@@ -1,0 +1,12 @@
+[package]
+name = "monoxide"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mongodb = "3.2.1"
+thiserror = "2.0.11"
+
+[dev-dependencies]
+dotenv = "0.15.0"
+tokio = { version = "1.43.0", features = ["full"] }
