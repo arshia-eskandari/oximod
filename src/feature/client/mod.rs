@@ -13,7 +13,7 @@ async fn init_db(mongo_uri: String) -> Result<Client, MongoClientError> {
     Ok(client)
 }
 
-pub async fn get_global_client() -> Result<Arc<Client>, MongoClientError> {
+pub fn get_global_client() -> Result<Arc<Client>, MongoClientError> {
     let client = CLIENT.get()
         .cloned()
         .ok_or_else(||
