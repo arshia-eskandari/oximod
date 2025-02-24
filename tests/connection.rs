@@ -1,4 +1,4 @@
-use monoxide::feature::client::{get_global_client, set_global_client};
+use monoxide_core::feature::client::{get_global_client, set_global_client};
 use testresult::TestResult;
 
 #[tokio::test]

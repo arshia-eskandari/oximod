@@ -8,6 +8,8 @@ pub enum MongoClientError {
 
     #[error("Database query failed: {0}")] QueryError(String),
 
+    #[error("Databse operation failed: {0}")] OperationError(String),
+
     #[error("An unexpected error occurred: {0}")] Unexpected(String),
 
     #[error("Failed to set CLIENT")] SetClientError(String),
