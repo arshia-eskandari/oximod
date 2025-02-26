@@ -1,2 +1,2 @@
-pub mod client_error;
+pub mod conn_error;
 pub mod printable;
