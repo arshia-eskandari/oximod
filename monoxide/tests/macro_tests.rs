@@ -11,6 +11,8 @@ async fn saves_document_correctly() -> TestResult {
     set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
 
     #[derive(Model)]
+    #[db("db_name")]
+    #[collection("collection_name")]
     pub struct User {
         name: String,
         age: i32,

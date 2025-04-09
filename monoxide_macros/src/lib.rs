@@ -1,17 +1,68 @@
 use proc_macro::TokenStream;
-use syn::{ parse_macro_input, DeriveInput, Type, Data, Fields };
 use quote::quote;
+use syn::{ parse_macro_input, Data, DeriveInput, Fields, LitStr, Type };
 
 fn is_allowed_type(ty: &Type) -> bool {
     let ty_str = (quote! { #ty }).to_string();
-    matches!(ty_str.as_str(), "String" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool")
+
+    if matches!(ty_str.as_str(), "String" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool") {
+        return true;
+    }
+
+    if ty_str.starts_with("Option <") {
+        let inner = ty_str.trim_start_matches("Option <").trim_end_matches(">").trim();
+        return matches!(inner, "String" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool");
+    }
+
+    false
 }
 
-#[proc_macro_derive(Model)]
+#[proc_macro_derive(Model, attributes(db, collection))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-
     let name = &input.ident;
+
+    let mut db: Option<LitStr> = None;
+    let mut collection: Option<LitStr> = None;
+
+    for attr in &input.attrs {
+        if attr.path().is_ident("db") {
+            if let Ok(val) = attr.parse_args::<LitStr>() {
+                db = Some(val);
+            } else {
+                return syn::Error::new_spanned(attr, "Expected #[db = \"...\"]")
+                    .to_compile_error()
+                    .into();
+            }
+        } else if attr.path().is_ident("collection") {
+            if let Ok(val) = attr.parse_args::<LitStr>() {
+                collection = Some(val);
+            } else {
+                return syn::Error::new_spanned(attr, "Expected #[collection = \"...\"]")
+                    .to_compile_error()
+                    .into();
+            }
+        }
+    }
+
+    let db = match db {
+        Some(val) => val,
+        None => {
+            return syn::Error::new_spanned(&input, "Missing #[db = \"...\"] attribute")
+                .to_compile_error()
+                .into();
+        }
+    };
+
+    let collection = match collection {
+        Some(val) => val,
+        None => {
+            return syn::Error::new_spanned(&input, "Missing #[collection = \"...\"] attribute")
+                .to_compile_error()
+                .into();
+        }
+    };
+
 
     let fields = if let Data::Struct(data) = &input.data {
         if let Fields::Named(ref fields_named) = data.fields {
@@ -36,7 +87,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             return syn::Error
                 ::new_spanned(
                     &field.ty,
-                    "Field type not supported. Allowed types are: String, i32, i64, u32, u64, f32, f64, bool"
+                    "Field type not supported. Allowed types: String, i32, i64, u32, u64, f32, f64, bool, Option<...>"
                 )
                 .to_compile_error()
                 .into();
@@ -52,8 +103,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         impl ::monoxide_core::feature::model::Model for #name {
             async fn save(&self) -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
                 let client = ::monoxide_core::feature::conn::client::get_global_client()?;
-                let db = client.database("default_db");
-                let collection = db.collection(stringify!(#name));
+                let db = client.database(#db);
+                let collection = db.collection::<::mongodb::bson::Document>(#collection);
                 let document = ::mongodb::bson::doc! {
                     #(#doc_entries),*
                 };
