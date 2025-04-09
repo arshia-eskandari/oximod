@@ -30,7 +30,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             if let Ok(val) = attr.parse_args::<LitStr>() {
                 db = Some(val);
             } else {
-                return syn::Error::new_spanned(attr, "Expected #[db = \"...\"]")
+                return syn::Error::new_spanned(attr, "Expected #[db(\"db_name\"]")
                     .to_compile_error()
                     .into();
             }
@@ -38,7 +38,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             if let Ok(val) = attr.parse_args::<LitStr>() {
                 collection = Some(val);
             } else {
-                return syn::Error::new_spanned(attr, "Expected #[collection = \"...\"]")
+                return syn::Error::new_spanned(attr, "Expected #[collection(\"collection_name\"]")
                     .to_compile_error()
                     .into();
             }
