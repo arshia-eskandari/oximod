@@ -1,21 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ parse_macro_input, Data, DeriveInput, Fields, LitStr, Type };
-
-fn is_allowed_type(ty: &Type) -> bool {
-    let ty_str = (quote! { #ty }).to_string();
-
-    if matches!(ty_str.as_str(), "String" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool") {
-        return true;
-    }
-
-    if ty_str.starts_with("Option <") {
-        let inner = ty_str.trim_start_matches("Option <").trim_end_matches(">").trim();
-        return matches!(inner, "String" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool");
-    }
-
-    false
-}
+use syn::{ parse_macro_input, DeriveInput, LitStr };
 
 #[proc_macro_derive(Model, attributes(db, collection))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
@@ -30,7 +15,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             if let Ok(val) = attr.parse_args::<LitStr>() {
                 db = Some(val);
             } else {
-                return syn::Error::new_spanned(attr, "Expected #[db(\"db_name\"]")
+                return syn::Error
+                    ::new_spanned(attr, "Expected #[db(\"db_name\"]")
                     .to_compile_error()
                     .into();
             }
@@ -38,7 +24,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             if let Ok(val) = attr.parse_args::<LitStr>() {
                 collection = Some(val);
             } else {
-                return syn::Error::new_spanned(attr, "Expected #[collection(\"collection_name\"]")
+                return syn::Error
+                    ::new_spanned(attr, "Expected #[collection(\"collection_name\"]")
                     .to_compile_error()
                     .into();
             }
@@ -48,7 +35,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let db = match db {
         Some(val) => val,
         None => {
-            return syn::Error::new_spanned(&input, "Missing #[db = \"...\"] attribute")
+            return syn::Error
+                ::new_spanned(&input, "Missing #[db(\"db_name\"] attribute")
                 .to_compile_error()
                 .into();
         }
@@ -57,45 +45,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let collection = match collection {
         Some(val) => val,
         None => {
-            return syn::Error::new_spanned(&input, "Missing #[collection = \"...\"] attribute")
+            return syn::Error
+                ::new_spanned(&input, "Missing #[collection(\"collection_name\"] attribute")
                 .to_compile_error()
                 .into();
         }
     };
-
-
-    let fields = if let Data::Struct(data) = &input.data {
-        if let Fields::Named(ref fields_named) = data.fields {
-            &fields_named.named
-        } else {
-            return syn::Error
-                ::new_spanned(&input, "Model can only be derived for structs with named fields")
-                .to_compile_error()
-                .into();
-        }
-    } else {
-        return syn::Error
-            ::new_spanned(&input, "Model can only be derived for structs")
-            .to_compile_error()
-            .into();
-    };
-
-    let mut doc_entries = Vec::new();
-    for field in fields {
-        let ident = field.ident.as_ref().unwrap();
-        if !is_allowed_type(&field.ty) {
-            return syn::Error
-                ::new_spanned(
-                    &field.ty,
-                    "Field type not supported. Allowed types: String, i32, i64, u32, u64, f32, f64, bool, Option<...>"
-                )
-                .to_compile_error()
-                .into();
-        }
-
-        let field_name_str = ident.to_string();
-        doc_entries.push(quote! { #field_name_str: &self.#ident });
-    }
 
     let expanded =
         quote! {
@@ -105,12 +60,14 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 let client = ::monoxide_core::feature::conn::client::get_global_client()?;
                 let db = client.database(#db);
                 let collection = db.collection::<::mongodb::bson::Document>(#collection);
-                let document = ::mongodb::bson::doc! {
-                    #(#doc_entries),*
-                };
+                let document = ::mongodb::bson::to_document(&self).map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::SerializationError(e.to_string()))?;
                 collection.insert_one(document).await.map_err(|e| {
                     ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(format!("{}", e))
                 })?;
+                Ok(())
+            }
+
+            async fn update() -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
                 Ok(())
             }
         }

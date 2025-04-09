@@ -2,6 +2,7 @@ use monoxide_core::feature::conn::client::set_global_client;
 use monoxide_macros::Model;
 use testresult::TestResult;
 use monoxide_core::feature::model::Model;
+use serde::{Deserialize, Serialize};
 
 #[tokio::test]
 async fn saves_document_correctly() -> TestResult {
@@ -10,7 +11,7 @@ async fn saves_document_correctly() -> TestResult {
 
     set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
 
-    #[derive(Model)]
+    #[derive(Model, Serialize, Deserialize)]
     #[db("db_name")]
     #[collection("collection_name")]
     pub struct User {

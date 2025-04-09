@@ -8,7 +8,5 @@ pub enum MongoDbError {
 
     #[error("CLIENT not found: {0}")] ClientNotFound(String),
 
-    #[error("Failed to set DEFAULT_DB: {0}")] SetDefaultDb(String),
-
-    #[error("DEFAULT_DB not found: {0}")] DefaultDbNotFound(String),
+    #[error("Serialization error: {0}")] SerializationError(String),
 }
