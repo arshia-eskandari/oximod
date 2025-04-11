@@ -67,7 +67,18 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 Ok(())
             }
 
-            async fn update() -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+            async fn update(
+                filter: impl Into<::mongodb::bson::Document> + Send,
+                update: impl Into<::mongodb::bson::Document> + Send
+            ) -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+                let client = ::monoxide_core::feature::conn::client::get_global_client()?;
+                let db = client.database(#db);
+                let collection = db.collection::<::mongodb::bson::Document>(#collection);
+                collection
+                    .update_many(filter.into(), update.into())
+                    .await
+                    .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
+
                 Ok(())
             }
         }
