@@ -24,6 +24,8 @@ async fn counts_matching_documents_correctly() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let users = vec![
         User {
             _id: None,

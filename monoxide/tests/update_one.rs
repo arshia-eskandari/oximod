@@ -24,6 +24,8 @@ async fn updates_first_matching_document_only() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let users = vec![
         User {
             _id: None,

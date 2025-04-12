@@ -24,6 +24,8 @@ async fn deletes_document_by_id_correctly() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let user = User {
         _id: Some(ObjectId::new()),
         name: "User1".to_string(),

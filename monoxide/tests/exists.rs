@@ -24,6 +24,8 @@ async fn checks_existence_of_matching_document() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let user = User {
         _id: None,
         name: "User1".to_string(),

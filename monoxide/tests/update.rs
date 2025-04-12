@@ -24,6 +24,8 @@ async fn updates_multiple_documents_correctly() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let users = vec![
         User {
             _id: None,

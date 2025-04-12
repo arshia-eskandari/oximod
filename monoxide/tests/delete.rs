@@ -24,6 +24,8 @@ async fn deletes_multiple_matching_documents() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let users = vec![
         User {
             _id: None,

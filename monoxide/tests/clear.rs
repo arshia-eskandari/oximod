@@ -5,9 +5,9 @@ use testresult::TestResult;
 use monoxide_core::feature::model::Model;
 use serde::{Deserialize, Serialize};
 
-// Run test: cargo nextest run finds_first_matching_document_correctly
+// Run test: cargo nextest run clears_collection_successfully
 #[tokio::test]
-async fn finds_first_matching_document_correctly() -> TestResult {
+async fn clears_collection_successfully() -> TestResult {
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
 
@@ -15,7 +15,7 @@ async fn finds_first_matching_document_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("find_one")]
+    #[collection("clear")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
@@ -23,8 +23,6 @@ async fn finds_first_matching_document_correctly() -> TestResult {
         age: i32,
         active: bool,
     }
-    
-    User::clear().await?;
 
     let users = vec![
         User {
@@ -36,7 +34,7 @@ async fn finds_first_matching_document_correctly() -> TestResult {
         User {
             _id: None,
             name: "User2".to_string(),
-            age: 22,
+            age: 28,
             active: false,
         },
     ];
@@ -45,12 +43,13 @@ async fn finds_first_matching_document_correctly() -> TestResult {
         user.save().await?;
     }
 
-    let matched = User::find_one(doc! { "age": 22 }).await?;
-    assert!(matched.is_some());
+    let count_before = User::count(doc! {}).await?;
+    assert!(count_before >= 2);
 
-    if let Some(user) = matched {
-        assert_eq!(user.age, 22);
-    }
+    User::clear().await?;
+
+    let count_after = User::count(doc! {}).await?;
+    assert_eq!(count_after, 0);
 
     Ok(())
 }

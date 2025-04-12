@@ -29,4 +29,5 @@ pub trait Model {
     async fn delete_by_id(id: ObjectId) -> Result<bool, MongoDbError>;
     async fn count(filter: impl Into<bson::Document> + Send) -> Result<u64, MongoDbError>;
     async fn exists(filter: impl Into<bson::Document> + Send) -> Result<bool, MongoDbError>;
+    async fn clear() -> Result<(), MongoDbError>;     
 }

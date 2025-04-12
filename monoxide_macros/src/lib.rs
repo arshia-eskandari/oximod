@@ -200,6 +200,15 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             ) -> Result<bool, ::monoxide_core::error::conn_error::MongoDbError> {
                 Ok(Self::find_one(filter).await?.is_some())
             }
+
+            async fn clear() -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+                let collection = get_collection()?;
+                collection
+                    .delete_many(::mongodb::bson::doc! {})
+                    .await
+                    .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
+                Ok(())
+            }
         }
     };
 

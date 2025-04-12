@@ -55,6 +55,8 @@ async fn saves_document_with_id_correctly() -> TestResult {
         active: bool,
     }
 
+    User::clear().await?;
+
     let user = User {
         _id: Some(ObjectId::new()),
         name: "User1".to_string(),
