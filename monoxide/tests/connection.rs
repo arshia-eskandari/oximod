@@ -1,6 +1,7 @@
 use monoxide_core::feature::conn::client::{get_global_client, set_global_client};
 use testresult::TestResult;
 
+// Run test: cargo nextest run connects_to_db_successfully
 #[tokio::test]
 async fn connects_to_db_successfully() -> TestResult {
     dotenv::dotenv().ok();
