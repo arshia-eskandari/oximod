@@ -14,8 +14,8 @@ async fn checks_existence_of_matching_document() -> TestResult {
     set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
 
     #[derive(Model, Serialize, Deserialize, Debug)]
-    #[db("db_name")]
-    #[collection("collection_name")]
+    #[db("test")]
+    #[collection("exists")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
