@@ -46,11 +46,14 @@ async fn updates_first_matching_document_only() -> TestResult {
     }
 
     // Only one of the users with age 65 should be updated
-    User::update_one(
+    let result = User::update_one(
         doc! { "age": 65 },
         doc! { "$set": { "active": false } },
     )
     .await?;
+
+    assert_eq!(result.matched_count, 1);
+    assert_eq!(result.modified_count, 1);
 
     Ok(())
 }

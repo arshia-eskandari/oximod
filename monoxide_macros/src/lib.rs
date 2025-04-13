@@ -66,61 +66,65 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         #[async_trait::async_trait]
         impl ::monoxide_core::feature::model::Model for #name {
 
-            async fn save(&self) -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+            async fn save(&self) -> Result<::mongodb::bson::oid::ObjectId, ::monoxide_core::error::conn_error::MongoDbError> {
                 let collection = get_collection()?;
-                let document = ::mongodb::bson::to_document(&self).map_err(|e| 
-                    ::monoxide_core::error::conn_error::MongoDbError::SerializationError(e.to_string())
-                )?;
-                collection.insert_one(document).await.map_err(|e| {
-                    ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(format!("{}", e))
-                })?;
-                Ok(())
+                let document = ::mongodb::bson::to_document(&self)
+                    .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::SerializationError(e.to_string()))?;
+
+                let result = collection.insert_one(document)
+                    .await
+                    .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
+
+                match result.inserted_id.as_object_id() {
+                    Some(id) => Ok(id),
+                    None => Err(::monoxide_core::error::conn_error::MongoDbError::SerializationError("inserted_id is not an ObjectId".to_string()))
+                }
             }
 
             async fn update(
                 filter: impl Into<::mongodb::bson::Document> + Send,
                 update: impl Into<::mongodb::bson::Document> + Send
-            ) -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+            ) -> Result<::mongodb::results::UpdateResult, ::monoxide_core::error::conn_error::MongoDbError> {
                 let collection = get_collection()?;
-                collection
+                let result = collection
                     .update_many(filter.into(), update.into())
                     .await
                     .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
 
-                Ok(())
+                Ok(result)
             }
 
             async fn update_one (
                 filter: impl Into<::mongodb::bson::Document> + Send,
                 update: impl Into<::mongodb::bson::Document> + Send,
-            ) -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+            ) -> Result<::mongodb::results::UpdateResult, ::monoxide_core::error::conn_error::MongoDbError> {
                 let collection = get_collection()?;
-                collection
+                let result = collection
                     .update_one(filter.into(), update.into())
                     .await
                     .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
 
-                Ok(())
+                Ok(result)
             }
 
             async fn delete(
                 filter: impl Into<::mongodb::bson::Document> + Send,
-            ) -> Result<u64, ::monoxide_core::error::conn_error::MongoDbError> {
+            ) -> Result<::mongodb::results::DeleteResult, ::monoxide_core::error::conn_error::MongoDbError> {
                 let collection = get_collection()?;
                 let result = collection.delete_many(filter.into())
                     .await
                     .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
-                Ok(result.deleted_count)
+                Ok(result)
             }
 
             async fn delete_one(
                 filter: impl Into<::mongodb::bson::Document> + Send,
-            ) -> Result<bool, ::monoxide_core::error::conn_error::MongoDbError> {
+            ) -> Result<::mongodb::results::DeleteResult, ::monoxide_core::error::conn_error::MongoDbError> {
                 let collection = get_collection()?;
                 let result = collection.delete_one(filter.into())
                     .await
                     .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
-                Ok(result.deleted_count > 0)
+                Ok(result)
             }
 
             async fn find(
@@ -175,14 +179,16 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn update_by_id(
                 id: ::mongodb::bson::oid::ObjectId,
                 update: impl Into<::mongodb::bson::Document> + Send,
-            ) -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
-                Self::update_one(::mongodb::bson::doc! { "_id": id }, update).await
+            ) -> Result<::mongodb::results::UpdateResult, ::monoxide_core::error::conn_error::MongoDbError> {
+                let result = Self::update_one(::mongodb::bson::doc! { "_id": id }, update).await?;
+                Ok(result)
             }
 
             async fn delete_by_id(
                 id: ::mongodb::bson::oid::ObjectId,
-            ) -> Result<bool, ::monoxide_core::error::conn_error::MongoDbError> {
-                Self::delete_one(::mongodb::bson::doc! { "_id": id }).await
+            ) -> Result<::mongodb::results::DeleteResult, ::monoxide_core::error::conn_error::MongoDbError> {
+                let result = Self::delete_one(::mongodb::bson::doc! { "_id": id }).await?;
+                Ok(result)
             }
 
             async fn count(
@@ -201,13 +207,13 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 Ok(Self::find_one(filter).await?.is_some())
             }
 
-            async fn clear() -> Result<(), ::monoxide_core::error::conn_error::MongoDbError> {
+            async fn clear() -> Result<::mongodb::results::DeleteResult, ::monoxide_core::error::conn_error::MongoDbError> {
                 let collection = get_collection()?;
-                collection
+                let result = collection
                     .delete_many(::mongodb::bson::doc! {})
                     .await
                     .map_err(|e| ::monoxide_core::error::conn_error::MongoDbError::ConnectionError(e.to_string()))?;
-                Ok(())
+                Ok(result)
             }
         }
     };

@@ -39,9 +39,11 @@ async fn finds_document_by_id_correctly() -> TestResult {
     let found = User::find_by_id(id).await?;
     assert!(found.is_some());
 
-    if let Some(user) = found {
-        assert_eq!(user._id, Some(id));
-        assert_eq!(user.name, "User1");
+    if let Some(u) = found {
+        assert_eq!(u._id, Some(id));
+        assert_eq!(u.name, "User1");
+        assert_eq!(u.age, 33);
+        assert!(u.active);
     }
 
     Ok(())

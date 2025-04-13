@@ -31,7 +31,8 @@ async fn saves_document_without_id_correctly() -> TestResult {
         active: true,
     };
 
-    user.save().await?;
+    let result = user.save().await?;
+    assert_ne!(result, ObjectId::default());    
 
     Ok(())
 }
@@ -64,7 +65,8 @@ async fn saves_document_with_id_correctly() -> TestResult {
         active: false,
     };
 
-    user.save().await?;
+    let result = user.save().await?;
+    assert_eq!(result, user._id.unwrap());
 
     Ok(())
 }

@@ -1,9 +1,9 @@
-use mongodb::bson::{doc, oid::ObjectId};
+use mongodb::bson::{ doc, oid::ObjectId };
 use monoxide_core::feature::conn::client::set_global_client;
 use monoxide_macros::Model;
 use testresult::TestResult;
 use monoxide_core::feature::model::Model;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 // Run test: cargo nextest run finds_multiple_matching_documents
 #[tokio::test]
@@ -35,7 +35,7 @@ async fn finds_multiple_matching_documents() -> TestResult {
         },
         User {
             _id: None,
-            name: "User1".to_string(),
+            name: "User2".to_string(),
             age: 28,
             active: true,
         },
@@ -44,7 +44,7 @@ async fn finds_multiple_matching_documents() -> TestResult {
             name: "User3".to_string(),
             age: 35,
             active: true,
-        },
+        }
     ];
 
     for user in users {
@@ -53,6 +53,13 @@ async fn finds_multiple_matching_documents() -> TestResult {
 
     let matched_users = User::find(doc! { "age": 28 }).await?;
     assert_eq!(matched_users.len(), 2);
+
+    let names: Vec<String> = matched_users
+        .into_iter()
+        .map(|u| u.name)
+        .collect();
+    assert!(names.contains(&"User1".to_string()));
+    assert!(names.contains(&"User2".to_string()));
 
     Ok(())
 }

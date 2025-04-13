@@ -50,6 +50,7 @@ async fn finds_first_matching_document_correctly() -> TestResult {
 
     if let Some(user) = matched {
         assert_eq!(user.age, 22);
+        assert!(["User1", "User2"].contains(&user.name.as_str()));
     }
 
     Ok(())

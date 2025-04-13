@@ -51,8 +51,8 @@ async fn deletes_multiple_matching_documents() -> TestResult {
         user.save().await?;
     }
 
-    let deleted_count = User::delete(doc! { "active": false }).await?;
-    assert_eq!(deleted_count, 2);
+    let deleted_result = User::delete(doc! { "active": false }).await?;
+    assert_eq!(deleted_result.deleted_count, 2);
 
     Ok(())
 }

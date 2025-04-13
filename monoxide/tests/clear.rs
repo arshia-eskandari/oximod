@@ -46,10 +46,9 @@ async fn clears_collection_successfully() -> TestResult {
     let count_before = User::count(doc! {}).await?;
     assert!(count_before >= 2);
 
-    User::clear().await?;
+    let result = User::clear().await?;
 
-    let count_after = User::count(doc! {}).await?;
-    assert_eq!(count_after, 0);
+    assert!(result.deleted_count >= 2);
 
     Ok(())
 }

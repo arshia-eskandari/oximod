@@ -52,11 +52,14 @@ async fn updates_multiple_documents_correctly() -> TestResult {
     }
 
     // Deactivate users aged 65+
-    User::update(
+    let result = User::update(
         doc! { "age": { "$gte": 65 } },
         doc! { "$set": { "active": false } },
     )
     .await?;
+
+    assert_eq!(result.matched_count, 2);
+    assert_eq!(result.modified_count, 2);
 
     Ok(())
 }

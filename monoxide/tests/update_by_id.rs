@@ -44,6 +44,7 @@ async fn updates_document_by_id_correctly() -> TestResult {
 
     if let Some(u) = updated {
         assert_eq!(u.age, 32);
+        assert_eq!(u.name, "User1");
     }
 
     Ok(())

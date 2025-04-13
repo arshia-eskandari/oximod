@@ -46,7 +46,7 @@ async fn deletes_first_matching_document_only() -> TestResult {
     }
 
     let deleted = User::delete_one(doc! { "age": 50, "active": false }).await?;
-    assert!(deleted);
+    assert_eq!(deleted.deleted_count, 1);
 
     Ok(())
 }

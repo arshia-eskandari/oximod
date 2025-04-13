@@ -37,7 +37,7 @@ async fn deletes_document_by_id_correctly() -> TestResult {
     user.save().await?;
 
     let deleted = User::delete_by_id(id).await?;
-    assert!(deleted);
+    assert_eq!(deleted.deleted_count, 1);
 
     let result = User::find_by_id(id).await?;
     assert!(result.is_none());
