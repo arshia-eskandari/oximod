@@ -1,7 +1,6 @@
 use std::sync::{ Arc, OnceLock };
 use mongodb::Client;
-use crate::{ error::conn_error::MongoDbError, Printable };
-use std::backtrace::Backtrace;
+use crate::{ error::conn_error::MongoDbError, Printable, attach_printables };
 
 static CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
 
@@ -17,9 +16,9 @@ pub fn get_global_client() -> Result<Arc<Client>, MongoDbError> {
     let client = CLIENT.get()
         .cloned()
         .ok_or_else(||
-            MongoDbError::ClientNotFound("Failed to clone arc".to_string()).attach_printables(
-                Backtrace::capture(),
-                Some("Ensure you call `set_global_client` before using `get_global_client`.")
+            attach_printables!(
+                MongoDbError::ClientNotFound("Failed to clone arc".to_string()),
+                "Ensure you call `set_global_client` before using `get_global_client`."
             )
         )?;
     Ok(client)
@@ -29,9 +28,9 @@ pub async fn set_global_client(mongo_uri: String) -> Result<(), MongoDbError> {
     let client = init_db(mongo_uri).await?;
 
     CLIENT.set(client.into()).map_err(|_|
-        MongoDbError::SetClientError("CLIENT set method failed.".to_string()).attach_printables(
-            Backtrace::capture(),
-            Some("Ensure `set_global_client` is only called once, or restart the application.")
+        attach_printables!(
+            MongoDbError::SetClientError("CLIENT set method failed.".to_string()),
+            "Ensure `set_global_client` is only called once, or restart the application."
         )
     )?;
 

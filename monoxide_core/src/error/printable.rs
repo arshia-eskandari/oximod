@@ -1,6 +1,7 @@
 use std::backtrace::Backtrace;
 use std::error::Error;
 
+/// A trait for attaching helpful debugging output to errors.
 pub trait Printable {
     fn backtrace(&self, capture: Backtrace) {
         eprintln!("\nBacktrace: {}\n", capture);
@@ -22,5 +23,5 @@ pub trait Printable {
     }
 }
 
-// Blanket implementation for all error types inside this crate
+// Blanket implementation for all types that implement `Error`
 impl<T: Error> Printable for T {}
