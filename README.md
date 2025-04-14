@@ -99,6 +99,9 @@ Each file clears previous data on run and demonstrates isolated functionality.
 
 [MIT](./LICENSE) © 2025 Monoxide Contributors
 
+> ⚠️ The name **Monoxide** and this repository represent the official version of the project.  
+> Forks are welcome, but please **do not use the name or create similarly named organizations** to avoid confusion with the original.
+
 ---
 
 We hope Monoxide helps bring joy and structure to your MongoDB experience in Rust.
