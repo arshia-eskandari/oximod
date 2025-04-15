@@ -1,6 +1,6 @@
-# Contributing to Monoxide
+# Contributing to Oximod
 
-🎉 Thank you for your interest in contributing! We’re excited to build Monoxide together.
+🎉 Thank you for your interest in contributing! We’re excited to build Oximod together.
 
 ## 🤝 Before You Start
 
@@ -19,8 +19,8 @@
 
 ```bash
 # Clone the repo
-git clone https://github.com/arshia-eskandari/monoxide.git
-cd monoxide
+git clone https://github.com/arshia-eskandari/oximod.git
+cd oximod
 
 # Run tests
 cargo nextest run
@@ -52,4 +52,4 @@ By contributing, you agree your code will be released under the MIT license.
 
 ## 📬 Questions?
 
-Open a [Discussion](https://github.com/arshia-eskandari/monoxide/discussions) or ping us in an issue.
+Open a [Discussion](https://github.com/arshia-eskandari/oximod/discussions) or ping us in an issue.

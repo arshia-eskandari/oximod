@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "monoxide_macros",
-  "monoxide_core", 
-  "monoxide"
+  "oximod_macros",
+  "oximod_core", 
+  "oximod"
 ]

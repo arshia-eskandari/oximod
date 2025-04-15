@@ -1,0 +1,16 @@
+[package]
+name = "oximod_core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
+description = "The core logic and error handling for Oximod, a MongoDB ODM for Rust."
+license = "MIT"
+repository = "https://github.com/arshia-eskandari/oximod"
+readme = "README.md"
+keywords = ["mongodb", "odm", "mongoose", "rust"]
+categories = ["database", "asynchronous"]
+
+[dependencies]
+async-trait = "0.1.86"
+mongodb = "3.2.1"
+thiserror = "2.0.11"
