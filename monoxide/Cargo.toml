@@ -6,10 +6,9 @@ authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "MongoDB ODM for Rust inspired by Mongoose"
 license = "MIT"
 repository = "https://github.com/arshia-eskandari/monoxide"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["mongodb", "odm", "mongoose", "rust"]
-categories = ["database"]
-exclude = ["tests/*", "examples/*", "target/*"]
+categories = ["database", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1.86"

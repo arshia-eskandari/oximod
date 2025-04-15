@@ -2,6 +2,13 @@
 name = "monoxide_macros"
 version = "0.1.0"
 edition = "2021"
+authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
+description = "Procedural macros for the Monoxide MongoDB ODM."
+license = "MIT"
+repository = "https://github.com/arshia-eskandari/monoxide"
+readme = "../README.md"
+keywords = ["mongodb", "odm", "macro", "derive", "mongoose"]
+categories = ["database", "asynchronous", "development-tools::procedural-macro"]
 
 [lib]
 proc-macro = true
