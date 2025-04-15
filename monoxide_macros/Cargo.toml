@@ -12,5 +12,5 @@ quote = "1.0.38"
 proc-macro2 = "1.0.93"
 mongodb = "3.2.1"
 thiserror = "2.0.11"
-monoxide_core = { path = "../monoxide_core" }
+monoxide_core = { version = "0.1.0", path = "../monoxide_core" }
 futures-util = "0.3.31"
