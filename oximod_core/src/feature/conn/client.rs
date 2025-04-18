@@ -25,16 +25,16 @@ async fn init_db(mongo_uri: String) -> Result<Client, OximodError> {
 /// Retrieves the globally-initialized MongoDB client as an `Arc<Client>`.
 ///
 /// This function must be called **after** [`set_global_client`] has been
-/// successfully invoked. If not, it will return a [`OximodError::ClientNotFound`] error.
+/// successfully invoked. If not, it will return a [`OximodError::GlobalClientMissing`] error.
 ///
 /// # Errors
-/// Returns a [`OximodError::ClientNotFound`] if no client has been set.
+/// Returns a [`OximodError::GlobalClientMissing`] if no client has been set.
 pub fn get_global_client() -> Result<Arc<Client>, OximodError> {
     let client = CLIENT.get()
         .cloned()
         .ok_or_else(||
             attach_printables!(
-                OximodError::ClientNotFound("Failed to clone arc".to_string()),
+                OximodError::GlobalClientMissing("Failed to clone arc".to_string()),
                 "Ensure you call `set_global_client` before using `get_global_client`."
             )
         )?;
@@ -51,13 +51,13 @@ pub fn get_global_client() -> Result<Arc<Client>, OximodError> {
 ///
 /// # Errors
 /// - Returns [`OximodError::ConnectionError`] if the client cannot connect.
-/// - Returns [`OximodError::SetClientError`] if called more than once.
+/// - Returns [`OximodError::GlobalClientInitError`] if called more than once.
 pub async fn set_global_client(mongo_uri: String) -> Result<(), OximodError> {
     let client = init_db(mongo_uri).await?;
 
     CLIENT.set(client.into()).map_err(|_| 
         attach_printables!(
-            OximodError::SetClientError("CLIENT set method failed.".to_string()),
+            OximodError::GlobalClientInitError("CLIENT set method failed.".to_string()),
             "Ensure `set_global_client` is only called once, or restart the application."
         )
     )?;
