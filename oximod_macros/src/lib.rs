@@ -3,6 +3,33 @@ use quote::quote;
 use syn::{ parse_macro_input, DeriveInput, LitStr };
 
 #[proc_macro_derive(Model, attributes(db, collection))]
+/// Procedural macro to derive the `Model` trait for MongoDB schema support.
+///
+/// This macro enables automatic implementation of the `Model` trait, allowing
+/// CRUD operations and schema-based MongoDB interaction.
+///
+/// # Required Attributes
+///
+/// - `#[db("your_database_name")]`: Specifies the database name.
+/// - `#[collection("your_collection_name")]`: Specifies the collection name.
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Model, Serialize, Deserialize, Debug)]
+/// #[db("test")]
+/// #[collection("users")]
+/// pub struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+///     age: i32,
+///     active: bool,
+/// }
+/// ```
+///
+/// Once derived, you can use methods like `.save()`, `.find()`, `.update_one()`, `.delete()`, etc.,
+/// provided by the `Model` trait.
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
