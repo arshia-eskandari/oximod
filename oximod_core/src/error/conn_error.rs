@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum MongoDbError {
+pub enum OximodError  {
     #[error("Failed to connect to db: {0}")] ConnectionError(String),
 
     #[error("Failed to set CLIENT")] SetClientError(String),

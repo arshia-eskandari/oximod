@@ -1,6 +1,6 @@
 use async_trait;
 use mongodb::{bson::{self, oid::ObjectId}, results::{DeleteResult, UpdateResult}};
-use crate::error::conn_error::MongoDbError;
+use crate::error::conn_error::OximodError;
 
 #[async_trait::async_trait]
 pub trait Model {
@@ -14,7 +14,7 @@ pub trait Model {
     /// let id = user.save().await?;
     /// println!("Inserted user ID: {}", id);
     /// ```
-    async fn save(&self) -> Result<ObjectId, MongoDbError>;
+    async fn save(&self) -> Result<ObjectId, OximodError>;
     /// Updates all documents in the collection that match the given filter.
     ///
     /// # Parameters
@@ -32,7 +32,7 @@ pub trait Model {
     async fn update(
         filter: impl Into<bson::Document> + Send,
         update: impl Into<bson::Document> + Send
-    ) -> Result<UpdateResult, MongoDbError>;
+    ) -> Result<UpdateResult, OximodError>;
     /// Updates the **first document** in the collection that matches the given filter.
     ///
     /// # Parameters
@@ -50,7 +50,7 @@ pub trait Model {
     async fn update_one(
         filter: impl Into<bson::Document> + Send,
         update: impl Into<bson::Document> + Send
-    ) -> Result<UpdateResult, MongoDbError>;
+    ) -> Result<UpdateResult, OximodError>;
     /// Deletes all documents in the collection that match the given filter.
     ///
     /// # Parameters
@@ -64,7 +64,7 @@ pub trait Model {
     /// let result = User::delete(doc! { "active": false }).await?;
     /// println!("Deleted {} users", result.deleted_count);
     /// ```
-    async fn delete(filter: impl Into<bson::Document> + Send) -> Result<DeleteResult, MongoDbError>;
+    async fn delete(filter: impl Into<bson::Document> + Send) -> Result<DeleteResult, OximodError>;
     /// Deletes the **first** document in the collection that matches the given filter.
     ///
     /// # Parameters
@@ -78,7 +78,7 @@ pub trait Model {
     /// let result = User::delete_one(doc! { "name": "user_a" }).await?;
     /// assert_eq!(result.deleted_count, 1);
     /// ```
-    async fn delete_one(filter: impl Into<bson::Document> + Send) -> Result<DeleteResult, MongoDbError>;
+    async fn delete_one(filter: impl Into<bson::Document> + Send) -> Result<DeleteResult, OximodError>;
     /// Finds all documents in the collection that match the given filter.
     ///
     /// # Parameters
@@ -92,7 +92,7 @@ pub trait Model {
     /// let users = User::find(doc! { "active": true }).await?;
     /// assert!(!users.is_empty());
     /// ```
-    async fn find(filter: impl Into<bson::Document> + Send) -> Result<Vec<Self>, MongoDbError>
+    async fn find(filter: impl Into<bson::Document> + Send) -> Result<Vec<Self>, OximodError>
         where Self: Sized;
     /// Finds the **first document** in the collection that matches the given filter.
     ///
@@ -110,7 +110,7 @@ pub trait Model {
     /// ``` 
     async fn find_one(
         filter: impl Into<bson::Document> + Send
-    ) -> Result<Option<Self>, MongoDbError>
+    ) -> Result<Option<Self>, OximodError>
         where Self: Sized;
     /// Finds a document in the collection by its MongoDB `_id` field.
     ///
@@ -128,7 +128,7 @@ pub trait Model {
     ///     println!("Found: {}", u.name);
     /// }
     /// ``` 
-    async fn find_by_id(id: ObjectId) -> Result<Option<Self>, MongoDbError> where Self: Sized;
+    async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OximodError> where Self: Sized;
     /// Updates a document by its MongoDB `_id` field.
     ///
     /// # Parameters
@@ -147,7 +147,7 @@ pub trait Model {
     async fn update_by_id(
         id: ObjectId,
         update: impl Into<bson::Document> + Send
-    ) -> Result<UpdateResult, MongoDbError>;
+    ) -> Result<UpdateResult, OximodError>;
     /// Deletes a document from the collection by its MongoDB `_id` field.
     ///
     /// # Parameters
@@ -162,7 +162,7 @@ pub trait Model {
     /// let result = User::delete_by_id(id).await?;
     /// assert_eq!(result.deleted_count, 1);
     /// ```
-    async fn delete_by_id(id: ObjectId) -> Result<DeleteResult, MongoDbError>;
+    async fn delete_by_id(id: ObjectId) -> Result<DeleteResult, OximodError>;
     /// Counts the number of documents in the collection that match the given filter.
     ///
     /// # Parameters
@@ -176,7 +176,7 @@ pub trait Model {
     /// let count = User::count(doc! { "active": true }).await?;
     /// println!("Active users: {}", count);
     /// ```
-    async fn count(filter: impl Into<bson::Document> + Send) -> Result<u64, MongoDbError>;
+    async fn count(filter: impl Into<bson::Document> + Send) -> Result<u64, OximodError>;
     /// Checks if any document in the collection matches the given filter.
     ///
     /// # Parameters
@@ -192,7 +192,7 @@ pub trait Model {
     ///     println!("User exists!");
     /// }
     /// ```
-    async fn exists(filter: impl Into<bson::Document> + Send) -> Result<bool, MongoDbError>;
+    async fn exists(filter: impl Into<bson::Document> + Send) -> Result<bool, OximodError>;
     /// Deletes all documents from the model's collection.
     ///
     /// This is useful for resetting test data or clearing out a dataset.
@@ -205,5 +205,5 @@ pub trait Model {
     /// let result = User::clear().await?;
     /// println!("Cleared {} documents", result.deleted_count);
     /// ```
-    async fn clear() -> Result<DeleteResult, MongoDbError>;     
+    async fn clear() -> Result<DeleteResult, OximodError>;     
 }
