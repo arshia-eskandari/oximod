@@ -2,6 +2,7 @@ use async_trait;
 use mongodb::{bson::{self, oid::ObjectId}, results::{DeleteResult, UpdateResult}};
 use crate::error::conn_error::OximodError;
 
+/// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro. 
 #[async_trait::async_trait]
 pub trait Model {
     /// Inserts the current model instance into the MongoDB collection.
