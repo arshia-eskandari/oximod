@@ -1,8 +1,6 @@
 use mongodb::bson::oid::ObjectId;
-use oximod_core::feature::conn::client::set_global_client;
-use oximod_macros::Model;
+use oximod::{set_global_client, Model};
 use testresult::TestResult;
-use oximod_core::feature::model::Model;
 use serde::{Deserialize, Serialize};
 
 // Run test: cargo nextest run saves_document_without_id_correctly

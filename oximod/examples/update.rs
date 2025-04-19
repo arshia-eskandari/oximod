@@ -6,9 +6,7 @@
 //! - Insert a document
 //! - Update fields using `update` and `update_by_id`
 
-use oximod_core::feature::conn::client::set_global_client;
-use oximod_core::feature::model::Model;
-use oximod_macros::Model;
+use oximod::{set_global_client, Model};
 use mongodb::bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 

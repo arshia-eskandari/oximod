@@ -8,9 +8,7 @@
 //! - Delete a document by ID
 //! - Delete one document with a filter
 
-use oximod_core::feature::conn::client::set_global_client;
-use oximod_core::feature::model::Model;
-use oximod_macros::Model;
+use oximod::{set_global_client, Model};
 use mongodb::bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 

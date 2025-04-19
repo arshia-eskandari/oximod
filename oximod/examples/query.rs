@@ -8,9 +8,7 @@
 //! - Query with `find_one`
 //! - Check if a document exists
 
-use oximod_core::feature::conn::client::set_global_client;
-use oximod_core::feature::model::Model;
-use oximod_macros::Model;
+use oximod::{set_global_client, Model};
 use mongodb::bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 
