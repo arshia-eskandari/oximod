@@ -34,9 +34,7 @@ Inspired by Mongoose, Oximod brings a structured modeling experience while embra
 ## Example
 
 ```rust
-use oximod_core::feature::conn::client::set_global_client;
-use oximod_core::feature::model::Model;
-use oximod_macros::Model;
+use oximod::{set_global_client, Model};
 use serde::{Serialize, Deserialize};
 use mongodb::bson::{doc, oid::ObjectId};
 
