@@ -5,19 +5,19 @@ pub use oximod_macros::Model;
 
 // --- Internal API ---
 #[doc(hidden)]
-pub use oximod_core::feature;
+pub use oximod_core::feature as _feature;
 #[doc(hidden)]
-pub mod error {
+pub mod _error {
     pub use oximod_core::error::oximod_error;
     pub use oximod_core::error::printable;
 }
 #[doc(hidden)]
-pub use oximod_core::attach_printables;
+pub use oximod_core::attach_printables as _attach_printables;
 #[doc(hidden)]
-pub extern crate async_trait;
+pub use async_trait as _async_trait;
 #[doc(hidden)]
-pub extern crate futures_util;
+pub use futures_util as _futures_util;
 #[doc(hidden)]
-pub extern crate mongodb;
+pub use mongodb as _mongodb;
 #[doc(hidden)]
 pub use oximod_core::feature::model::Model; // removes the need of importing the trait
