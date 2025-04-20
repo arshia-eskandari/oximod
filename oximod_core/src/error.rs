@@ -1,2 +1,2 @@
-pub mod conn_error;
+pub mod oximod_error;
 pub mod printable;
