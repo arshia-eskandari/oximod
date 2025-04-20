@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 use mongodb::Client;
-use crate::{error::conn_error::OximodError, Printable, attach_printables};
+use crate::{error::oximod_error::OximodError, Printable, attach_printables};
 
 static CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
 
