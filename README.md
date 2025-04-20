@@ -77,6 +77,7 @@ Monoxide includes a growing set of usage examples:
 
 ```bash
 cargo run --example basic_usage
+cargo run --example aggregate_usage
 cargo run --example query
 cargo run --example update
 cargo run --example delete
