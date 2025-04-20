@@ -22,4 +22,9 @@ pub enum OximodError {
     /// This usually indicates a mismatch between struct fields and BSON types.
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    /// An error occurred while executing an aggregation pipeline.
+    /// This may result from malformed pipeline stages or collection access issues.
+    #[error("Aggregation error: {0}")]
+    AggregationError(String),
 }
