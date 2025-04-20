@@ -1,8 +1,8 @@
 use async_trait;
-use mongodb::{bson::{self, oid::ObjectId}, results::{DeleteResult, UpdateResult}};
-use crate::error::conn_error::OximodError;
+use mongodb::{ bson::{ self, oid::ObjectId }, results::{ DeleteResult, UpdateResult }, Cursor };
+use crate::error::oximod_error::OximodError;
 
-/// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro. 
+/// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro.
 #[async_trait::async_trait]
 pub trait Model {
     /// Inserts the current model instance into the MongoDB collection.
@@ -79,7 +79,9 @@ pub trait Model {
     /// let result = User::delete_one(doc! { "name": "user_a" }).await?;
     /// assert_eq!(result.deleted_count, 1);
     /// ```
-    async fn delete_one(filter: impl Into<bson::Document> + Send) -> Result<DeleteResult, OximodError>;
+    async fn delete_one(
+        filter: impl Into<bson::Document> + Send
+    ) -> Result<DeleteResult, OximodError>;
     /// Finds all documents in the collection that match the given filter.
     ///
     /// # Parameters
@@ -108,10 +110,8 @@ pub trait Model {
     /// if let Some(user) = User::find_one(doc! { "name": "user_a" }).await? {
     ///     println!("Found user: {}", user.name);
     /// }
-    /// ``` 
-    async fn find_one(
-        filter: impl Into<bson::Document> + Send
-    ) -> Result<Option<Self>, OximodError>
+    /// ```
+    async fn find_one(filter: impl Into<bson::Document> + Send) -> Result<Option<Self>, OximodError>
         where Self: Sized;
     /// Finds a document in the collection by its MongoDB `_id` field.
     ///
@@ -128,7 +128,7 @@ pub trait Model {
     /// if let Some(u) = user {
     ///     println!("Found: {}", u.name);
     /// }
-    /// ``` 
+    /// ```
     async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OximodError> where Self: Sized;
     /// Updates a document by its MongoDB `_id` field.
     ///
@@ -206,5 +206,27 @@ pub trait Model {
     /// let result = User::clear().await?;
     /// println!("Cleared {} documents", result.deleted_count);
     /// ```
-    async fn clear() -> Result<DeleteResult, OximodError>;     
+    async fn clear() -> Result<DeleteResult, OximodError>;
+    /// Executes an aggregation pipeline on the model's MongoDB collection.
+    ///
+    /// # Parameters
+    /// - `pipeline`: A vector of BSON documents defining the aggregation stages.
+    ///
+    /// # Returns
+    /// - A [`Cursor`](https://docs.rs/mongodb/latest/mongodb/struct.Cursor.html) over the resulting documents.
+    ///
+    /// # Example
+    /// ```rust, no_run
+    /// let pipeline = vec![
+    ///     doc! { "$match": { "active": true } },
+    ///     doc! { "$group": { "_id": "$age", "count": { "$sum": 1 } } }
+    /// ];
+    /// let mut cursor = User::aggregate(pipeline).await?;
+    /// while let Some(doc) = cursor.try_next().await? {
+    ///     println!("{:?}", doc);
+    /// }
+    /// ```
+    async fn aggregate(
+        pipeline: impl Into<Vec<bson::Document>> + Send
+    ) -> Result<Cursor<bson::Document>, OximodError>;
 }
