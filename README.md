@@ -1,4 +1,4 @@
-# Oximod
+# OxiMod
 
 **A MongoDB ODM for Rust**
 
@@ -6,9 +6,9 @@
 
 ## Overview
 
-Oximod is a schema-based Object-Document Mapper (ODM) for MongoDB, designed for Rust developers who want a familiar and expressive way to model and interact with their data.
+OxiMod is a schema-based Object-Document Mapper (ODM) for MongoDB, designed for Rust developers who want a familiar and expressive way to model and interact with their data.
 
-Inspired by Mongoose, Oximod brings a structured modeling experience while embracing Rust's type safety and performance. It works with any async runtime and is currently tested using `tokio`.
+Inspired by Mongoose, OxiMod brings a structured modeling experience while embracing Rust's type safety and performance. It works with any async runtime and is currently tested using `tokio`.
 
 ---
 
@@ -96,14 +96,14 @@ Each file clears previous data on run and demonstrates isolated functionality.
 
 ## License
 
-[MIT](./LICENSE) © 2025 Oximod Contributors
+[MIT](./LICENSE) © 2025 OxiMod Contributors
 
-> ⚠️ The name **Oximod** and this repository represent the official version of the project.  
+> ⚠️ The name **OxiMod** and this repository represent the official version of the project.  
 > Forks are welcome, but please **do not use the name or create similarly named organizations** to avoid confusion with the original.
 
 ---
 
-We hope Oximod helps bring joy and structure to your MongoDB experience in Rust.
+We hope OxiMod helps bring joy and structure to your MongoDB experience in Rust.
 
 Contributions welcome!
 

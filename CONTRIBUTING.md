@@ -1,6 +1,6 @@
-# Contributing to Oximod
+# Contributing to OxiMod
 
-🎉 Thank you for your interest in contributing! We’re excited to build Oximod together.
+🎉 Thank you for your interest in contributing! We’re excited to build OxiMod together.
 
 ## 🤝 Before You Start
 
@@ -29,22 +29,40 @@ cargo nextest run
 cargo run --example basic_usage
 ```
 
-## 🛆 Development Tips
+## 🛠 Branch Naming Conventions
 
-- Run `cargo fmt` to format code before committing.
-- Keep PRs focused — aim for one feature or fix per pull request.
-- Follow the existing module structure and naming conventions.
+Please use the following format when naming your branches:
+
+```
+type/issue-number/short-description
+```
+
+**Examples**:
+- `fix/42/missing-aggregate-docs`
+- `feat/103/implement-index-macro`
+- `docs/77/improve-contributing-guide`
+
+This helps us track what each branch is for and associate it easily with related issues.
+
+## 📦 Pull Request Guidelines
+
+- Keep PRs focused — one feature or fix per pull request.
+- Reference the issue number in your PR title or description.
+- Add relevant tests and docs when introducing changes.
+- Run `cargo fmt` to keep things clean.
 
 ## 🔬 Testing
 
-Make sure to add or update tests for your changes.
-We use modular test files per method. Run individual tests like:
+Make sure to add or update tests for your changes.  
+We use modular test files per method.
+
+Run individual tests like:
 
 ```bash
 cargo nextest run saves_document_without_id_correctly
 ```
 
-Use `.clear()` in tests to clean up state when needed.
+Use `.clear()` in tests to reset state between runs.
 
 ## 📜 Licensing
 
