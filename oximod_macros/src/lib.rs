@@ -1,8 +1,87 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ parse_macro_input, DeriveInput, LitStr };
+use syn::{ parse_macro_input, Attribute, DeriveInput, Lit, LitStr };
 
-#[proc_macro_derive(Model, attributes(db, collection))]
+#[derive(Default, Debug)]
+/// Arguments for creating an index on a field in a MongoDB collection.
+///
+/// This struct is populated from the `#[index(...)]` attribute
+/// and specifies the behavior of the index.
+///
+/// # Fields
+///
+/// - `unique`: (Optional) Whether the index enforces a unique constraint.
+///   - If `true`, MongoDB will reject documents that cause duplicate values for the indexed field.
+///   - Default: `false`
+///
+/// - `sparse`: (Optional) Whether the index skips documents that are missing the field.
+///   - If `true`, documents that do not have the indexed field will not be included in the index.
+///   - Default: `false`
+///
+/// - `name`: (Optional) The custom name for the index.
+///   - Useful for identifying indexes manually.
+///   - If not provided, MongoDB will generate a default name.
+///
+/// - `background`: (Optional) Whether the index is built in the background.
+///   - If `true`, index creation does not block database operations.
+///   - Default: `false`
+///
+/// # Example
+///
+/// ```rust
+/// #[index(unique = true, sparse = true, name = "email_idx", background = true, order = -1)]
+/// email: String,
+/// ```
+///
+/// # Notes
+/// - These fields **can be combined freely** — for example, you can have an index that is both `unique` and `sparse`.
+/// - MongoDB allows combining `unique`, `sparse`, and `background`.
+/// - The `name` field is just metadata and does not conflict with others.
+///
+struct IndexArgs {
+    pub unique: Option<bool>,
+    pub sparse: Option<bool>,
+    pub name: Option<String>,
+    pub background: Option<bool>,
+    pub order: Option<i32>,
+}
+
+#[derive(Debug)]
+struct IndexDefinition {
+    field_name: String,
+    args: IndexArgs,
+}
+
+fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDefinition> {
+    let mut args = IndexArgs::default();
+
+    if attr.path().is_ident("index") {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("unique") {
+                args.unique = Some(true);
+            } else if meta.path.is_ident("sparse") {
+                args.sparse = Some(true);
+            } else if meta.path.is_ident("background") {
+                args.background = Some(true);
+            } else if meta.path.is_ident("name") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Str(lit_str) = lit {
+                    args.name = Some(lit_str.value());
+                }
+            } else if meta.path.is_ident("order") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = lit {
+                    args.order = Some(lit_int.base10_parse()?);
+                }
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(IndexDefinition { field_name, args })
+}
+
+#[proc_macro_derive(Model, attributes(db, collection, index))]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
 /// This macro enables automatic implementation of the `Model` trait, allowing
@@ -33,9 +112,10 @@ use syn::{ parse_macro_input, DeriveInput, LitStr };
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-
+    
     let mut db: Option<LitStr> = None;
     let mut collection: Option<LitStr> = None;
+    let mut index_definitions = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -79,6 +159,63 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
     };
 
+
+    if let syn::Data::Struct(data_struct) = &input.data {
+        for field in data_struct.fields.iter() {
+            for attr in &field.attrs {
+                if attr.path().is_ident("index") {
+                    if let Some(ident) = &field.ident {
+                        let field_name = ident.to_string();
+                        let index_args = parse_index_args(attr, field_name)
+                            .expect("could not parse index args");
+
+                        index_definitions.push(index_args); // <-- COLLECT
+                    }
+                }
+            }
+        }
+    }
+
+    let index_models = index_definitions.iter().map(|index_def| {
+        let field = &index_def.field_name;
+        let order = index_def.args.order.unwrap_or(1);
+
+        let unique = match index_def.args.unique {
+            Some(val) => quote! { Some(#val) },
+            None => quote! { None },
+        };
+
+        let sparse = match index_def.args.sparse {
+            Some(val) => quote! { Some(#val) },
+            None => quote! { None },
+        };
+
+        let background = match index_def.args.background {
+            Some(val) => quote! { Some(#val) },
+            None => quote! { None },
+        };
+
+        let name = match &index_def.args.name {
+            Some(val) => quote! { Some(#val.to_string()) },
+            None => quote! { None },
+        };
+
+        quote! {
+            ::oximod::_mongodb::IndexModel::builder()
+                .keys(::oximod::_mongodb::bson::doc! { #field: #order })
+                .options(
+                    ::oximod::_mongodb::options::IndexOptions::builder()
+                        .unique(#unique)
+                        .sparse(#sparse)
+                        .background(#background)
+                        .name(#name)
+                        .build()
+                )
+                .build()
+        }
+    });
+
+
     let expanded =
         quote! {
 
@@ -91,11 +228,33 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             Ok(db.collection::<::oximod::_mongodb::bson::Document>(#collection))
         }
 
+        async fn create_indexes(
+            collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
+        ) -> Result<(), ::oximod::_error::oximod_error::OximodError> {
+            use ::oximod::_error::printable::Printable;
+
+            let indexes = vec![
+                #(#index_models),*
+            ];
+
+            if !indexes.is_empty() {
+                collection.create_indexes(indexes).await.map_err(|e| {
+                    ::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ConnectionError(e.to_string()),
+                        "Failed to create indexes on the collection."
+                    )
+                })?;
+            }
+
+            Ok(())
+        }
+
         #[::oximod::_async_trait::async_trait]
         impl ::oximod::_feature::model::Model for #name {
 
             async fn save(&self) -> Result<::oximod::_mongodb::bson::oid::ObjectId, ::oximod::_error::oximod_error::OximodError> {
                 let collection = get_collection()?;
+                create_indexes(&collection).await?; 
                 use ::oximod::_error::printable::Printable;
 
                 let document = ::oximod::_mongodb::bson::to_document(&self).map_err(|e| {
