@@ -219,42 +219,44 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let expanded =
         quote! {
 
-        fn get_collection() -> Result<
-            ::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>, 
-            ::oximod::_error::oximod_error::OximodError
-        > {
-            let client = ::oximod::_feature::conn::client::get_global_client()?;
-            let db = client.database(#db);
-            Ok(db.collection::<::oximod::_mongodb::bson::Document>(#collection))
-        }
-
-        async fn create_indexes(
-            collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
-        ) -> Result<(), ::oximod::_error::oximod_error::OximodError> {
-            use ::oximod::_error::printable::Printable;
-
-            let indexes = vec![
-                #(#index_models),*
-            ];
-
-            if !indexes.is_empty() {
-                collection.create_indexes(indexes).await.map_err(|e| {
-                    ::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ConnectionError(e.to_string()),
-                        "Failed to create indexes on the collection."
-                    )
-                })?;
+        impl #name {
+            fn _get_collection() -> Result<
+                ::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>, 
+                ::oximod::_error::oximod_error::OximodError
+            > {
+                let client = ::oximod::_feature::conn::client::get_global_client()?;
+                let db = client.database(#db);
+                Ok(db.collection::<::oximod::_mongodb::bson::Document>(#collection))
             }
-
-            Ok(())
+    
+            async fn _create_indexes(
+                collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
+            ) -> Result<(), ::oximod::_error::oximod_error::OximodError> {
+                use ::oximod::_error::printable::Printable;
+    
+                let indexes = vec![
+                    #(#index_models),*
+                ];
+    
+                if !indexes.is_empty() {
+                    collection.create_indexes(indexes).await.map_err(|e| {
+                        ::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OximodError::ConnectionError(e.to_string()),
+                            "Failed to create indexes on the collection."
+                        )
+                    })?;
+                }
+    
+                Ok(())
+            }
         }
 
         #[::oximod::_async_trait::async_trait]
         impl ::oximod::_feature::model::Model for #name {
 
             async fn save(&self) -> Result<::oximod::_mongodb::bson::oid::ObjectId, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
-                create_indexes(&collection).await?; 
+                let collection = Self::_get_collection()?;
+                Self::_create_indexes(&collection).await?; 
                 use ::oximod::_error::printable::Printable;
 
                 let document = ::oximod::_mongodb::bson::to_document(&self).map_err(|e| {
@@ -284,7 +286,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
                 update: impl Into<::oximod::_mongodb::bson::Document> + Send
             ) -> Result<::oximod::_mongodb::results::UpdateResult, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
 
@@ -305,7 +307,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
                 update: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::UpdateResult, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
 
@@ -325,7 +327,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn delete(
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
 
@@ -345,7 +347,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn delete_one(
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
 
@@ -368,7 +370,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             where
                 Self: Sized,
             {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
 
@@ -411,7 +413,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             where
                 Self: Sized,
             {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
 
@@ -485,7 +487,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn count(
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<u64, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
                 let count = collection
@@ -517,7 +519,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             }
 
             async fn clear() -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
                 let result = collection
@@ -536,7 +538,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn aggregate(
                 pipeline: impl Into<Vec<::oximod::_mongodb::bson::Document>> + Send
             ) -> Result<::oximod::_mongodb::Cursor<oximod::_mongodb::bson::Document>, ::oximod::_error::oximod_error::OximodError> {
-                let collection = get_collection()?;
+                let collection = Self::_get_collection()?;
                 use ::oximod::_error::printable::Printable;
 
                 let result = collection.aggregate(pipeline.into()).await.map_err(|e| {
