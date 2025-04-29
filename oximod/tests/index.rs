@@ -4,7 +4,7 @@ use testresult::TestResult;
 use serde::{Deserialize, Serialize};
 
 // Run test: cargo nextest run creates_indexes_correctly
-#[tokio::test]
+#[tokio::test] // Might throw `expected Expr rust-analyzer` so disable "macro-error"
 async fn creates_indexes_correctly() -> TestResult {
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
@@ -21,7 +21,7 @@ async fn creates_indexes_correctly() -> TestResult {
         #[index(unique, name = "name_idx")]
         name: String,
 
-        #[index(sparse, order = -1)]
+        #[index(sparse, order = "-1")]
         age: Option<i32>,
 
         active: bool,
