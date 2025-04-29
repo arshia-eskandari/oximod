@@ -70,9 +70,16 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
                 }
             } else if meta.path.is_ident("order") {
                 let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.order = Some(lit_int.base10_parse()?);
-                }
+                let order_val = match lit {
+                    Lit::Int(lit_int) => lit_int.base10_parse::<i32>()?,
+                    Lit::Str(lit_str) => lit_str.value().parse::<i32>()
+                        .map_err(|e| syn::Error::new(lit_str.span(), format!("could not parse order: {}", e)))?,
+                    other => {
+                        return Err(syn::Error::new(other.span(),
+                            "expected integer literal or string literal for `order`"));
+                    }
+                };
+                args.order = Some(order_val);
             }
             Ok(())
         })?;
