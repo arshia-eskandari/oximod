@@ -27,4 +27,10 @@ pub enum OximodError {
     /// This may result from malformed pipeline stages or collection access issues.
     #[error("Aggregation error: {0}")]
     AggregationError(String),
+
+    /// An error occurred during index creation, deletion, or retrieval.
+    /// This may indicate invalid index specifications, duplicate definitions,
+    /// or issues with interacting with the MongoDB server's index system.
+    #[error("Index error: {0}")]
+    IndexError(String)
 }
