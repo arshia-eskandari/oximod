@@ -1,10 +1,32 @@
 use async_trait;
-use mongodb::{ bson::{ self, oid::ObjectId }, results::{ DeleteResult, UpdateResult }, Cursor };
+use mongodb::{
+    bson::{ self, oid::ObjectId, Document },
+    results::{ DeleteResult, UpdateResult },
+    Collection,
+    Cursor,
+};
 use crate::error::oximod_error::OximodError;
 
 /// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro.
 #[async_trait::async_trait]
 pub trait Model {
+    /// Retrieves the MongoDB collection associated with the model.
+    ///
+    /// This method is typically used internally by the framework, but it can be called
+    /// directly when you need low-level access to the collection—such as for creating
+    /// indexes manually or performing custom MongoDB operations not covered by the trait.
+    ///
+    /// # Returns
+    /// - [`Collection<Document>`](https://docs.rs/mongodb/latest/mongodb/struct.Collection.html): A handle to the MongoDB collection.
+    /// - [`OximodError`](crate::error::oximod_error::OximodError): If the global client is not initialized or the collection name is missing.
+    ///
+    /// # Example
+    /// ```rust, no_run
+    /// let collection = User::get_collection()?;
+    /// let count = collection.count_documents(doc! {}).await?;
+    /// println!("Total documents: {}", count);
+    /// ```
+    fn get_collection() -> Result<Collection<Document>, OximodError>;
     /// Inserts the current model instance into the MongoDB collection.
     ///
     /// # Returns
