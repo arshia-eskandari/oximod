@@ -248,7 +248,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 if !indexes.is_empty() {
                     collection.create_indexes(indexes).await.map_err(|e| {
                         ::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ConnectionError(e.to_string()),
+                            ::oximod::_error::oximod_error::OximodError::IndexError(e.to_string()),
                             "Failed to create indexes on the collection."
                         )
                     })?;
