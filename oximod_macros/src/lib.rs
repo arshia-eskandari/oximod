@@ -26,6 +26,14 @@ use syn::{ parse_macro_input, Attribute, DeriveInput, Lit, LitStr };
 ///   - If `true`, index creation does not block database operations.
 ///   - Default: `false`
 ///
+/// - `order`: (Optional) The order of the index.
+///   - `1` for ascending order, `-1` for descending order.
+///   - Default: `1`
+/// 
+/// - `expire_after_secs`: (Optional) The time-to-live (TTL) for the index.
+///   - If set, documents will be automatically deleted after the specified number of seconds.
+///   - If not provided, documents will not automatically expire.
+///
 /// # Example
 ///
 /// ```rust
@@ -44,6 +52,7 @@ struct IndexArgs {
     pub name: Option<String>,
     pub background: Option<bool>,
     pub order: Option<i32>,
+    pub expire_after_secs: Option<i32>,
 }
 
 #[derive(Debug)]
@@ -80,6 +89,14 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
                     }
                 };
                 args.order = Some(order_val);
+            } else if meta.path.is_ident("expire_after_secs") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = lit {
+                    args.expire_after_secs = Some(lit_int.base10_parse::<i32>()?);
+                } else {
+                    return Err(syn::Error::new(lit.span(),
+                        "expected integer literal for `expire_after_secs`"));
+                }
             }
             Ok(())
         })?;
@@ -207,6 +224,13 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             None => quote! { None },
         };
 
+        let expire_after_secs = match index_def.args.expire_after_secs {
+            Some(secs) => {
+                quote! { Some(::std::time::Duration::from_secs(#secs as u64)) }
+            }
+            None => quote! { None },
+        };
+
         quote! {
             ::oximod::_mongodb::IndexModel::builder()
                 .keys(::oximod::_mongodb::bson::doc! { #field: #order })
@@ -216,6 +240,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         .sparse(#sparse)
                         .background(#background)
                         .name(#name)
+                        .expire_after(#expire_after_secs)
                         .build()
                 )
                 .build()

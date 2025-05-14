@@ -1,4 +1,4 @@
-use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{DateTime, oid::ObjectId};
 use oximod::{set_global_client, Model};
 use testresult::TestResult;
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,9 @@ async fn creates_indexes_correctly() -> TestResult {
         #[index(sparse, order = "-1")]
         age: Option<i32>,
 
+        #[index(expire_after_secs = 3600)]
+        created_at: Option<DateTime>,
+
         active: bool,
     }
 
@@ -33,6 +36,7 @@ async fn creates_indexes_correctly() -> TestResult {
         _id: None,
         name: "IndexUser".to_string(),
         age: Some(25),
+        created_at: Some(DateTime::now()),
         active: true,
     };
 
