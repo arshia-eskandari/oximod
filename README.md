@@ -54,6 +54,7 @@ You can add indexes to fields using the `#[index(...)]` attribute.
 - `name = "...""`: Custom name for the index.
 - `background`: Builds index in the background without locking the database.
 - `order = 1 | -1`: Index sort order (1 = ascending, -1 = descending).
+- `expire_after_secs = ...`: Time-to-live for the index in seconds.
 
 ---
 
