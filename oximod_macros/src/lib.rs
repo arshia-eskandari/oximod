@@ -105,7 +105,7 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
     Ok(IndexDefinition { field_name, args })
 }
 
-#[proc_macro_derive(Model, attributes(db, collection, index))]
+#[proc_macro_derive(Model, attributes(db, collection, index, validate))]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
 /// This macro enables automatic implementation of the `Model` trait, allowing
