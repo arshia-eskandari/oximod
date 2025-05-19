@@ -29,7 +29,7 @@ use syn::{ parse_macro_input, Attribute, DeriveInput, Lit, LitStr };
 /// - `order`: (Optional) The order of the index.
 ///   - `1` for ascending order, `-1` for descending order.
 ///   - Default: `1`
-/// 
+///
 /// - `expire_after_secs`: (Optional) The time-to-live (TTL) for the index.
 ///   - If set, documents will be automatically deleted after the specified number of seconds.
 ///   - If not provided, documents will not automatically expire.
@@ -81,11 +81,23 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
                 let lit: Lit = meta.value()?.parse()?;
                 let order_val = match lit {
                     Lit::Int(lit_int) => lit_int.base10_parse::<i32>()?,
-                    Lit::Str(lit_str) => lit_str.value().parse::<i32>()
-                        .map_err(|e| syn::Error::new(lit_str.span(), format!("could not parse order: {}", e)))?,
+                    Lit::Str(lit_str) =>
+                        lit_str
+                            .value()
+                            .parse::<i32>()
+                            .map_err(|e|
+                                syn::Error::new(
+                                    lit_str.span(),
+                                    format!("could not parse order: {}", e)
+                                )
+                            )?,
                     other => {
-                        return Err(syn::Error::new(other.span(),
-                            "expected integer literal or string literal for `order`"));
+                        return Err(
+                            syn::Error::new(
+                                other.span(),
+                                "expected integer literal or string literal for `order`"
+                            )
+                        );
                     }
                 };
                 args.order = Some(order_val);
@@ -94,8 +106,12 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
                 if let Lit::Int(lit_int) = lit {
                     args.expire_after_secs = Some(lit_int.base10_parse::<i32>()?);
                 } else {
-                    return Err(syn::Error::new(lit.span(),
-                        "expected integer literal for `expire_after_secs`"));
+                    return Err(
+                        syn::Error::new(
+                            lit.span(),
+                            "expected integer literal for `expire_after_secs`"
+                        )
+                    );
                 }
             }
             Ok(())
@@ -105,6 +121,48 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
     Ok(IndexDefinition { field_name, args })
 }
 
+#[derive(Default, Debug)]
+struct ValidateArgs {
+    min_length: Option<u32>,
+    max_length: Option<u32>,
+}
+
+struct ValidateDefinition {
+    field_name: String,
+    args: ValidateArgs,
+}
+
+fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<ValidateDefinition> {
+    let mut args = ValidateArgs::default();
+
+    if attr.path().is_ident("validate") {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("min_length") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = lit {
+                    args.min_length = Some(lit_int.base10_parse::<u32>()?);
+                } else {
+                    return Err(
+                        syn::Error::new(lit.span(), "expected integer literal for `min_length`")
+                    );
+                }
+            } else if meta.path.is_ident("max_length") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = lit {
+                    args.max_length = Some(lit_int.base10_parse::<u32>()?);
+                } else {
+                    return Err(
+                        syn::Error::new(lit.span(), "expected integer literal for `max_length`")
+                    );
+                }
+            }
+            
+            Ok(())
+        })?;
+    }
+
+    Ok(ValidateDefinition { field_name, args })
+}
 #[proc_macro_derive(Model, attributes(db, collection, index, validate))]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
@@ -136,10 +194,11 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    
+
     let mut db: Option<LitStr> = None;
     let mut collection: Option<LitStr> = None;
     let mut index_definitions = Vec::new();
+    let mut validate_definitions = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -183,17 +242,26 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
     };
 
-
     if let syn::Data::Struct(data_struct) = &input.data {
         for field in data_struct.fields.iter() {
             for attr in &field.attrs {
                 if attr.path().is_ident("index") {
                     if let Some(ident) = &field.ident {
                         let field_name = ident.to_string();
-                        let index_args = parse_index_args(attr, field_name)
-                            .expect("could not parse index args");
+                        let index_args = parse_index_args(attr, field_name).expect(
+                            "could not parse index args"
+                        );
 
                         index_definitions.push(index_args); // <-- COLLECT
+                    }
+                } else if attr.path().is_ident("validate") {
+                    if let Some(ident) = &field.ident {
+                        let field_name = ident.to_string();
+                        let validate_definition = parse_validate_args(attr, field_name).expect(
+                            "could nhot parse validate args"
+                        );
+
+                        validate_definitions.push(validate_definition);
                     }
                 }
             }
@@ -247,11 +315,44 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
     });
 
+    let validations = validate_definitions.iter().flat_map(|validate_def| {
+        let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
+        let ValidateArgs { min_length, max_length } = &validate_def.args;
+    
+        let mut checks = vec![];
+    
+        if let Some(min) = min_length {
+            checks.push(quote! {
+                if self.#field_ident.len() < #min as usize {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
+                    ));
+                }
+            });
+        }
+    
+        if let Some(max) = max_length {
+            checks.push(quote! {
+                if self.#field_ident.len() > #max as usize {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
+                    ));
+                }
+            });
+        }
+    
+        checks
+    }); 
 
     let expanded =
         quote! {
 
         impl #name {
+            fn validate(&self) -> Result<(), ::oximod::_error::oximod_error::OximodError> {
+                #(#validations)*
+                Ok(())
+            }
+            
             async fn _create_indexes(
                 collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
             ) -> Result<(), ::oximod::_error::oximod_error::OximodError> {
@@ -287,6 +388,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             }
             
             async fn save(&self) -> Result<::oximod::_mongodb::bson::oid::ObjectId, ::oximod::_error::oximod_error::OximodError> {
+                self.validate()?; 
                 let collection = Self::get_collection()?;
                 Self::_create_indexes(&collection).await?; 
                 use ::oximod::_error::printable::Printable;

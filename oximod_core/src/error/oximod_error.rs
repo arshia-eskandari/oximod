@@ -32,5 +32,10 @@ pub enum OximodError {
     /// This may indicate invalid index specifications, duplicate definitions,
     /// or issues with interacting with the MongoDB server's index system.
     #[error("Index error: {0}")]
-    IndexError(String)
+    IndexError(String),
+
+    /// A validation rule was violated on one or more fields.
+    /// This typically occurs when data does not meet constraints like `min_length`, `max`, `enum`, etc.
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
