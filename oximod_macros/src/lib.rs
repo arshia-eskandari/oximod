@@ -351,24 +351,24 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         if let Some(min) = min_length {
             checks.push(
                 quote! {
-                if self.#field_ident.len() < #min as usize {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
-                    ));
+                    if self.#field_ident.len() < #min as usize {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
+                        ));
+                    }
                 }
-            }
             );
         }
 
         if let Some(max) = max_length {
             checks.push(
                 quote! {
-                if self.#field_ident.len() > #max as usize {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
-                    ));
+                    if self.#field_ident.len() > #max as usize {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
+                        ));
+                    }
                 }
-            }
             );
         }
 
