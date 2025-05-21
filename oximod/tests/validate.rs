@@ -1,7 +1,7 @@
 use mongodb::bson::oid::ObjectId;
-use oximod::{set_global_client, Model};
+use oximod::{ set_global_client, Model };
 use testresult::TestResult;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 // Run test: cargo nextest run validates_correctly
 #[tokio::test]
@@ -20,6 +20,12 @@ async fn validates_correctly() -> TestResult {
 
         #[validate(min_length = 5, max_length = 10)]
         name: String,
+
+        #[validate(required)]
+        email: Option<String>,
+
+        #[validate(enum_values("admin", "user", "guest"))]
+        role: Option<String>,
     }
 
     User::clear().await?;
@@ -27,6 +33,8 @@ async fn validates_correctly() -> TestResult {
     let valid_user = User {
         _id: None,
         name: "ValidName".to_string(),
+        email: Some("user@example.com".to_string()),
+        role: Some("user".to_string()),
     };
 
     let result = valid_user.save().await?;
@@ -34,29 +42,51 @@ async fn validates_correctly() -> TestResult {
 
     let too_short_user = User {
         _id: None,
-        name: "abc".to_string(), // Too short
+        name: "abc".to_string(),
+        email: Some("x@y.com".to_string()),
+        role: Some("user".to_string()),
     };
 
     let err = too_short_user.save().await;
     assert!(err.is_err());
     let msg = format!("{:?}", err);
-    assert!(
-        msg.contains("must be at least 5 characters long"),
-        "Expected validation error message, got: {msg}"
-    );
+    assert!(msg.contains("at least 5 characters"), "Expected min length error, got: {msg}");
 
     let too_long_user = User {
-      _id: None,
-      name: "ThisNameIsWayTooLong".to_string(),
+        _id: None,
+        name: "ThisNameIsWayTooLong".to_string(),
+        email: Some("x@y.com".to_string()),
+        role: Some("user".to_string()),
     };
-    
+
     let err = too_long_user.save().await;
     assert!(err.is_err());
     let msg = format!("{:?}", err);
-    assert!(
-        msg.contains("at most"),
-        "Expected max length validation error, got: {msg}"
-    ); 
+    assert!(msg.contains("at most"), "Expected max length error, got: {msg}");
+
+    let missing_required = User {
+        _id: None,
+        name: "Valid".to_string(),
+        email: None,
+        role: Some("admin".to_string()),
+    };
+
+    let err = missing_required.save().await;
+    assert!(err.is_err());
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("is required"), "Expected required field error, got: {msg}");
+
+    let invalid_enum = User {
+        _id: None,
+        name: "Valid".to_string(),
+        email: Some("test@example.com".to_string()),
+        role: Some("superuser".to_string()), // invalid
+    };
+
+    let err = invalid_enum.save().await;
+    assert!(err.is_err());
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("must be one of"), "Expected enum_values error, got: {msg}");
 
     Ok(())
 }

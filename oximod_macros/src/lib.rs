@@ -123,8 +123,10 @@ fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDe
 
 #[derive(Default, Debug)]
 struct ValidateArgs {
-    min_length: Option<u32>,
-    max_length: Option<u32>,
+    pub min_length: Option<u32>,
+    pub max_length: Option<u32>,
+    pub required: Option<bool>,
+    pub enum_values: Option<Vec<String>>,
 }
 
 struct ValidateDefinition {
@@ -155,6 +157,30 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                         syn::Error::new(lit.span(), "expected integer literal for `max_length`")
                     );
                 }
+            } else if meta.path.is_ident("required") {
+                args.required = Some(true);
+            } else if meta.path.is_ident("enum_values") {
+                // 1. Grab the parenthesized group
+                let content;
+                syn::parenthesized!(content in meta.input);
+            
+                // 2. Parse a comma-separated list of string literals
+                let values = content
+                    .parse_terminated(
+                        |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
+                        syn::Token![,],
+                    )?
+                    .into_iter()
+                    .map(|lit_str| lit_str.value())
+                    .collect::<Vec<_>>();
+            
+                args.enum_values = Some(values);
+            }
+            
+            
+            
+             else {
+                return Err(meta.error("unknown attribute key"));
             }
             
             Ok(())
@@ -163,6 +189,7 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
 
     Ok(ValidateDefinition { field_name, args })
 }
+
 #[proc_macro_derive(Model, attributes(db, collection, index, validate))]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
@@ -317,32 +344,75 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let validations = validate_definitions.iter().flat_map(|validate_def| {
         let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
-        let ValidateArgs { min_length, max_length } = &validate_def.args;
-    
+        let ValidateArgs { min_length, max_length, required, enum_values } = &validate_def.args;
+
         let mut checks = vec![];
-    
+
         if let Some(min) = min_length {
-            checks.push(quote! {
+            checks.push(
+                quote! {
                 if self.#field_ident.len() < #min as usize {
                     return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
                     ));
                 }
-            });
+            }
+            );
         }
-    
+
         if let Some(max) = max_length {
-            checks.push(quote! {
+            checks.push(
+                quote! {
                 if self.#field_ident.len() > #max as usize {
                     return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
                     ));
                 }
+            }
+            );
+        }
+
+        if let Some(req) = required {
+            if *req {
+                checks.push(
+                    quote! {
+                        match self.#field_ident {
+                            Some(_) => {},
+                            None => {
+                                return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                    format!("Field '{}' is required", stringify!(#field_ident))
+                                ))
+                            },
+                            _ => {}
+                        }
+                    }
+                );
+            }
+        }
+
+        if let Some(values) = enum_values {
+            let allowed: Vec<proc_macro2::TokenStream> = values
+                .iter()
+                .map(|v| quote! { #v })
+                .collect();
+    
+            checks.push(quote! {
+                if let Some(ref value) = self.#field_ident {
+                    if ! [#( #allowed ),*].contains(&value.as_str()) {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!(
+                                "Field '{}' must be one of: {}",
+                                stringify!(#field_ident),
+                                vec![#( #allowed.to_string() ),*].join(", ")
+                            )
+                        ));
+                    }
+                }
             });
         }
     
         checks
-    }); 
+    });
 
     let expanded =
         quote! {
