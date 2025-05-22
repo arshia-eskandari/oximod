@@ -127,6 +127,7 @@ struct ValidateArgs {
     pub max_length: Option<u32>,
     pub required: Option<bool>,
     pub enum_values: Option<Vec<String>>,
+    pub email: Option<bool>,
 }
 
 struct ValidateDefinition {
@@ -163,26 +164,24 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                 // 1. Grab the parenthesized group
                 let content;
                 syn::parenthesized!(content in meta.input);
-            
+
                 // 2. Parse a comma-separated list of string literals
                 let values = content
                     .parse_terminated(
                         |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
-                        syn::Token![,],
+                        syn::Token![,]
                     )?
                     .into_iter()
                     .map(|lit_str| lit_str.value())
                     .collect::<Vec<_>>();
-            
+
                 args.enum_values = Some(values);
-            }
-            
-            
-            
-             else {
+            } else if meta.path.is_ident("email") {
+                args.email = Some(true);
+            } else {
                 return Err(meta.error("unknown attribute key"));
             }
-            
+
             Ok(())
         })?;
     }
@@ -344,7 +343,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let validations = validate_definitions.iter().flat_map(|validate_def| {
         let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
-        let ValidateArgs { min_length, max_length, required, enum_values } = &validate_def.args;
+        let ValidateArgs { min_length, max_length, required, enum_values, email } =
+            &validate_def.args;
 
         let mut checks = vec![];
 
@@ -395,8 +395,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 .iter()
                 .map(|v| quote! { #v })
                 .collect();
-    
-            checks.push(quote! {
+
+            checks.push(
+                quote! {
                 if let Some(ref value) = self.#field_ident {
                     if ! [#( #allowed ),*].contains(&value.as_str()) {
                         return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -408,9 +409,33 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         ));
                     }
                 }
-            });
+            }
+            );
         }
-    
+
+        if let Some(is_email) = email {
+            if *is_email {
+                checks.push(
+                    quote! {
+                        if let Some(email) = &self.#field_ident {
+                            if !email.contains('@') || !email.contains('.') {
+                                return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                    format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                                ));
+                            }
+                        
+                            let parts: Vec<&str> = email.split('@').collect();
+                            if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
+                                return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                    format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                                ));
+                            }
+                        } 
+                    }
+                );
+            }
+        }
+
         checks
     });
 

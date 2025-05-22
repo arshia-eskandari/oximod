@@ -17,16 +17,16 @@ async fn validates_correctly() -> TestResult {
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
-
+    
         #[validate(min_length = 5, max_length = 10)]
         name: String,
-
-        #[validate(required)]
+    
+        #[validate(email)]
         email: Option<String>,
-
-        #[validate(enum_values("admin", "user", "guest"))]
+    
+        #[validate(required, enum_values("admin", "user", "guest"))]
         role: Option<String>,
-    }
+    } 
 
     User::clear().await?;
 
@@ -68,7 +68,7 @@ async fn validates_correctly() -> TestResult {
         _id: None,
         name: "Valid".to_string(),
         email: None,
-        role: Some("admin".to_string()),
+        role: None,
     };
 
     let err = missing_required.save().await;
@@ -87,6 +87,42 @@ async fn validates_correctly() -> TestResult {
     assert!(err.is_err());
     let msg = format!("{:?}", err);
     assert!(msg.contains("must be one of"), "Expected enum_values error, got: {msg}");
+
+    let missing_role = User {
+        _id: None,
+        name: "Valid".to_string(),
+        email: Some("valid@example.com".to_string()),
+        role: None,
+    };
+
+    let err = missing_role.save().await;
+    assert!(err.is_err());
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("is required"), "Expected required field error for role, got: {msg}");
+
+    let bad_email1 = User {
+        _id: None,
+        name: "Valid".to_string(),
+        email: Some("notanemail.com".to_string()),
+        role: Some("admin".to_string()),
+    };
+
+    let err = bad_email1.save().await;
+    assert!(err.is_err());
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("must be a valid email"), "Expected email validation error, got: {msg}");
+
+    let bad_email2 = User {
+        _id: None,
+        name: "Valid".to_string(),
+        email: Some("user@domain".to_string()),
+        role: Some("admin".to_string()),
+    };
+
+    let err = bad_email2.save().await;
+    assert!(err.is_err());
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("must be a valid email"), "Expected email validation error, got: {msg}");
 
     Ok(())
 }
