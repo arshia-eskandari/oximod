@@ -128,6 +128,7 @@ struct ValidateArgs {
     pub required: Option<bool>,
     pub enum_values: Option<Vec<String>>,
     pub email: Option<bool>,
+    pub pattern: Option<String>,
 }
 
 struct ValidateDefinition {
@@ -178,6 +179,15 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                 args.enum_values = Some(values);
             } else if meta.path.is_ident("email") {
                 args.email = Some(true);
+            } else if meta.path.is_ident("pattern") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Str(lit_str) = lit {
+                    args.pattern = Some(lit_str.value());
+                } else {
+                    return Err(
+                        syn::Error::new(lit.span(), "expected integer literal for `min_length`")
+                    );
+                }
             } else {
                 return Err(meta.error("unknown attribute key"));
             }
@@ -343,7 +353,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let validations = validate_definitions.iter().flat_map(|validate_def| {
         let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
-        let ValidateArgs { min_length, max_length, required, enum_values, email } =
+        let ValidateArgs { min_length, max_length, required, enum_values, email, pattern } =
             &validate_def.args;
 
         let mut checks = vec![];
@@ -435,6 +445,26 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 );
             }
         }
+
+        if let Some(pattern) = pattern {
+            checks.push(quote! {
+                if let Some(ref value) = self.#field_ident {
+                    let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
+                        )
+                    })?;
+                    if !regex.is_match(value) {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!(
+                                "Field '{}' does not match the required pattern",
+                                stringify!(#field_ident)
+                            )
+                        ));
+                    }
+                }
+            });
+        }        
 
         checks
     });

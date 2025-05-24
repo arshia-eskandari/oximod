@@ -1,128 +1,231 @@
 use mongodb::bson::oid::ObjectId;
-use oximod::{ set_global_client, Model };
+use oximod::{set_global_client, Model};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
-// Run test: cargo nextest run validates_correctly
-#[tokio::test]
-async fn validates_correctly() -> TestResult {
+#[derive(Model, Serialize, Deserialize, Debug)]
+#[db("test")]
+#[collection("validation_test")]
+pub struct User {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    _id: Option<ObjectId>,
+
+    #[validate(min_length = 5, max_length = 10)]
+    name: String,
+
+    #[validate(email)]
+    email: Option<String>,
+
+    #[validate(required, enum_values("admin", "user", "guest"))]
+    role: Option<String>,
+}
+
+#[derive(Model, Serialize, Deserialize, Debug)]
+#[db("test")]
+#[collection("pattern_test")]
+pub struct Product {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    _id: Option<ObjectId>,
+
+    #[validate(pattern = r"^SKU-\d{4}$")]
+    code: Option<String>,
+}
+
+async fn init() {
     dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
+    let mongodb_uri = std::env::var("MONGODB_URI").expect("Missing MONGODB_URI");
+    set_global_client(mongodb_uri).await.unwrap();
+}
 
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+// =======================
+//      User tests
+// =======================
 
-    #[derive(Model, Serialize, Deserialize, Debug)]
-    #[db("test")]
-    #[collection("validation_test")]
-    pub struct User {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        _id: Option<ObjectId>,
-    
-        #[validate(min_length = 5, max_length = 10)]
-        name: String,
-    
-        #[validate(email)]
-        email: Option<String>,
-    
-        #[validate(required, enum_values("admin", "user", "guest"))]
-        role: Option<String>,
-    } 
-
+// Run test: cargo nextest run test_valid_user_saves_successfully
+#[tokio::test]
+async fn test_valid_user_saves_successfully() -> TestResult {
+    init().await;
     User::clear().await?;
 
-    let valid_user = User {
+    let user = User {
         _id: None,
         name: "ValidName".to_string(),
         email: Some("user@example.com".to_string()),
         role: Some("user".to_string()),
     };
 
-    let result = valid_user.save().await?;
+    let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
+    Ok(())
+}
 
-    let too_short_user = User {
+// Run test: cargo nextest run test_min_length_violation
+#[tokio::test]
+async fn test_min_length_violation() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "abc".to_string(),
         email: Some("x@y.com".to_string()),
         role: Some("user".to_string()),
     };
 
-    let err = too_short_user.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("at least 5 characters"), "Expected min length error, got: {msg}");
+    assert!(format!("{:?}", err).contains("at least 5 characters"));
+    Ok(())
+}
 
-    let too_long_user = User {
+// Run test: cargo nextest run test_max_length_violation
+#[tokio::test]
+async fn test_max_length_violation() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "ThisNameIsWayTooLong".to_string(),
         email: Some("x@y.com".to_string()),
         role: Some("user".to_string()),
     };
 
-    let err = too_long_user.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("at most"), "Expected max length error, got: {msg}");
+    assert!(format!("{:?}", err).contains("at most"));
+    Ok(())
+}
 
-    let missing_required = User {
+// Run test: cargo nextest run test_missing_required_field
+#[tokio::test]
+async fn test_missing_required_field() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "Valid".to_string(),
         email: None,
         role: None,
     };
 
-    let err = missing_required.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("is required"), "Expected required field error, got: {msg}");
+    assert!(format!("{:?}", err).contains("is required"));
+    Ok(())
+}
 
-    let invalid_enum = User {
+// Run test: cargo nextest run test_invalid_enum_value
+#[tokio::test]
+async fn test_invalid_enum_value() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "Valid".to_string(),
-        email: Some("test@example.com".to_string()),
-        role: Some("superuser".to_string()), // invalid
+        email: Some("user@example.com".to_string()),
+        role: Some("superuser".to_string()),
     };
 
-    let err = invalid_enum.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("must be one of"), "Expected enum_values error, got: {msg}");
+    assert!(format!("{:?}", err).contains("must be one of"));
+    Ok(())
+}
 
-    let missing_role = User {
+// Run test: cargo nextest run test_missing_required_role
+#[tokio::test]
+async fn test_missing_required_role() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "Valid".to_string(),
-        email: Some("valid@example.com".to_string()),
+        email: Some("user@example.com".to_string()),
         role: None,
     };
 
-    let err = missing_role.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("is required"), "Expected required field error for role, got: {msg}");
+    assert!(format!("{:?}", err).contains("is required"));
+    Ok(())
+}
 
-    let bad_email1 = User {
+// Run test: cargo nextest run test_invalid_email_missing_at
+#[tokio::test]
+async fn test_invalid_email_missing_at() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "Valid".to_string(),
-        email: Some("notanemail.com".to_string()),
+        email: Some("invalidemail.com".to_string()),
         role: Some("admin".to_string()),
     };
 
-    let err = bad_email1.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("must be a valid email"), "Expected email validation error, got: {msg}");
+    assert!(format!("{:?}", err).contains("valid email"));
+    Ok(())
+}
 
-    let bad_email2 = User {
+// Run test: cargo nextest run test_invalid_email_missing_domain_dot
+#[tokio::test]
+async fn test_invalid_email_missing_domain_dot() -> TestResult {
+    init().await;
+    User::clear().await?;
+
+    let user = User {
         _id: None,
         name: "Valid".to_string(),
         email: Some("user@domain".to_string()),
         role: Some("admin".to_string()),
     };
 
-    let err = bad_email2.save().await;
+    let err = user.save().await;
     assert!(err.is_err());
-    let msg = format!("{:?}", err);
-    assert!(msg.contains("must be a valid email"), "Expected email validation error, got: {msg}");
+    assert!(format!("{:?}", err).contains("valid email"));
+    Ok(())
+}
+
+// =======================
+//      Product test
+// =======================
+
+// Run test: cargo nextest run test_invalid_pattern_format
+#[tokio::test]
+async fn test_invalid_pattern_format() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let product = Product {
+        _id: None,
+        code: Some("BAD-SKU".to_string()),
+    };
+
+    let err = product.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("pattern"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_valid_pattern_format
+#[tokio::test]
+async fn test_valid_pattern_format() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let product = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()), // ✅ matches ^SKU-\d{4}$
+    };
+
+    let result = product.save().await?;
+    assert_ne!(result, ObjectId::default());
 
     Ok(())
 }
