@@ -32,6 +32,15 @@ pub struct Product {
 
     #[validate(non_empty)]
     name: Option<String>,
+
+    #[validate(positive)]
+    quantity: i32,
+
+    #[validate(negative)]
+    temperature: i32,
+
+    #[validate(non_negative)]
+    rating: i32,
 }
 
 async fn init() {
@@ -209,6 +218,9 @@ async fn test_invalid_pattern_format() -> TestResult {
         _id: None,
         code: Some("BAD-SKU".to_string()),
         name: Some("Product1".to_string()),
+        quantity: 32,
+        temperature: -20,
+        rating: 2,
     };
 
     let err = product.save().await;
@@ -227,6 +239,9 @@ async fn test_valid_pattern_format() -> TestResult {
         _id: None,
         code: Some("SKU-1234".to_string()), // ✅ matches ^SKU-\d{4}$
         name: Some("Product1".to_string()),
+        quantity: 32,
+        temperature: -20,
+        rating: 2,
     };
 
     let result = product.save().await?;
@@ -246,6 +261,9 @@ async fn test_non_empty_field_missing_or_blank() -> TestResult {
         _id: None,
         code: Some("SKU-1234".to_string()),
         name: None,
+        quantity: 32,
+        temperature: -20,
+        rating: 2,
     };
 
     let err = missing_name.save().await;
@@ -257,6 +275,9 @@ async fn test_non_empty_field_missing_or_blank() -> TestResult {
         _id: None,
         code: Some("SKU-1234".to_string()),
         name: Some("".to_string()),
+        quantity: 32,
+        temperature: -20,
+        rating: 2,
     };
 
     let err = empty_name.save().await;
@@ -268,6 +289,9 @@ async fn test_non_empty_field_missing_or_blank() -> TestResult {
         _id: None,
         code: Some("SKU-1234".to_string()),
         name: Some("   ".to_string()),
+        quantity: 32,
+        temperature: -20,
+        rating: 2,
     };
 
     let err = whitespace_name.save().await;
@@ -287,10 +311,136 @@ async fn test_non_empty_field_valid() -> TestResult {
         _id: None,
         code: Some("SKU-1234".to_string()),
         name: Some("Non-Empty Name".to_string()),
+        quantity: 32,
+        temperature: -20,
+        rating: 2,
     };
 
     let result = valid.save().await?;
     assert_ne!(result, ObjectId::default());
 
+    Ok(())
+}
+
+// Run test: cargo nextest run test_positive_field_fails_on_zero_or_negative
+#[tokio::test]
+async fn test_positive_field_fails_on_zero_or_negative() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let zero = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Valid".to_string()),
+        quantity: 0, // ❌ not positive
+        temperature: -10,
+        rating: 3,
+    };
+
+    let err = zero.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("positive"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_negative_field_fails_on_zero_or_positive
+#[tokio::test]
+async fn test_negative_field_fails_on_zero_or_positive() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let pos_temp = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Valid".to_string()),
+        quantity: 5,
+        temperature: 10, // ❌ not negative
+        rating: 0,
+    };
+
+    let err = pos_temp.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("negative"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_negative_field_fails_on_negative
+#[tokio::test]
+async fn test_non_negative_field_fails_on_negative() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let neg_rating = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Valid".to_string()),
+        quantity: 1,
+        temperature: -5,
+        rating: -1, // ❌ not non-negative
+    };
+
+    let err = neg_rating.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("non-negative"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_positive_field_valid
+#[tokio::test]
+async fn test_positive_field_valid() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let product = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Valid".to_string()),
+        quantity: 5, // ✅
+        temperature: -10,
+        rating: 0,
+    };
+
+    let result = product.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}
+
+// Run test: cargo nextest run test_negative_field_valid
+#[tokio::test]
+async fn test_negative_field_valid() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let product = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Valid".to_string()),
+        quantity: 10,
+        temperature: -3, // ✅
+        rating: 1,
+    };
+
+    let result = product.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_negative_field_valid
+#[tokio::test]
+async fn test_non_negative_field_valid() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let product = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Valid".to_string()),
+        quantity: 2,
+        temperature: -1,
+        rating: 0, // ✅
+    };
+
+    let result = product.save().await?;
+    assert_ne!(result, ObjectId::default());
     Ok(())
 }

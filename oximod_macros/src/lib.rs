@@ -130,6 +130,9 @@ struct ValidateArgs {
     pub email: Option<bool>,
     pub pattern: Option<String>,
     pub non_empty: Option<bool>,
+    pub positive: Option<bool>,
+    pub negative: Option<bool>,
+    pub non_negative: Option<bool>,
 }
 
 struct ValidateDefinition {
@@ -191,6 +194,12 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                 }
             } else if meta.path.is_ident("non_empty") {
                 args.non_empty = Some(true);
+            } else if meta.path.is_ident("positive") {
+                args.positive = Some(true);
+            } else if meta.path.is_ident("negative") {
+                args.negative = Some(true);
+            } else if meta.path.is_ident("non_negative") {
+                args.non_negative = Some(true);
             } else {
                 return Err(meta.error("unknown attribute key"));
             }
@@ -364,6 +373,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             email,
             pattern,
             non_empty,
+            positive,
+            negative,
+            non_negative,
         } = &validate_def.args;
 
         let mut checks = vec![];
@@ -477,9 +489,10 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             }
             );
         }
- 
+
         if let Some(true) = non_empty {
-            checks.push(quote! {
+            checks.push(
+                quote! {
                 let value = &self.#field_ident;
                 if let Some(ref val) = value {
                     if val.trim().is_empty() {
@@ -492,8 +505,51 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         format!("Field '{}' is missing but marked as non-empty", stringify!(#field_ident))
                     ));
                 }
-            });
-        } 
+            }
+            );
+        }
+
+        if let Some(positive) = positive {
+            if *positive {
+                checks.push(
+                    quote! {
+                        if self.#field_ident <= 0 {
+                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                format!("Field '{}' must be positive", stringify!(#field_ident))
+                            ))
+                        }
+                    }
+                );
+            }
+        }
+
+        if let Some(negative) = negative {
+            if *negative {
+                checks.push(
+                    quote! {
+                        if self.#field_ident >= 0 {
+                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                format!("Field '{}' must be negative", stringify!(#field_ident))
+                            ))
+                        }
+                    }
+                );
+            }
+        }
+
+        if let Some(non_negative) = non_negative {
+            if *non_negative {
+                checks.push(
+                    quote! {
+                        if self.#field_ident < 0 {
+                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                format!("Field '{}' must be non-negative", stringify!(#field_ident))
+                            ))
+                        }
+                    }
+                );
+            }
+        }
 
         checks
     });
