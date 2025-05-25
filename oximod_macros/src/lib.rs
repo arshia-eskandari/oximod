@@ -133,6 +133,8 @@ struct ValidateArgs {
     pub positive: Option<bool>,
     pub negative: Option<bool>,
     pub non_negative: Option<bool>,
+    pub min: Option<i64>,
+    pub max: Option<i64>,
 }
 
 struct ValidateDefinition {
@@ -200,6 +202,20 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                 args.negative = Some(true);
             } else if meta.path.is_ident("non_negative") {
                 args.non_negative = Some(true);
+            } else if meta.path.is_ident("min") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = lit {
+                    args.min = Some(lit_int.base10_parse::<i64>()?);
+                } else {
+                    return Err(syn::Error::new(lit.span(), "expected integer literal for `min`"));
+                }
+            } else if meta.path.is_ident("max") {
+                let lit: Lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = lit {
+                    args.max = Some(lit_int.base10_parse::<i64>()?);
+                } else {
+                    return Err(syn::Error::new(lit.span(), "expected integer literal for `max`"));
+                }
             } else {
                 return Err(meta.error("unknown attribute key"));
             }
@@ -376,6 +392,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             positive,
             negative,
             non_negative,
+            min,
+            max,
         } = &validate_def.args;
 
         let mut checks = vec![];
@@ -549,6 +567,30 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     }
                 );
             }
+        }
+
+        if let Some(min) = min {
+            checks.push(
+                quote! {
+                    if (self.#field_ident as i64) < #min {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be at least {}", stringify!(#field_ident), #min)
+                        ));
+                    }
+                }
+            );
+        }
+
+        if let Some(max) = max {
+            checks.push(
+                quote! {
+                    if (self.#field_ident as i64) > #max {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be at most {}", stringify!(#field_ident), #max)
+                        ));
+                    }
+                }
+            );
         }
 
         checks
