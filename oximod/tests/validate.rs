@@ -29,6 +29,9 @@ pub struct Product {
 
     #[validate(pattern = r"^SKU-\d{4}$")]
     code: Option<String>,
+
+    #[validate(non_empty)]
+    name: Option<String>,
 }
 
 async fn init() {
@@ -205,6 +208,7 @@ async fn test_invalid_pattern_format() -> TestResult {
     let product = Product {
         _id: None,
         code: Some("BAD-SKU".to_string()),
+        name: Some("Product1".to_string()),
     };
 
     let err = product.save().await;
@@ -222,9 +226,70 @@ async fn test_valid_pattern_format() -> TestResult {
     let product = Product {
         _id: None,
         code: Some("SKU-1234".to_string()), // ✅ matches ^SKU-\d{4}$
+        name: Some("Product1".to_string()),
     };
 
     let result = product.save().await?;
+    assert_ne!(result, ObjectId::default());
+
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_empty_field_missing_or_blank
+#[tokio::test]
+async fn test_non_empty_field_missing_or_blank() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    // Case 1: Field is None
+    let missing_name = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: None,
+    };
+
+    let err = missing_name.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("non-empty"));
+
+    // Case 2: Field is Some("") (empty string)
+    let empty_name = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("".to_string()),
+    };
+
+    let err = empty_name.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("non-empty"));
+
+    // Case 3: Field is Some("   ") (whitespace only)
+    let whitespace_name = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("   ".to_string()),
+    };
+
+    let err = whitespace_name.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("non-empty"));
+
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_empty_field_valid
+#[tokio::test]
+async fn test_non_empty_field_valid() -> TestResult {
+    init().await;
+    Product::clear().await?;
+
+    let valid = Product {
+        _id: None,
+        code: Some("SKU-1234".to_string()),
+        name: Some("Non-Empty Name".to_string()),
+    };
+
+    let result = valid.save().await?;
     assert_ne!(result, ObjectId::default());
 
     Ok(())

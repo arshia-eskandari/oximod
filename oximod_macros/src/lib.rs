@@ -129,6 +129,7 @@ struct ValidateArgs {
     pub enum_values: Option<Vec<String>>,
     pub email: Option<bool>,
     pub pattern: Option<String>,
+    pub non_empty: Option<bool>,
 }
 
 struct ValidateDefinition {
@@ -188,6 +189,8 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                         syn::Error::new(lit.span(), "expected integer literal for `min_length`")
                     );
                 }
+            } else if meta.path.is_ident("non_empty") {
+                args.non_empty = Some(true);
             } else {
                 return Err(meta.error("unknown attribute key"));
             }
@@ -353,8 +356,15 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let validations = validate_definitions.iter().flat_map(|validate_def| {
         let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
-        let ValidateArgs { min_length, max_length, required, enum_values, email, pattern } =
-            &validate_def.args;
+        let ValidateArgs {
+            min_length,
+            max_length,
+            required,
+            enum_values,
+            email,
+            pattern,
+            non_empty,
+        } = &validate_def.args;
 
         let mut checks = vec![];
 
@@ -447,7 +457,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
 
         if let Some(pattern) = pattern {
-            checks.push(quote! {
+            checks.push(
+                quote! {
                 if let Some(ref value) = self.#field_ident {
                     let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -463,8 +474,26 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         ));
                     }
                 }
+            }
+            );
+        }
+ 
+        if let Some(true) = non_empty {
+            checks.push(quote! {
+                let value = &self.#field_ident;
+                if let Some(ref val) = value {
+                    if val.trim().is_empty() {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be non-empty", stringify!(#field_ident))
+                        ));
+                    }
+                } else {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' is missing but marked as non-empty", stringify!(#field_ident))
+                    ));
+                }
             });
-        }        
+        } 
 
         checks
     });
