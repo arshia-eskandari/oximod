@@ -20,4 +20,6 @@ pub use futures_util as _futures_util;
 #[doc(hidden)]
 pub use mongodb as _mongodb;
 #[doc(hidden)]
+pub use regex as _regex;
+#[doc(hidden)]
 pub use oximod_core::feature::model::Model; // removes the need of importing the trait
