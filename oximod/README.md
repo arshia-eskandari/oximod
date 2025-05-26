@@ -29,6 +29,9 @@ Inspired by Mongoose, OxiMod brings a structured modeling experience while embra
 - **Indexing Support**  
   Add indexes declaratively via field-level `#[index(...)]` attributes.
 
+- **Validation Support**  
+  Add field-level validation using `#[validate(...)]`. Supports length, email, pattern, positivity, and more.
+
 - **Clear Error Handling**  
   Strongly typed, developer-friendly errors based on `thiserror`.
 
@@ -54,6 +57,27 @@ You can add indexes to fields using the `#[index(...)]` attribute.
 - `name = "...""`: Custom name for the index.
 - `background`: Builds index in the background without locking the database.
 - `order = 1 | -1`: Index sort order (1 = ascending, -1 = descending).
+- `expire_after_secs = ...`: Time-to-live for the index in seconds.
+
+### Field-Level Validation Attributes
+
+You can apply validations on fields using the `#[validate(...)]` attribute.
+
+#### Supported Validators:
+
+- `min_length = N`: Minimum length for `String` values.
+- `max_length = N`: Maximum length for `String` values.
+- `required`: Ensures the field is not `None`.
+- `email`: Validates the format of an email.
+- `pattern = "regex"`: Validates the value against a regex pattern.
+- `non_empty`: Ensures a `String` is not empty or whitespace.
+- `positive`: Ensures numeric value is greater than 0.
+- `negative`: Ensures numeric value is less than 0.
+- `non_negative`: Ensures numeric value is 0 or greater.
+- `min = N`: Ensures numeric value is at least `N`.
+- `max = N`: Ensures numeric value is at most `N`.
+
+> 💡 Use native Rust enums instead of `enum_values`.
 
 ---
 
@@ -79,30 +103,13 @@ struct User {
     #[index(sparse)]
     phone: Option<String>,
 
+    #[validate(min_length = 3)]
     name: String,
+
+    #[validate(non_negative)]
     age: i32,
+
     active: bool,
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI")?;
-    set_global_client(mongodb_uri).await?;
-
-    let user = User {
-        _id: None,
-        email: "example@example.com".into(),
-        phone: Some("123-456-7890".into()),
-        name: "User1".into(),
-        age: 29,
-        active: true,
-    };
-
-    let id = user.save().await?;
-    println!("Inserted user with _id: {}", id);
-
-    Ok(())
 }
 ```
 
@@ -110,6 +117,8 @@ In this example:
 - `#[db("my_app_db")]` and `#[collection("users")]` configure the database and collection.
 - The `email` field has a descending, unique index with a custom name.
 - The `phone` field is indexed only when it exists in the document (sparse).
+- The `name` field must be at least 3 characters long.
+- The `age` field must be non-negative.
 
 ---
 
@@ -120,6 +129,7 @@ OxiMod includes a growing set of usage examples:
 ```bash
 cargo run --example basic_usage
 cargo run --example aggregate_usage
+cargo run --example validate_usage
 cargo run --example query
 cargo run --example update
 cargo run --example delete
