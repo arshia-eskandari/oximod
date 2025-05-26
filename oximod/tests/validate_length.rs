@@ -6,6 +6,13 @@ use oximod::Model;
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Role {
+    Admin,
+    User,
+    Guess,
+}
+
 #[derive(Model, Serialize, Deserialize, Debug)]
 #[db("test")]
 #[collection("validate_length")]
@@ -19,8 +26,8 @@ pub struct User {
     #[validate(email)]
     email: Option<String>,
 
-    #[validate(required, enum_values("admin", "user", "guest"))]
-    role: Option<String>,
+    #[validate(required)]
+    role: Option<Role>,
 }
 
 // Run test: cargo nextest run test_min_length_violation
@@ -33,7 +40,7 @@ async fn test_min_length_violation() -> TestResult {
         _id: None,
         name: "abc".to_string(), // too short
         email: Some("x@y.com".to_string()),
-        role: Some("user".to_string()),
+        role: Some(Role::Admin),
     };
 
     let err = user.save().await;
@@ -53,7 +60,7 @@ async fn test_max_length_violation() -> TestResult {
         _id: None,
         name: "ThisNameIsWayTooLong".to_string(), // too long
         email: Some("x@y.com".to_string()),
-        role: Some("user".to_string()),
+        role: Some(Role::Admin),
     };
 
     let err = user.save().await;
@@ -73,7 +80,7 @@ async fn test_length_valid() -> TestResult {
         _id: None,
         name: "ValidName".to_string(), // valid
         email: Some("user@example.com".to_string()),
-        role: Some("admin".to_string()),
+        role: Some(Role::Admin),
     };
 
     let result = user.save().await?;

@@ -6,6 +6,13 @@ use oximod::Model;
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Role {
+    Admin,
+    User,
+    Guess,
+}
+
 #[derive(Model, Serialize, Deserialize, Debug)]
 #[db("test")]
 #[collection("validate_email")]
@@ -19,8 +26,8 @@ pub struct User {
     #[validate(email)]
     email: Option<String>,
 
-    #[validate(required, enum_values("admin", "user", "guest"))]
-    role: Option<String>,
+    #[validate(required)]
+    role: Option<Role>,
 }
 
 // Run test: cargo nextest run test_missing_at_symbol
@@ -33,7 +40,7 @@ async fn test_missing_at_symbol() -> TestResult {
         _id: None,
         name: "Valid".to_string(),
         email: Some("invalidemail.com".to_string()), // ❌ missing '@'
-        role: Some("admin".to_string()),
+        role: Some(Role::Admin),
     };
 
     let err = user.save().await;
@@ -52,7 +59,7 @@ async fn test_missing_domain_dot() -> TestResult {
         _id: None,
         name: "Valid".to_string(),
         email: Some("user@domain".to_string()), // ❌ missing .com, .net, etc.
-        role: Some("admin".to_string()),
+        role: Some(Role::Admin),
     };
 
     let err = user.save().await;
@@ -71,7 +78,7 @@ async fn test_valid_email() -> TestResult {
         _id: None,
         name: "Valid".to_string(),
         email: Some("user@example.com".to_string()), // ✅ valid
-        role: Some("user".to_string()),
+        role: Some(Role::Guess),
     };
 
     let result = user.save().await?;

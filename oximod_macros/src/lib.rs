@@ -126,7 +126,7 @@ struct ValidateArgs {
     pub min_length: Option<u32>,
     pub max_length: Option<u32>,
     pub required: Option<bool>,
-    pub enum_values: Option<Vec<String>>,
+    // pub enum_values: Option<Vec<String>>, // use rust's enum instead
     pub email: Option<bool>,
     pub pattern: Option<String>,
     pub non_empty: Option<bool>,
@@ -167,22 +167,22 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                 }
             } else if meta.path.is_ident("required") {
                 args.required = Some(true);
-            } else if meta.path.is_ident("enum_values") {
-                // 1. Grab the parenthesized group
-                let content;
-                syn::parenthesized!(content in meta.input);
+            // } else if meta.path.is_ident("enum_values") {
+            //     // 1. Grab the parenthesized group
+            //     let content;
+            //     syn::parenthesized!(content in meta.input);
 
-                // 2. Parse a comma-separated list of string literals
-                let values = content
-                    .parse_terminated(
-                        |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
-                        syn::Token![,]
-                    )?
-                    .into_iter()
-                    .map(|lit_str| lit_str.value())
-                    .collect::<Vec<_>>();
+            //     // 2. Parse a comma-separated list of string literals
+            //     let values = content
+            //         .parse_terminated(
+            //             |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
+            //             syn::Token![,]
+            //         )?
+            //         .into_iter()
+            //         .map(|lit_str| lit_str.value())
+            //         .collect::<Vec<_>>();
 
-                args.enum_values = Some(values);
+            //     args.enum_values = Some(values);
             } else if meta.path.is_ident("email") {
                 args.email = Some(true);
             } else if meta.path.is_ident("pattern") {
@@ -385,7 +385,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             min_length,
             max_length,
             required,
-            enum_values,
+            // enum_values,
             email,
             pattern,
             non_empty,
@@ -440,28 +440,28 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             }
         }
 
-        if let Some(values) = enum_values {
-            let allowed: Vec<proc_macro2::TokenStream> = values
-                .iter()
-                .map(|v| quote! { #v })
-                .collect();
+        // if let Some(values) = enum_values {
+        //     let allowed: Vec<proc_macro2::TokenStream> = values
+        //         .iter()
+        //         .map(|v| quote! { #v })
+        //         .collect();
 
-            checks.push(
-                quote! {
-                if let Some(ref value) = self.#field_ident {
-                    if ! [#( #allowed ),*].contains(&value.as_str()) {
-                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!(
-                                "Field '{}' must be one of: {}",
-                                stringify!(#field_ident),
-                                vec![#( #allowed.to_string() ),*].join(", ")
-                            )
-                        ));
-                    }
-                }
-            }
-            );
-        }
+        //     checks.push(
+        //         quote! {
+        //             if let Some(ref value) = self.#field_ident {
+        //                 if ! [#( #allowed ),*].contains(&value.as_str()) {
+        //                     return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+        //                         format!(
+        //                             "Field '{}' must be one of: {}",
+        //                             stringify!(#field_ident),
+        //                             vec![#( #allowed.to_string() ),*].join(", ")
+        //                         )
+        //                     ));
+        //                 }
+        //             }
+        //         }
+        //     );
+        // }
 
         if let Some(is_email) = email {
             if *is_email {

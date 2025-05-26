@@ -6,6 +6,13 @@ use oximod::Model;
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Role {
+    Admin,
+    User,
+    Guess,
+}
+
 #[derive(Model, Serialize, Deserialize, Debug)]
 #[db("test")]
 #[collection("validate_required_enum")]
@@ -19,8 +26,8 @@ pub struct User {
     #[validate(required, email)]
     email: Option<String>,
 
-    #[validate(required, enum_values("admin", "user", "guest"))]
-    role: Option<String>,
+    #[validate(required)]
+    role: Option<Role>,
 }
 
 // Run test: cargo nextest run test_missing_required_email
@@ -33,7 +40,7 @@ async fn test_missing_required_email() -> TestResult {
         _id: None,
         name: "Valid".to_string(),
         email: None, // ❌ required
-        role: Some("user".to_string()),
+        role: Some(Role::User),
     };
 
     let err = user.save().await;
@@ -61,25 +68,6 @@ async fn test_missing_required_role() -> TestResult {
     Ok(())
 }
 
-// Run test: cargo nextest run test_invalid_enum_value
-#[tokio::test]
-async fn test_invalid_enum_value() -> TestResult {
-    init().await;
-    User::clear().await?;
-
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: Some("user@example.com".to_string()),
-        role: Some("superadmin".to_string()), // ❌ not in allowed list
-    };
-
-    let err = user.save().await;
-    assert!(err.is_err());
-    assert!(format!("{:?}", err).contains("must be one of"));
-    Ok(())
-}
-
 // Run test: cargo nextest run test_valid_required_enum
 #[tokio::test]
 async fn test_valid_required_enum() -> TestResult {
@@ -90,7 +78,7 @@ async fn test_valid_required_enum() -> TestResult {
         _id: None,
         name: "Valid".to_string(),
         email: Some("user@example.com".to_string()),
-        role: Some("admin".to_string()), // ✅ allowed enum
+        role: Some(Role::Admin), // ✅ allowed enum
     };
 
     let result = user.save().await?;
