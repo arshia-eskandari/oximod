@@ -76,3 +76,44 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run builder_using_custom_document_id_setter
+#[tokio::test]
+async fn builder_using_custom_document_id_setter() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("builder_tests")]
+    #[document_id_setter_ident("my_custom_id_setter")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+        id: String,
+    }
+
+    User::clear().await?;
+
+    let saved_id = User::default()
+        .my_custom_id_setter(ObjectId::new()) // this provides maximum flexibility with field names
+        .id("3894HR934HR00NJ23R324R".to_string())
+        .name("User1".to_string())
+        .age(42)
+        .active(true)
+        .save().await?;
+
+    assert_ne!(saved_id, ObjectId::default());
+
+    let fetched = User::find_by_id(saved_id).await?;
+    assert!(fetched.is_some());
+
+    let user = fetched.unwrap();
+    assert_eq!(user.name, "User1");
+    assert_eq!(user.age, 42);
+    assert!(user.active);
+
+    Ok(())
+}

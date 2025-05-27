@@ -350,7 +350,10 @@ fn option_inner_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-#[proc_macro_derive(Model, attributes(db, collection, index, validate, default))]
+#[proc_macro_derive(
+    Model,
+    attributes(db, collection, index, validate, default, document_id_setter_ident)
+)]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
 /// This macro enables automatic implementation of the `Model` trait, allowing
@@ -741,12 +744,25 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             quote! { #ident: Default::default(), }
         });
 
+    let mut id_setter_name = "id".to_string();
+
+    for attr in &input.attrs {
+        if attr.path().is_ident("document_id_setter_ident") {
+            let setter_lit: LitStr = attr
+                .parse_args()
+                .expect("Expected #[document_id_setter_ident = \"...\"]");
+            id_setter_name = setter_lit.value();
+        }
+    }
+
+    let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
+
     let mut setters = Vec::new();
 
     let id_setter =
         quote! {
             /// Set the MongoDB ObjectId
-            pub fn id(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
+            pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
                 self._id = Some(id);
                 self
             }
