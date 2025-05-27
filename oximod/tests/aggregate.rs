@@ -1,16 +1,16 @@
-use mongodb::bson::{ doc, oid::ObjectId };
-use oximod::{ set_global_client, Model };
-use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 use futures_util::stream::StreamExt;
+use mongodb::bson::{ doc, oid::ObjectId };
+use oximod::Model;
+use serde::{ Deserialize, Serialize };
+use testresult::TestResult;
+
+mod common;
+use common::init;
 
 // Run test: cargo nextest run aggregates_documents_correctly
 #[tokio::test]
 async fn aggregates_documents_correctly() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -25,21 +25,9 @@ async fn aggregates_documents_correctly() -> TestResult {
     LogEntry::clear().await?;
 
     let logs = vec![
-        LogEntry {
-            _id: None,
-            level: "INFO".to_string(),
-            message: "Startup complete".to_string(),
-        },
-        LogEntry {
-            _id: None,
-            level: "ERROR".to_string(),
-            message: "Failed to connect".to_string(),
-        },
-        LogEntry {
-            _id: None,
-            level: "INFO".to_string(),
-            message: "Listening on port 3000".to_string(),
-        }
+        LogEntry::default().level("INFO".to_string()).message("Startup complete".to_string()),
+        LogEntry::default().level("ERROR".to_string()).message("Failed to connect".to_string()),
+        LogEntry::default().level("INFO".to_string()).message("Listening on port 3000".to_string())
     ];
 
     for log in logs {

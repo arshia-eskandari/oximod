@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use testresult::TestResult;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,12 +36,10 @@ async fn test_missing_at_symbol() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: Some("invalidemail.com".to_string()), // ❌ missing '@'
-        role: Some(Role::Admin),
-    };
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("invalidemail.com".to_string())
+        .role(Role::Admin);
 
     let err = user.save().await;
     assert!(err.is_err());
@@ -55,12 +53,10 @@ async fn test_missing_domain_dot() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: Some("user@domain".to_string()), // ❌ missing .com, .net, etc.
-        role: Some(Role::Admin),
-    };
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("user@domain".to_string())
+        .role(Role::Admin);
 
     let err = user.save().await;
     assert!(err.is_err());
@@ -74,12 +70,10 @@ async fn test_valid_email() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: Some("user@example.com".to_string()), // ✅ valid
-        role: Some(Role::Guess),
-    };
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("user@example.com".to_string())
+        .role(Role::Guess);
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());

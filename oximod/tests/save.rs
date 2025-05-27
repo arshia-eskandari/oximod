@@ -1,15 +1,15 @@
 use mongodb::bson::oid::ObjectId;
-use oximod::{set_global_client, Model};
+use oximod::Model;
 use testresult::TestResult;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
+
+mod common;
+use common::init;
 
 // Run test: cargo nextest run saves_document_without_id_correctly
 #[tokio::test]
 async fn saves_document_without_id_correctly() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("db_name")]
@@ -22,15 +22,12 @@ async fn saves_document_without_id_correctly() -> TestResult {
         active: bool,
     }
 
-    let user = User {
-        _id: None,
-        name: "User1".to_string(),
-        age: 25,
-        active: true,
-    };
+    User::clear().await?;
+
+    let user = User::default().name("User1".to_string()).age(25).active(true);
 
     let result = user.save().await?;
-    assert_ne!(result, ObjectId::default());    
+    assert_ne!(result, ObjectId::default());
 
     Ok(())
 }
@@ -38,10 +35,7 @@ async fn saves_document_without_id_correctly() -> TestResult {
 // Run test: cargo nextest run saves_document_with_id_correctly
 #[tokio::test]
 async fn saves_document_with_id_correctly() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -56,15 +50,11 @@ async fn saves_document_with_id_correctly() -> TestResult {
 
     User::clear().await?;
 
-    let user = User {
-        _id: Some(ObjectId::new()),
-        name: "User1".to_string(),
-        age: 30,
-        active: false,
-    };
+    let id = ObjectId::new();
+    let user = User::default().id(id.clone()).name("User1".to_string()).age(30).active(false);
 
     let result = user.save().await?;
-    assert_eq!(result, user._id.unwrap());
+    assert_eq!(result, id);
 
     Ok(())
 }

@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use testresult::TestResult;
 
 #[derive(Model, Serialize, Deserialize, Debug)]
@@ -35,14 +35,12 @@ async fn test_invalid_pattern_format() -> TestResult {
     init().await;
     Product::clear().await?;
 
-    let product = Product {
-        _id: None,
-        code: Some("BAD-SKU".to_string()), // ❌ does not match ^SKU-\d{4}$
-        name: Some("Product1".to_string()),
-        quantity: 10,
-        temperature: -10,
-        rating: 5,
-    };
+    let product = Product::default()
+        .code("BAD-SKU".to_string()) // ❌ does not match ^SKU-\d{4}$
+        .name("Product1".to_string())
+        .quantity(10)
+        .temperature(-10)
+        .rating(5);
 
     let err = product.save().await;
     assert!(err.is_err());
@@ -56,14 +54,12 @@ async fn test_valid_pattern_format() -> TestResult {
     init().await;
     Product::clear().await?;
 
-    let product = Product {
-        _id: None,
-        code: Some("SKU-1234".to_string()), // ✅ matches pattern
-        name: Some("Product1".to_string()),
-        quantity: 10,
-        temperature: -10,
-        rating: 5,
-    };
+    let product = Product::default()
+        .code("SKU-1234".to_string()) // ✅ matches pattern
+        .name("Product1".to_string())
+        .quantity(10)
+        .temperature(-10)
+        .rating(5);
 
     let result = product.save().await?;
     assert_ne!(result, ObjectId::default());
