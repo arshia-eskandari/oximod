@@ -2,7 +2,16 @@ use std::collections::HashSet;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ parse_macro_input, Attribute, DeriveInput, Lit, LitStr };
+use syn::{
+    parse_macro_input,
+    Attribute,
+    DeriveInput,
+    Lit,
+    LitStr,
+    Type,
+    PathArguments,
+    GenericArgument,
+};
 
 #[derive(Default, Debug)]
 /// Arguments for creating an index on a field in a MongoDB collection.
@@ -302,27 +311,20 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
 
 struct DefaultDefinition {
     field_ident: syn::Ident,
-    default_lit: Lit, // could be LitStr, LitInt, or a path-like literal
+    default_expr: proc_macro2::TokenStream,
 }
 
-fn parse_default_args(attr: &Attribute, field_ident: &syn::Ident) -> Option<DefaultDefinition> {
-    let mut lit_opt = None;
-    attr
-        .parse_nested_meta(|meta| {
-            if meta.path.is_ident("default") {
-                lit_opt = Some(meta.value()?.parse()?);
-            }
-            Ok(())
-        })
-        .ok()?;
-
-    lit_opt.map(|lit| DefaultDefinition {
+fn parse_default_args(
+    attr: &Attribute,
+    field_ident: &syn::Ident
+) -> syn::Result<DefaultDefinition> {
+    // Accept #[default(Status::Pending)] or #[default(42 + 5)]
+    let expr: syn::Expr = attr.parse_args()?;
+    Ok(DefaultDefinition {
         field_ident: field_ident.clone(),
-        default_lit: lit,
+        default_expr: quote! { #expr },
     })
 }
-
-use syn::{ Type, PathArguments, GenericArgument };
 
 /// If `ty` is `Option<Inner>`, returns `Some(&Inner)`, otherwise `None`.
 fn option_inner_type(ty: &Type) -> Option<&Type> {
@@ -447,9 +449,10 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         ).expect("could not parse validate args");
                         validate_definitions.push(validate_definition);
                     } else if attr.path().is_ident("default") {
-                        if let Some(def) = parse_default_args(attr, ident) {
-                            default_definitions.push(def);
-                        }
+                        let def = parse_default_args(attr, ident).expect(
+                            "could not parse default args"
+                        );
+                        default_definitions.push(def);
                     }
                 }
             }
@@ -722,8 +725,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let default_inits = default_definitions.iter().map(|def| {
         let ident = &def.field_ident;
-        let lit = &def.default_lit;
-        quote! { #ident: (#lit).into(), }
+        let expr = &def.default_expr;
+        quote! { #ident: #expr, }
     });
 
     let default_idents: HashSet<String> = default_definitions
