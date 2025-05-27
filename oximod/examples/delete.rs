@@ -8,9 +8,9 @@
 //! - Delete a document by ID
 //! - Delete one document with a filter
 
-use oximod::{set_global_client, Model};
-use mongodb::bson::{doc, oid::ObjectId};
-use serde::{Deserialize, Serialize};
+use oximod::{ set_global_client, Model };
+use mongodb::bson::{ doc, oid::ObjectId };
+use serde::{ Deserialize, Serialize };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,15 +26,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _id: Option<ObjectId>,
         name: String,
         age: i32,
+        #[default(true)]
         active: bool,
     }
 
-    // Insert users
+    // Clean up previous runs
+    User::clear().await?;
+
+    // Insert users using builder API
     let users = vec![
-        User { _id: None, name: "User1".into(), age: 20, active: false },
-        User { _id: None, name: "User2".into(), age: 25, active: false },
-        User { _id: None, name: "User3".into(), age: 30, active: true },
-        User { _id: None, name: "User4".into(), age: 30, active: true },
+        User::new().name("User1".to_string()).age(20).active(false),
+        User::new().name("User2".to_string()).age(25).active(false),
+        User::new().name("User3".to_string()).age(30), // active: true by default
+        User::new().name("User4".to_string()).age(30) // active: true by default
     ];
 
     let mut inserted_ids = vec![];
@@ -51,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = User::delete_one(doc! { "active": true }).await?;
     println!("🧹 Deleted {} active user(s)", result.deleted_count);
 
-    // Delete last one by ID
+    // Delete the last one by ID
     if let Some(id) = inserted_ids.pop() {
         let result = User::delete_by_id(id).await?;
         println!("❌ Deleted by ID: {}", result.deleted_count);
