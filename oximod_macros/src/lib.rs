@@ -727,9 +727,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     });
 
     let default_idents: HashSet<String> = default_definitions
-    .iter()
-    .map(|d| d.field_ident.to_string())
-    .collect();
+        .iter()
+        .map(|d| d.field_ident.to_string())
+        .collect();
 
     let other_inits = all_fields
         .iter()
@@ -738,23 +738,36 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             quote! { #ident: Default::default(), }
         });
 
-    let setters = all_fields.iter().map(|(ident, ty)| {
-        if let Some(inner_ty) = option_inner_type(ty) {
-            quote! {
-                pub fn #ident<T: Into<#inner_ty>>(mut self, val: T) -> Self {
-                    self.#ident = Some(val.into());
-                    self
-                }
+    let mut setters = Vec::new();
+
+    let id_setter =
+        quote! {
+            /// Set the MongoDB ObjectId
+            pub fn id(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
+                self._id = Some(id);
+                self
             }
+        };
+    setters.push(id_setter);
+
+    for (ident, ty) in all_fields.iter().filter(|(ident, _)| ident != "_id") {
+        let setter = if let Some(inner) = option_inner_type(ty) {
+            quote! {
+                    pub fn #ident<T: Into<#inner>>(mut self, val: T) -> Self {
+                        self.#ident = Some(val.into());
+                        self
+                    }
+                }
         } else {
             quote! {
-                pub fn #ident(mut self, val: #ty) -> Self {
-                    self.#ident = val;
-                    self
+                    pub fn #ident(mut self, val: #ty) -> Self {
+                        self.#ident = val;
+                        self
+                    }
                 }
-            }
-        }
-    });
+        };
+        setters.push(setter);
+    }
 
     let expanded =
         quote! {
