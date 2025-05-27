@@ -32,10 +32,10 @@ async fn new_and_default_are_equivalent() -> TestResult {
 #[tokio::test]
 async fn builder_sets_all_fields() -> TestResult {
     let id = ObjectId::new();
-    let user = User::default().id(id.clone()).name("Alice".to_string()).age(30).active(true);
+    let user = User::default().id(id.clone()).name("User1".to_string()).age(30).active(true);
 
     assert_eq!(user._id, Some(id));
-    assert_eq!(user.name, "Alice");
+    assert_eq!(user.name, "User1");
     assert_eq!(user.age, 30);
     assert!(user.active);
 
@@ -45,10 +45,10 @@ async fn builder_sets_all_fields() -> TestResult {
 // Run test: cargo nextest run builder_partial_fields_default_rest
 #[tokio::test]
 async fn builder_partial_fields_default_rest() -> TestResult {
-    let user = User::default().name("Bob".to_string());
+    let user = User::default().name("User1".to_string());
 
     // name should be set, rest should be their respective defaults
-    assert_eq!(user.name, "Bob");
+    assert_eq!(user.name, "User1");
     assert_eq!(user.age, 0);
     assert_eq!(user.active, false);
     assert_eq!(user._id, None);
@@ -62,7 +62,7 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let saved_id = User::default().name("Charlie".to_string()).age(42).active(true).save().await?;
+    let saved_id = User::default().name("User1".to_string()).age(42).active(true).save().await?;
 
     assert_ne!(saved_id, ObjectId::default());
 
@@ -70,7 +70,7 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
     assert!(fetched.is_some());
 
     let user = fetched.unwrap();
-    assert_eq!(user.name, "Charlie");
+    assert_eq!(user.name, "User1");
     assert_eq!(user.age, 42);
     assert!(user.active);
 
