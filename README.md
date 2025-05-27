@@ -10,6 +10,23 @@ OxiMod is a schema-based Object-Document Mapper (ODM) for MongoDB, designed for 
 
 Inspired by Mongoose, OxiMod brings a structured modeling experience while embracing Rust's type safety and performance. It works with any async runtime and is currently tested using `tokio`.
 
+### 🚀 New in `v0.1.7` – Fluent API Builders
+
+OxiMod now supports **fluent API builders** and a `new()` method for ergonomic model creation:
+
+```rust
+let user = User::new()
+    .name("Alice".to_string())
+    .age(30)
+    .active(true);
+```
+
+- Supports `Option<T>` and non-optional fields.
+- Works with `#[default("...")]` for seamless defaults.
+- Customize `_id` setter via `#[document_id_setter_ident("...")]`.
+
+Use `user.save().await?` just like before!
+
 ---
 
 ## Features
@@ -32,6 +49,12 @@ Inspired by Mongoose, OxiMod brings a structured modeling experience while embra
 - **Validation Support**  
   Add field-level validation using `#[validate(...)]`. Supports length, email, pattern, positivity, and more.
 
+- **Default Values**  
+  Use `#[default(...)]` to specify field defaults for strings, numbers, and enums.
+
+- **Builder API & `new()` Support**  
+  Use `Model::default()` or `Model::new()` to initialize structs and chain fluent setters. Customize `_id` setter name with `#[document_id_setter_ident(...)]`.
+
 - **Clear Error Handling**  
   Strongly typed, developer-friendly errors based on `thiserror`.
 
@@ -45,6 +68,7 @@ OxiMod supports attributes at both the struct level and field level.
 
 - `#[db("name")]`: Specifies the MongoDB database the model belongs to.
 - `#[collection("name")]`: Specifies the collection name within the database.
+- `#[document_id_setter_ident("name")]`: Optional. Renames the `_id` builder function for fluent `.new()`/`.default()` APIs.
 
 ### Field-Level Index Attributes
 
@@ -79,11 +103,17 @@ You can apply validations on fields using the `#[validate(...)]` attribute.
 
 > 💡 Use native Rust enums instead of `enum_values`.
 
+### Field-Level Default Attributes
+
+- `#[default("value")]`: Assigns a default value for strings.
+- `#[default(42)]`: Sets default for numbers.
+- `#[default(MyEnum::Variant)]`: Sets default for enums.
+
+Accessible via `Model::new()` or `Model::default()`.
+
 ---
 
 ## Example
-
-This example demonstrates how to define a model with schema-level and field-level metadata.
 
 ```rust
 use oximod::{set_global_client, Model};
@@ -109,16 +139,19 @@ struct User {
     #[validate(non_negative)]
     age: i32,
 
+    #[default(false)]
     active: bool,
 }
 ```
 
 In this example:
+
 - `#[db("my_app_db")]` and `#[collection("users")]` configure the database and collection.
 - The `email` field has a descending, unique index with a custom name.
 - The `phone` field is indexed only when it exists in the document (sparse).
 - The `name` field must be at least 3 characters long.
 - The `age` field must be non-negative.
+- The `active` field defaults to `false`.
 
 ---
 
@@ -134,6 +167,7 @@ cargo run --example query
 cargo run --example update
 cargo run --example delete
 cargo run --example by_id
+cargo run --example default_usage
 ```
 
 Each file clears previous data on run and demonstrates isolated functionality.
