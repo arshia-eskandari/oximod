@@ -6,9 +6,9 @@
 //! - Insert a document
 //! - Update fields using `update` and `update_by_id`
 
-use oximod::{set_global_client, Model};
-use mongodb::bson::{doc, oid::ObjectId};
-use serde::{Deserialize, Serialize};
+use oximod::{ set_global_client, Model };
+use mongodb::bson::{ doc, oid::ObjectId };
+use serde::{ Deserialize, Serialize };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,19 +24,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _id: Option<ObjectId>,
         name: String,
         age: i32,
+        #[default(false)]
         active: bool,
     }
 
-    // Insert a user
-    let user = User {
-        _id: None,
-        name: "User1".to_string(),
-        age: 45,
-        active: false,
-    };
-
     // Clean up previous runs
     User::clear().await?;
+
+    // Insert a user
+    let user = User::new().name("User1".to_string()).age(45).active(false);
 
     let id = user.save().await?;
     println!("📝 Inserted user with _id: {}", id);
@@ -44,17 +40,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generic update: Set active = true for all users over 40
     let result = User::update(
         doc! { "age": { "$gt": 40 } },
-        doc! { "$set": { "active": true } },
-    )
-    .await?;
+        doc! { "$set": { "active": true } }
+    ).await?;
     println!("🔁 Updated {} document(s)", result.modified_count);
 
     // Update by ID
-    let result = User::update_by_id(
-        id,
-        doc! { "$set": { "name": "User1 Updated" } },
-    )
-    .await?;
+    let result = User::update_by_id(id, doc! { "$set": { "name": "User1 Updated" } }).await?;
     println!("🆔 Updated {} document(s) by ID", result.modified_count);
 
     Ok(())

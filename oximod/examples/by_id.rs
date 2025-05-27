@@ -8,12 +8,13 @@
 //! - Update a document by its `_id`
 //! - Delete a document by its `_id`
 
-use oximod::{set_global_client, Model};
-use mongodb::bson::{doc, oid::ObjectId};
-use serde::{Deserialize, Serialize};
+use oximod::{ set_global_client, Model };
+use mongodb::bson::{ doc, oid::ObjectId };
+use serde::{ Deserialize, Serialize };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load MongoDB URI from environment or .env
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI")?;
     set_global_client(mongodb_uri).await?;
@@ -26,19 +27,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _id: Option<ObjectId>,
         name: String,
         age: i32,
+        #[default(true)]
         active: bool,
     }
 
     // Clean up previous runs
     User::clear().await?;
 
-    // Insert one user
-    let user = User {
-        _id: None,
-        name: "User1".to_string(),
-        age: 35,
-        active: true,
-    };
+    // Insert one user using the builder API
+    let user = User::new().name("User1".to_string()).age(35); // `active` defaults to true
 
     let id = user.save().await?;
     println!("✅ Inserted user with _id: {}", id);

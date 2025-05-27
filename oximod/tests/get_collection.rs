@@ -1,14 +1,15 @@
-use mongodb::{bson::{doc, oid::ObjectId}, options::IndexOptions, IndexModel};
-use oximod::{set_global_client, Model};
+use mongodb::{ bson::{ doc, oid::ObjectId }, options::IndexOptions, IndexModel };
+use oximod::Model;
 use testresult::TestResult;
 use serde::{ Deserialize, Serialize };
+
+mod common;
+use common::init;
 
 // Run test: cargo nextest run uses_get_collection_and_manual_indexing
 #[tokio::test]
 async fn uses_get_collection_and_manual_indexing() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-    set_global_client(mongodb_uri).await?;
+    init().await;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -36,17 +37,12 @@ async fn uses_get_collection_and_manual_indexing() -> TestResult {
 
     collection.create_index(index_model).await?;
 
-    let user = User {
-        _id: None,
-        username: "User1".to_string(),
-        email: "user1@example.com".to_string(),
-    };
+    let user = User::default().username("User1".to_string()).email("user1@example.com".to_string());
+
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
 
-    let fetched = User
-        ::find_one(doc! { "email": "user1@example.com" })
-        .await?;
+    let fetched = User::find_one(doc! { "email": "user1@example.com" }).await?;
     assert!(fetched.is_some());
 
     Ok(())

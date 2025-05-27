@@ -8,9 +8,9 @@
 //! - Query with `find_one`
 //! - Check if a document exists
 
-use oximod::{set_global_client, Model};
-use mongodb::bson::{doc, oid::ObjectId};
-use serde::{Deserialize, Serialize};
+use oximod::{ set_global_client, Model };
+use mongodb::bson::{ doc, oid::ObjectId };
+use serde::{ Deserialize, Serialize };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,17 +26,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _id: Option<ObjectId>,
         name: String,
         age: i32,
+        #[default(true)]
         active: bool,
     }
 
     // Clean up previous runs
     User::clear().await?;
 
-    // Insert multiple users
+    // Insert multiple users using builder API
     let users = vec![
-        User { _id: None, name: "Alice".into(), age: 30, active: true },
-        User { _id: None, name: "Bob".into(), age: 40, active: false },
-        User { _id: None, name: "Charlie".into(), age: 25, active: true },
+        User::new().name("Alice".to_string()).age(30).active(true),
+        User::new().name("Bob".to_string()).age(40).active(false),
+        User::new().name("Charlie".to_string()).age(25).active(true)
     ];
 
     for user in &users {

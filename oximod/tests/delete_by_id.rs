@@ -1,15 +1,15 @@
-use mongodb::bson::{doc, oid::ObjectId};
-use oximod::{set_global_client, Model};
+use mongodb::bson::{ doc, oid::ObjectId };
+use oximod::Model;
 use testresult::TestResult;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
+
+mod common;
+use common::init;
 
 // Run test: cargo nextest run deletes_document_by_id_correctly
 #[tokio::test]
 async fn deletes_document_by_id_correctly() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -24,14 +24,9 @@ async fn deletes_document_by_id_correctly() -> TestResult {
 
     User::clear().await?;
 
-    let user = User {
-        _id: Some(ObjectId::new()),
-        name: "User1".to_string(),
-        age: 40,
-        active: true,
-    };
+    let id = ObjectId::new();
+    let user = User::default().id(id.clone()).name("User1".to_string()).age(40).active(true);
 
-    let id = user._id.unwrap();
     user.save().await?;
 
     let deleted = User::delete_by_id(id).await?;

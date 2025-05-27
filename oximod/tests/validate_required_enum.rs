@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use testresult::TestResult;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,12 +36,7 @@ async fn test_missing_required_email() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: None, // ❌ required
-        role: Some(Role::User),
-    };
+    let user = User::default().name("Valid".to_string()).role(Role::User); // ❌ missing email
 
     let err = user.save().await;
     assert!(err.is_err());
@@ -55,12 +50,7 @@ async fn test_missing_required_role() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: Some("user@example.com".to_string()),
-        role: None, // ❌ required
-    };
+    let user = User::default().name("Valid".to_string()).email("user@example.com".to_string()); // ❌ missing role
 
     let err = user.save().await;
     assert!(err.is_err());
@@ -74,12 +64,10 @@ async fn test_valid_required_enum() -> TestResult {
     init().await;
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "Valid".to_string(),
-        email: Some("user@example.com".to_string()),
-        role: Some(Role::Admin), // ✅ allowed enum
-    };
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("user@example.com".to_string())
+        .role(Role::Admin); // ✅ allowed enum
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());

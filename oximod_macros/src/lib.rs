@@ -1,6 +1,17 @@
+use std::collections::HashSet;
+
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ parse_macro_input, Attribute, DeriveInput, Lit, LitStr };
+use syn::{
+    parse_macro_input,
+    Attribute,
+    DeriveInput,
+    Lit,
+    LitStr,
+    Type,
+    PathArguments,
+    GenericArgument,
+};
 
 #[derive(Default, Debug)]
 /// Arguments for creating an index on a field in a MongoDB collection.
@@ -238,22 +249,22 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
                 }
             } else if meta.path.is_ident("required") {
                 args.required = Some(true);
-            // } else if meta.path.is_ident("enum_values") {
-            //     // 1. Grab the parenthesized group
-            //     let content;
-            //     syn::parenthesized!(content in meta.input);
+                // } else if meta.path.is_ident("enum_values") {
+                //     // 1. Grab the parenthesized group
+                //     let content;
+                //     syn::parenthesized!(content in meta.input);
 
-            //     // 2. Parse a comma-separated list of string literals
-            //     let values = content
-            //         .parse_terminated(
-            //             |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
-            //             syn::Token![,]
-            //         )?
-            //         .into_iter()
-            //         .map(|lit_str| lit_str.value())
-            //         .collect::<Vec<_>>();
+                //     // 2. Parse a comma-separated list of string literals
+                //     let values = content
+                //         .parse_terminated(
+                //             |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
+                //             syn::Token![,]
+                //         )?
+                //         .into_iter()
+                //         .map(|lit_str| lit_str.value())
+                //         .collect::<Vec<_>>();
 
-            //     args.enum_values = Some(values);
+                //     args.enum_values = Some(values);
             } else if meta.path.is_ident("email") {
                 args.email = Some(true);
             } else if meta.path.is_ident("pattern") {
@@ -298,7 +309,51 @@ fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<Vali
     Ok(ValidateDefinition { field_name, args })
 }
 
-#[proc_macro_derive(Model, attributes(db, collection, index, validate))]
+struct DefaultDefinition {
+    field_ident: syn::Ident,
+    default_expr: proc_macro2::TokenStream,
+}
+
+fn parse_default_args(
+    attr: &Attribute,
+    field_ident: &syn::Ident
+) -> syn::Result<DefaultDefinition> {
+    // Accept #[default(Status::Pending)] or #[default(42 + 5)]
+    let expr: syn::Expr = attr.parse_args()?;
+    Ok(DefaultDefinition {
+        field_ident: field_ident.clone(),
+        default_expr: quote! { #expr },
+    })
+}
+
+/// If `ty` is `Option<Inner>`, returns `Some(&Inner)`, otherwise `None`.
+fn option_inner_type(ty: &Type) -> Option<&Type> {
+    // We only care about a simple `Option<...>` path type
+    if let Type::Path(type_path) = ty {
+        // Must be exactly one segment, i.e. `Option`
+        if type_path.path.segments.len() == 1 {
+            let segment = &type_path.path.segments[0];
+            if segment.ident == "Option" {
+                // Look for the angle-bracketed args: `<Inner>`
+                if let PathArguments::AngleBracketed(params) = &segment.arguments {
+                    // We expect exactly one generic argument
+                    if params.args.len() == 1 {
+                        // And that argument must itself be a type
+                        if let GenericArgument::Type(inner_ty) = &params.args[0] {
+                            return Some(inner_ty);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[proc_macro_derive(
+    Model,
+    attributes(db, collection, index, validate, default, document_id_setter_ident)
+)]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
 /// This macro enables automatic implementation of the `Model` trait, allowing
@@ -334,6 +389,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let mut collection: Option<LitStr> = None;
     let mut index_definitions = Vec::new();
     let mut validate_definitions = Vec::new();
+    let mut default_definitions = Vec::new();
+    let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -379,24 +436,26 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     if let syn::Data::Struct(data_struct) = &input.data {
         for field in data_struct.fields.iter() {
-            for attr in &field.attrs {
-                if attr.path().is_ident("index") {
-                    if let Some(ident) = &field.ident {
-                        let field_name = ident.to_string();
-                        let index_args = parse_index_args(attr, field_name).expect(
+            if let Some(ident) = &field.ident {
+                all_fields.push((ident.clone(), field.ty.clone()));
+                for attr in &field.attrs {
+                    let field_name = ident.to_string();
+                    if attr.path().is_ident("index") {
+                        let index_args = parse_index_args(attr, field_name.clone()).expect(
                             "could not parse index args"
                         );
-
                         index_definitions.push(index_args); // <-- COLLECT
-                    }
-                } else if attr.path().is_ident("validate") {
-                    if let Some(ident) = &field.ident {
-                        let field_name = ident.to_string();
-                        let validate_definition = parse_validate_args(attr, field_name).expect(
-                            "could nhot parse validate args"
-                        );
-
+                    } else if attr.path().is_ident("validate") {
+                        let validate_definition = parse_validate_args(
+                            attr,
+                            field_name.clone()
+                        ).expect("could not parse validate args");
                         validate_definitions.push(validate_definition);
+                    } else if attr.path().is_ident("default") {
+                        let def = parse_default_args(attr, ident).expect(
+                            "could not parse default args"
+                        );
+                        default_definitions.push(def);
                     }
                 }
             }
@@ -667,6 +726,68 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         checks
     });
 
+    let default_inits = default_definitions.iter().map(|def| {
+        let ident = &def.field_ident;
+        let expr = &def.default_expr;
+        quote! { #ident: #expr, }
+    });
+
+    let default_idents: HashSet<String> = default_definitions
+        .iter()
+        .map(|d| d.field_ident.to_string())
+        .collect();
+
+    let other_inits = all_fields
+        .iter()
+        .filter(|(ident, _ty)| !default_idents.contains(&ident.to_string()))
+        .map(|(ident, _ty)| {
+            quote! { #ident: Default::default(), }
+        });
+
+    let mut id_setter_name = "id".to_string();
+
+    for attr in &input.attrs {
+        if attr.path().is_ident("document_id_setter_ident") {
+            let setter_lit: LitStr = attr
+                .parse_args()
+                .expect("Expected #[document_id_setter_ident = \"...\"]");
+            id_setter_name = setter_lit.value();
+        }
+    }
+
+    let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
+
+    let mut setters = Vec::new();
+
+    let id_setter =
+        quote! {
+            /// Set the MongoDB ObjectId
+            pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
+                self._id = Some(id);
+                self
+            }
+        };
+    setters.push(id_setter);
+
+    for (ident, ty) in all_fields.iter().filter(|(ident, _)| ident != "_id") {
+        let setter = if let Some(inner) = option_inner_type(ty) {
+            quote! {
+                    pub fn #ident<T: Into<#inner>>(mut self, val: T) -> Self {
+                        self.#ident = Some(val.into());
+                        self
+                    }
+                }
+        } else {
+            quote! {
+                    pub fn #ident(mut self, val: #ty) -> Self {
+                        self.#ident = val;
+                        self
+                    }
+                }
+        };
+        setters.push(setter);
+    }
+
     let expanded =
         quote! {
 
@@ -696,6 +817,19 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     
                 Ok(())
             }
+
+            pub fn new() -> Self {
+                #name {
+                    #(#default_inits)*
+                    #(#other_inits)*
+                }
+            }
+        
+            #(#setters)*
+        }
+
+        impl ::std::default::Default for #name {
+            fn default() -> Self { Self::new() }
         }
 
         #[::oximod::_async_trait::async_trait]

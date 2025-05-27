@@ -1,16 +1,16 @@
-use mongodb::bson::{DateTime, oid::ObjectId, doc};
-use oximod::{set_global_client, Model};
+use mongodb::bson::{ DateTime, oid::ObjectId, doc };
+use oximod::Model;
 use testresult::TestResult;
-use serde::{Deserialize, Serialize};
-use std::{thread::sleep, time::Duration};
+use serde::{ Deserialize, Serialize };
+use std::{ thread::sleep, time::Duration };
+
+mod common;
+use common::init;
 
 // Run test: cargo nextest run creates_indexes_correctly
 #[tokio::test] // Might throw `expected Expr rust-analyzer` so disable "macro-error"
 async fn creates_indexes_correctly() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -33,26 +33,23 @@ async fn creates_indexes_correctly() -> TestResult {
 
     User::clear().await?;
 
-    let user = User {
-        _id: None,
-        name: "IndexUser".to_string(),
-        age: Some(25),
-        created_at: Some(DateTime::now()),
-        active: true,
-    };
+    let user = User::default()
+        .name("IndexUser".to_string())
+        .age(25)
+        .created_at(DateTime::now())
+        .active(true);
 
     // This will trigger create_indexes() inside save
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
-    Ok(()) 
+
+    Ok(())
 }
 
 // Run test: cargo nextest run ttl_index_removes_expired_documents
 #[tokio::test]
 async fn ttl_index_removes_expired_documents() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -68,10 +65,9 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
     Session::clear().await?;
 
     // Insert a document with a created_at timestamp in the past
-    let expired_session = Session {
-        _id: None,
-        created_at: Some(DateTime::from_millis(DateTime::now().timestamp_millis() - 10_000)),
-    };
+    let expired_session = Session::default().created_at(
+        DateTime::from_millis(DateTime::now().timestamp_millis() - 10_000)
+    );
 
     expired_session.save().await?;
 

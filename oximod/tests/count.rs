@@ -1,15 +1,15 @@
-use mongodb::bson::{doc, oid::ObjectId};
-use oximod::{set_global_client, Model};
+use mongodb::bson::{ doc, oid::ObjectId };
+use oximod::Model;
 use testresult::TestResult;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
+
+mod common;
+use common::init;
 
 // Run test: cargo nextest run counts_matching_documents_correctly
 #[tokio::test]
 async fn counts_matching_documents_correctly() -> TestResult {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI").expect("Failed to find MONGODB_URI");
-
-    set_global_client(mongodb_uri).await.unwrap_or_else(|e| panic!("{}", e));
+    init().await;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -25,24 +25,9 @@ async fn counts_matching_documents_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User {
-            _id: None,
-            name: "User1".to_string(),
-            age: 30,
-            active: true,
-        },
-        User {
-            _id: None,
-            name: "User3".to_string(),
-            age: 30,
-            active: false,
-        },
-        User {
-            _id: None,
-            name: "User3".to_string(),
-            age: 25,
-            active: true,
-        },
+        User::default().name("User1".to_string()).age(30).active(true),
+        User::default().name("User3".to_string()).age(30).active(false),
+        User::default().name("User3".to_string()).age(25).active(true)
     ];
 
     for user in users {
