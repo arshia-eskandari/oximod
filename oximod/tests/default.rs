@@ -53,7 +53,7 @@ async fn override_default_values() -> TestResult {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
 
-        #[default("\"Guest\"".to_string())]
+        #[default("Guest".to_string())]
         user: String,
 
         #[default(1)]
