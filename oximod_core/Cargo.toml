@@ -1,6 +1,6 @@
 [package]
 name = "oximod_core"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "The core logic and error handling for OxiMod, a MongoDB ODM for Rust."
