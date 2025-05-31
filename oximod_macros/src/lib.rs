@@ -391,6 +391,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let mut validate_definitions = Vec::new();
     let mut default_definitions = Vec::new();
     let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
+    let mut has_id_attr = false;
+    let mut setters = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -440,6 +442,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 all_fields.push((ident.clone(), field.ty.clone()));
                 for attr in &field.attrs {
                     let field_name = ident.to_string();
+                    if field_name == "_id".to_string() {
+                        has_id_attr = true;
+                    }
                     if attr.path().is_ident("index") {
                         let index_args = parse_index_args(attr, field_name.clone()).expect(
                             "could not parse index args"
@@ -744,30 +749,29 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             quote! { #ident: Default::default(), }
         });
 
-    let mut id_setter_name = "id".to_string();
+    if has_id_attr {
+        let mut id_setter_name = "id".to_string();
 
-    for attr in &input.attrs {
-        if attr.path().is_ident("document_id_setter_ident") {
-            let setter_lit: LitStr = attr
-                .parse_args()
-                .expect("Expected #[document_id_setter_ident = \"...\"]");
-            id_setter_name = setter_lit.value();
-        }
-    }
-
-    let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
-
-    let mut setters = Vec::new();
-
-    let id_setter =
-        quote! {
-            /// Set the MongoDB ObjectId
-            pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
-                self._id = Some(id);
-                self
+        for attr in &input.attrs {
+            if attr.path().is_ident("document_id_setter_ident") {
+                let setter_lit: LitStr = attr
+                    .parse_args()
+                    .expect("Expected #[document_id_setter_ident = \"...\"]");
+                id_setter_name = setter_lit.value();
             }
-        };
-    setters.push(id_setter);
+        }
+
+        let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
+        let id_setter =
+            quote! {
+                /// Set the MongoDB ObjectId
+                pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
+                    self._id = Some(id);
+                    self
+                }
+            };
+        setters.push(id_setter);
+    }
 
     for (ident, ty) in all_fields.iter().filter(|(ident, _)| ident != "_id") {
         let setter = if let Some(inner) = option_inner_type(ty) {
