@@ -1,3 +1,5 @@
+use proc_macro2::TokenStream;
+use quote::quote;
 use syn::{ Attribute, Lit };
 
 #[derive(Default, Debug)]
@@ -117,4 +119,49 @@ pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<Ind
     }
 
     Ok(IndexDefinition { field_name, args })
+}
+
+pub fn generate_index_model_tokens(index_def: &IndexDefinition) -> TokenStream {
+    let field = &index_def.field_name;
+    let order = index_def.args.order.unwrap_or(1);
+
+    let unique = match index_def.args.unique {
+        Some(val) => quote! { Some(#val) },
+        None => quote! { None },
+    };
+
+    let sparse = match index_def.args.sparse {
+        Some(val) => quote! { Some(#val) },
+        None => quote! { None },
+    };
+
+    let background = match index_def.args.background {
+        Some(val) => quote! { Some(#val) },
+        None => quote! { None },
+    };
+
+    let name = match &index_def.args.name {
+        Some(val) => quote! { Some(#val.to_string()) },
+        None => quote! { None },
+    };
+
+    let expire_after_secs = match index_def.args.expire_after_secs {
+        Some(secs) => quote! { Some(::std::time::Duration::from_secs(#secs as u64)) },
+        None => quote! { None },
+    };
+
+    quote! {
+        ::oximod::_mongodb::IndexModel::builder()
+            .keys(::oximod::_mongodb::bson::doc! { #field: #order })
+            .options(
+                ::oximod::_mongodb::options::IndexOptions::builder()
+                    .unique(#unique)
+                    .sparse(#sparse)
+                    .background(#background)
+                    .name(#name)
+                    .expire_after(#expire_after_secs)
+                    .build()
+            )
+            .build()
+    }
 }

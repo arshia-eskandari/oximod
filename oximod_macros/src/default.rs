@@ -1,5 +1,6 @@
+use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, Type, PathArguments, GenericArgument };
+use syn::{ Attribute, GenericArgument, LitStr, PathArguments, Type, Ident };
 pub struct DefaultDefinition {
     pub field_ident: syn::Ident,
     pub default_expr: proc_macro2::TokenStream,
@@ -39,4 +40,55 @@ pub fn option_inner_type(ty: &Type) -> Option<&Type> {
         }
     }
     None
+}
+
+pub fn maybe_push_id_setter(
+    has_id_attr: bool,
+    input_attrs: &[Attribute],
+    setters: &mut Vec<TokenStream>
+) {
+    if has_id_attr {
+        let mut id_setter_name = "id".to_string();
+
+        for attr in input_attrs {
+            if attr.path().is_ident("document_id_setter_ident") {
+                let setter_lit: LitStr = attr
+                    .parse_args()
+                    .expect("Expected #[document_id_setter_ident(\"...\")]");
+                id_setter_name = setter_lit.value();
+            }
+        }
+
+        let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
+        let id_setter =
+            quote! {
+                /// Set the MongoDB ObjectId
+                pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
+                    self._id = Some(id);
+                    self
+                }
+            };
+        setters.push(id_setter);
+    }
+}
+
+pub fn push_field_setters(all_fields: &[(Ident, Type)], setters: &mut Vec<TokenStream>) {
+    for (ident, ty) in all_fields.iter().filter(|(ident, _)| ident != "_id") {
+        let setter = if let Some(inner) = option_inner_type(ty) {
+            quote! {
+                pub fn #ident<T: Into<#inner>>(mut self, val: T) -> Self {
+                    self.#ident = Some(val.into());
+                    self
+                }
+            }
+        } else {
+            quote! {
+                pub fn #ident(mut self, val: #ty) -> Self {
+                    self.#ident = val;
+                    self
+                }
+            }
+        };
+        setters.push(setter);
+    }
 }

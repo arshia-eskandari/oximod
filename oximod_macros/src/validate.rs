@@ -1,3 +1,5 @@
+use proc_macro2::TokenStream;
+use quote::quote;
 use syn::{ Attribute, Lit };
 
 #[derive(Default, Debug)]
@@ -92,7 +94,10 @@ pub struct ValidateDefinition {
     pub args: ValidateArgs,
 }
 
-pub fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<ValidateDefinition> {
+pub fn parse_validate_args(
+    attr: &Attribute,
+    field_name: String
+) -> syn::Result<ValidateDefinition> {
     let mut args = ValidateArgs::default();
 
     if attr.path().is_ident("validate") {
@@ -175,4 +180,221 @@ pub fn parse_validate_args(attr: &Attribute, field_name: String) -> syn::Result<
     }
 
     Ok(ValidateDefinition { field_name, args })
+}
+
+pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<TokenStream> {
+    let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
+    let ValidateArgs {
+        min_length,
+        max_length,
+        required,
+        // enum_values,
+        email,
+        pattern,
+        non_empty,
+        positive,
+        negative,
+        non_negative,
+        min,
+        max,
+    } = &validate_def.args;
+
+    let mut checks = vec![];
+
+    if let Some(min) = min_length {
+        checks.push(
+            quote! {
+                if self.#field_ident.len() < #min as usize {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
+                    ));
+                }
+            }
+        );
+    }
+
+    if let Some(max) = max_length {
+        checks.push(
+            quote! {
+                if self.#field_ident.len() > #max as usize {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
+                    ));
+                }
+            }
+        );
+    }
+
+    if let Some(req) = required {
+        if *req {
+            checks.push(
+                quote! {
+                    match self.#field_ident {
+                        Some(_) => {},
+                        None => {
+                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                format!("Field '{}' is required", stringify!(#field_ident))
+                            ))
+                        },
+                        _ => {}
+                    }
+                }
+            );
+        }
+    }
+
+    // if let Some(values) = enum_values {
+    //     let allowed: Vec<proc_macro2::TokenStream> = values
+    //         .iter()
+    //         .map(|v| quote! { #v })
+    //         .collect();
+
+    //     checks.push(
+    //         quote! {
+    //             if let Some(ref value) = self.#field_ident {
+    //                 if ! [#( #allowed ),*].contains(&value.as_str()) {
+    //                     return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+    //                         format!(
+    //                             "Field '{}' must be one of: {}",
+    //                             stringify!(#field_ident),
+    //                             vec![#( #allowed.to_string() ),*].join(", ")
+    //                         )
+    //                     ));
+    //                 }
+    //             }
+    //         }
+    //     );
+    // }
+
+    if let Some(is_email) = email {
+        if *is_email {
+            checks.push(
+                quote! {
+                    if let Some(email) = &self.#field_ident {
+                        if !email.contains('@') || !email.contains('.') {
+                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                            ));
+                        }
+                    
+                        let parts: Vec<&str> = email.split('@').collect();
+                        if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
+                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                                format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                            ));
+                        }
+                    } 
+                }
+            );
+        }
+    }
+
+    if let Some(pattern) = pattern {
+        checks.push(
+            quote! {
+            if let Some(ref value) = self.#field_ident {
+                let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
+                    )
+                })?;
+                if !regex.is_match(value) {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!(
+                            "Field '{}' does not match the required pattern",
+                            stringify!(#field_ident)
+                        )
+                    ));
+                }
+            }
+        }
+        );
+    }
+
+    if let Some(true) = non_empty {
+        checks.push(
+            quote! {
+            let value = &self.#field_ident;
+            if let Some(ref val) = value {
+                if val.trim().is_empty() {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be non-empty", stringify!(#field_ident))
+                    ));
+                }
+            } else {
+                return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                    format!("Field '{}' is missing but marked as non-empty", stringify!(#field_ident))
+                ));
+            }
+        }
+        );
+    }
+
+    if let Some(positive) = positive {
+        if *positive {
+            checks.push(
+                quote! {
+                    if self.#field_ident <= 0 {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be positive", stringify!(#field_ident))
+                        ))
+                    }
+                }
+            );
+        }
+    }
+
+    if let Some(negative) = negative {
+        if *negative {
+            checks.push(
+                quote! {
+                    if self.#field_ident >= 0 {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be negative", stringify!(#field_ident))
+                        ))
+                    }
+                }
+            );
+        }
+    }
+
+    if let Some(non_negative) = non_negative {
+        if *non_negative {
+            checks.push(
+                quote! {
+                    if self.#field_ident < 0 {
+                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be non-negative", stringify!(#field_ident))
+                        ))
+                    }
+                }
+            );
+        }
+    }
+
+    if let Some(min) = min {
+        checks.push(
+            quote! {
+                if (self.#field_ident as i64) < #min {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be at least {}", stringify!(#field_ident), #min)
+                    ));
+                }
+            }
+        );
+    }
+
+    if let Some(max) = max {
+        checks.push(
+            quote! {
+                if (self.#field_ident as i64) > #max {
+                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be at most {}", stringify!(#field_ident), #max)
+                    ));
+                }
+            }
+        );
+    }
+
+    checks
 }
