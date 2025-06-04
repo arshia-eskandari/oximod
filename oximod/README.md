@@ -57,7 +57,7 @@ Use `user.save().await?` just like before!
   Use `Model::default()` or `Model::new()` to initialize structs and chain fluent setters. Customize `_id` setter name with `#[document_id_setter_ident(...)]`.
 
 - **Clear Error Handling**  
-  Strongly typed, developer-friendly errors based on `thiserror`.
+  Strongly typed, developer-friendly errors based on `thiserror`. Includes optional debugging output with `backtrace` and human-readable suggestions when used with `RUST_BACKTRACE=full`.
 
 ---
 
