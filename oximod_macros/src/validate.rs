@@ -204,24 +204,30 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
     if let Some(min) = min_length {
         checks.push(
             quote! {
-                if self.#field_ident.len() < #min as usize {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+            if self.#field_ident.len() < #min as usize {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
-                    ));
-                }
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' has at least ", #min, " characters.")
+                ));
             }
+        }
         );
     }
 
     if let Some(max) = max_length {
         checks.push(
             quote! {
-                if self.#field_ident.len() > #max as usize {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+            if self.#field_ident.len() > #max as usize {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
-                    ));
-                }
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' has at most ", #max, " characters.")
+                ));
             }
+        }
         );
     }
 
@@ -229,16 +235,19 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         if *req {
             checks.push(
                 quote! {
-                    match self.#field_ident {
-                        Some(_) => {},
-                        None => {
-                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                match self.#field_ident {
+                    Some(_) => {},
+                    None => {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OximodError::ValidationError(
                                 format!("Field '{}' is required", stringify!(#field_ident))
-                            ))
-                        },
-                        _ => {}
-                    }
+                            ),
+                            concat!("Provide a value for '", stringify!(#field_ident), "'.")
+                        ));
+                    },
+                    _ => {}
                 }
+            }
             );
         }
     }
@@ -248,43 +257,54 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
     //         .iter()
     //         .map(|v| quote! { #v })
     //         .collect();
-
-    //     checks.push(
-    //         quote! {
-    //             if let Some(ref value) = self.#field_ident {
-    //                 if ! [#( #allowed ),*].contains(&value.as_str()) {
-    //                     return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+    //
+    //     checks.push(quote! {
+    //         if let Some(ref value) = self.#field_ident {
+    //             if ! [#( #allowed ),*].contains(&value.as_str()) {
+    //                 return Err(::oximod::_attach_printables!(
+    //                     ::oximod::_error::oximod_error::OximodError::ValidationError(
     //                         format!(
     //                             "Field '{}' must be one of: {}",
     //                             stringify!(#field_ident),
     //                             vec![#( #allowed.to_string() ),*].join(", ")
     //                         )
-    //                     ));
-    //                 }
+    //                     ),
+    //                     concat!(
+    //                         "Use one of: [",
+    //                         #( values.join(", ") ),*,
+    //                         "] for field '", stringify!(#field_ident), "'."
+    //                     )
+    //                 ));
     //             }
     //         }
-    //     );
+    //     });
     // }
 
     if let Some(is_email) = email {
         if *is_email {
             checks.push(
                 quote! {
-                    if let Some(email) = &self.#field_ident {
-                        if !email.contains('@') || !email.contains('.') {
-                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                if let Some(email) = &self.#field_ident {
+                    if !email.contains('@') || !email.contains('.') {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OximodError::ValidationError(
                                 format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                            ));
-                        }
-                    
-                        let parts: Vec<&str> = email.split('@').collect();
-                        if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
-                            return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                            ),
+                            concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
+                        ));
+                    }
+
+                    let parts: Vec<&str> = email.split('@').collect();
+                    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OximodError::ValidationError(
                                 format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                            ));
-                        }
-                    } 
+                            ),
+                            concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
+                        ));
+                    }
                 }
+            }
             );
         }
     }
@@ -294,16 +314,22 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
             quote! {
             if let Some(ref value) = self.#field_ident {
                 let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
-                    ::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
+                    ::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
+                        ),
+                        concat!("Check the regex pattern for '", stringify!(#field_ident), "'.")
                     )
                 })?;
                 if !regex.is_match(value) {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!(
-                            "Field '{}' does not match the required pattern",
-                            stringify!(#field_ident)
-                        )
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!(
+                                "Field '{}' does not match the required pattern",
+                                stringify!(#field_ident)
+                            )
+                        ),
+                        concat!("Ensure '", stringify!(#field_ident), "' matches regex: ", #pattern, ".")
                     ));
                 }
             }
@@ -317,13 +343,19 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
             let value = &self.#field_ident;
             if let Some(ref val) = value {
                 if val.trim().is_empty() {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Field '{}' must be non-empty", stringify!(#field_ident))
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must be non-empty", stringify!(#field_ident))
+                        ),
+                        concat!("Provide a non-empty string for '", stringify!(#field_ident), "'.")
                     ));
                 }
             } else {
-                return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
-                    format!("Field '{}' is missing but marked as non-empty", stringify!(#field_ident))
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' is missing but marked as non-empty", stringify!(#field_ident))
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' is present and not empty.")
                 ));
             }
         }
@@ -334,12 +366,15 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         if *positive {
             checks.push(
                 quote! {
-                    if self.#field_ident <= 0 {
-                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                if self.#field_ident <= 0 {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
                             format!("Field '{}' must be positive", stringify!(#field_ident))
-                        ))
-                    }
+                        ),
+                        concat!("Use a positive value for '", stringify!(#field_ident), "'.")
+                    ));
                 }
+            }
             );
         }
     }
@@ -348,12 +383,15 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         if *negative {
             checks.push(
                 quote! {
-                    if self.#field_ident >= 0 {
-                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                if self.#field_ident >= 0 {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
                             format!("Field '{}' must be negative", stringify!(#field_ident))
-                        ))
-                    }
+                        ),
+                        concat!("Use a negative value for '", stringify!(#field_ident), "'.")
+                    ));
                 }
+            }
             );
         }
     }
@@ -362,12 +400,15 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         if *non_negative {
             checks.push(
                 quote! {
-                    if self.#field_ident < 0 {
-                        return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+                if self.#field_ident < 0 {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
                             format!("Field '{}' must be non-negative", stringify!(#field_ident))
-                        ))
-                    }
+                        ),
+                        concat!("Use zero or a positive value for '", stringify!(#field_ident), "'.")
+                    ));
                 }
+            }
             );
         }
     }
@@ -375,24 +416,30 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
     if let Some(min) = min {
         checks.push(
             quote! {
-                if (self.#field_ident as i64) < #min {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+            if (self.#field_ident as i64) < #min {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at least {}", stringify!(#field_ident), #min)
-                    ));
-                }
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' is at least ", #min, ".")
+                ));
             }
+        }
         );
     }
 
     if let Some(max) = max {
         checks.push(
             quote! {
-                if (self.#field_ident as i64) > #max {
-                    return Err(::oximod::_error::oximod_error::OximodError::ValidationError(
+            if (self.#field_ident as i64) > #max {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at most {}", stringify!(#field_ident), #max)
-                    ));
-                }
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' is at most ", #max, ".")
+                ));
             }
+        }
         );
     }
 

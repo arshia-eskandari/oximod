@@ -161,6 +161,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
         impl #name {
             fn validate(&self) -> Result<(), ::oximod::_error::oximod_error::OximodError> {
+                use ::oximod::_error::printable::Printable;
                 #(#validations)*
                 Ok(())
             }
