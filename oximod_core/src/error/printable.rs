@@ -4,16 +4,17 @@ use std::error::Error;
 /// A trait for attaching helpful debugging output to errors.
 pub trait Printable {
     fn backtrace(&self, capture: Backtrace) {
-        eprintln!("\nBacktrace: {}\n", capture);
+        // Bold yellow "Backtrace:" header
+        eprintln!("\x1b[1;33mBacktrace:\x1b[0m\n{}", capture);
     }
 
     fn suggest(&self, suggest_msg: &str) {
-        eprintln!("\nSuggestion: {}\n", suggest_msg);
+        // Bold cyan "Suggestion:" header
+        eprintln!("\x1b[1;36mSuggestion:\x1b[0m {}", suggest_msg);
     }
 
     fn attach_printables(self, capture: Backtrace, suggest_msg: Option<&str>) -> Self
-    where
-        Self: Sized,
+        where Self: Sized
     {
         self.backtrace(capture);
         if let Some(msg) = suggest_msg {
