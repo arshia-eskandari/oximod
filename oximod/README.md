@@ -11,7 +11,7 @@ OxiMod is a schema-based Object-Document Mapper (ODM) for MongoDB, designed for 
 Inspired by Mongoose, OxiMod brings a structured modeling experience while embracing Rust's type safety and performance. It works with any async runtime and is currently tested using `tokio`.
 
 
-### 🚀 New in `v0.1.7` – Fluent API Builders
+### 🚀 Highlighted Feature (since `v0.1.7`) – Fluent API Builders
 
 OxiMod now supports **fluent API builders** and a `new()` method for ergonomic model creation:
 
@@ -57,7 +57,7 @@ Use `user.save().await?` just like before!
   Use `Model::default()` or `Model::new()` to initialize structs and chain fluent setters. Customize `_id` setter name with `#[document_id_setter_ident(...)]`.
 
 - **Clear Error Handling**  
-  Strongly typed, developer-friendly errors based on `thiserror`.
+  Strongly typed, developer-friendly errors based on `thiserror`. Includes optional debugging output with `backtrace` and human-readable suggestions when used with `RUST_BACKTRACE=full`.
 
 ---
 
@@ -167,6 +167,7 @@ cargo run --example validate_usage
 cargo run --example query
 cargo run --example update
 cargo run --example delete
+cargo run --example hook_usage
 cargo run --example by_id
 cargo run --example default_usage
 ```
