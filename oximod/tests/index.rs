@@ -1,8 +1,12 @@
-use mongodb::bson::{ DateTime, oid::ObjectId, doc };
+use mongodb::{
+    bson::{ doc, oid::ObjectId, DateTime },
+    options::{ IndexVersion, TextIndexVersion },
+};
 use oximod::Model;
 use testresult::TestResult;
 use serde::{ Deserialize, Serialize };
 use std::{ thread::sleep, time::Duration };
+use futures_util::TryStreamExt;
 
 mod common;
 use common::init;
@@ -76,6 +80,91 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
 
     let remaining = Session::find(doc! {}).await?;
     assert_eq!(remaining.len(), 0, "Expected document to be expired and deleted");
+
+    Ok(())
+}
+
+// Run test: cargo nextest run index_version_is_applied_correctly
+#[tokio::test]
+async fn index_version_is_applied_correctly() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("version_index_test")]
+    pub struct VersionedIndex {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(version = 2, name = "v2_idx")]
+        data: String,
+    }
+
+    VersionedIndex::clear().await?;
+
+    let item = VersionedIndex::default().data("hello".to_string());
+    item.save().await?;
+
+    // Confirm the index is created with version 2
+    let mut cursor = VersionedIndex::get_collection()
+        .expect("Failed to get collection")
+        .list_indexes().await?;
+
+    let mut found = false;
+
+    while let Some(index) = cursor.try_next().await? {
+        if let Some(opts) = index.options {
+            if opts.name.as_deref() == Some("v2_idx") {
+                if let Some(IndexVersion::V2) = opts.version {
+                    found = true;
+                }
+            }
+        }
+    }
+
+    assert!(found, "Expected index with name 'v2_idx'");
+
+    Ok(())
+}
+
+// Run test: cargo nextest run text_index_version_is_applied_correctly
+#[tokio::test]
+async fn text_index_version_is_applied_correctly() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("text_index_version_is_applied_correctly")]
+    pub struct TestModel {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(text_index_version = 2, name = "text_v2_idx")]
+        data: String,
+    }
+
+    TestModel::clear().await?;
+
+    let item = TestModel::default().data("hello".to_string());
+    item.save().await?;
+
+    let mut cursor = TestModel::get_collection()
+        .expect("Failed to get collection")
+        .list_indexes().await?;
+
+    let mut found = false;
+
+    while let Some(index) = cursor.try_next().await? {
+        if let Some(opts) = index.options {
+            if opts.name.as_deref() == Some("text_v2_idx") {
+                if let Some(TextIndexVersion::V2) = opts.text_index_version {
+                    found = true;
+                }
+            }
+        }
+    }
+
+    assert!(found, "Expected index with name 'text_v2_idx'");
 
     Ok(())
 }
