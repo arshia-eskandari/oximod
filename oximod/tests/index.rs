@@ -168,3 +168,42 @@ async fn text_index_version_is_applied_correctly() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run hidden_index_is_applied_correctly
+#[tokio::test]
+async fn hidden_index_is_applied_correctly() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("hidden_index_test")]
+    struct HiddenTest {
+        #[index(hidden, name = "hidden_idx")]
+        secret: String,
+    }
+
+    HiddenTest::clear().await?;
+
+    let doc = HiddenTest::default().secret("classified".to_string());
+    doc.save().await?;
+
+    let mut cursor = HiddenTest::get_collection()
+        .expect("failed to get collection")
+        .list_indexes().await?;
+
+    let mut found = false;
+
+    while let Some(index) = cursor.try_next().await? {
+        if let Some(name) = index.options.as_ref().and_then(|opts| opts.name.as_ref()) {
+            if name == "hidden_idx" {
+                let hidden = index.options.as_ref().and_then(|opts| opts.hidden);
+                assert_eq!(hidden, Some(true));
+                found = true;
+                break;
+            }
+        }
+    }
+
+    assert!(found, "Expected index 'hidden_idx' not found");
+    Ok(())
+}

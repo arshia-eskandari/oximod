@@ -44,6 +44,11 @@ use syn::{ Attribute, Lit };
 ///   - Supported values include `1`, `2`, and `3`, or `Custom(N)`.
 ///   - Use this to explicitly control MongoDB's text indexing behavior.
 ///
+/// - `hidden`: (Optional) Whether the index is hidden from the query planner.
+///   - If `true`, the index exists but will not be used by the query planner unless explicitly hinted.
+///   - Useful for testing or safely rolling out new indexes.
+///   - Default: `false`
+/// 
 /// # Example
 ///
 /// ```rust
@@ -68,6 +73,7 @@ pub struct IndexArgs {
     pub expire_after_secs: Option<i32>,
     pub version: Option<u32>,
     pub text_index_version: Option<u32>,
+    pub hidden: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -140,6 +146,8 @@ pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<Ind
                     ));
                 }
                 args.text_index_version = Some(text_index_version); 
+            } else if meta.path.is_ident("hidden") {
+                args.hidden = Some(true);
             }
 
             Ok(())
@@ -202,6 +210,11 @@ pub fn generate_index_model_tokens(index_def: &IndexDefinition) -> TokenStream {
         None => quote! { None },
     };
 
+    let hidden = match index_def.args.hidden {
+        Some(val) => quote! { Some(#val) },
+        None => quote! { None },
+    };
+
     quote! {
         ::oximod::_mongodb::IndexModel::builder()
             .keys(::oximod::_mongodb::bson::doc! { #key_entry })
@@ -214,6 +227,7 @@ pub fn generate_index_model_tokens(index_def: &IndexDefinition) -> TokenStream {
                     .expire_after(#expire_after_secs)
                     .version(#version)
                     .text_index_version(#text_index_version)
+                    .hidden(#hidden)
                     .build()
             )
             .build()
