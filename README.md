@@ -82,6 +82,9 @@ You can add indexes to fields using the `#[index(...)]` attribute.
 - `background`: Builds index in the background without locking the database.
 - `order = 1 | -1`: Index sort order (1 = ascending, -1 = descending).
 - `expire_after_secs = ...`: Time-to-live for the index in seconds.
+- `version = N`: Specifies the index version (e.g., 1, 2, etc.).
+- `text_index_version = N`: Specifies the text index version (1, 2, 3, etc.). Use only with text indexes.
+- `hidden`: If true, the index is created but hidden from the query planner by default.
 
 ### Field-Level Validation Attributes
 
@@ -100,6 +103,11 @@ You can apply validations on fields using the `#[validate(...)]` attribute.
 - `non_negative`: Ensures numeric value is 0 or greater.
 - `min = N`: Ensures numeric value is at least `N`.
 - `max = N`: Ensures numeric value is at most `N`.
+- `starts_with = "..."`: Ensures a string starts with the given prefix.
+- `ends_with = "..."`: Ensures a string ends with the given suffix.
+- `includes = "..."`: Ensures a string includes the given substring.
+- `alphanumeric`: Ensures all characters are alphanumeric.
+- `multiple_of = N`: Ensures the numeric value is a multiple of `N`.
 
 > 💡 Use native Rust enums instead of `enum_values`.
 
@@ -139,6 +147,12 @@ struct User {
     #[validate(non_negative)]
     age: i32,
 
+    #[validate(non_negative, multiple_of = 5)]
+    points: i32,
+
+    #[index(hidden)]
+    internal_tag: String,
+
     #[default(false)]
     active: bool,
 }
@@ -151,6 +165,8 @@ In this example:
 - The `phone` field is indexed only when it exists in the document (sparse).
 - The `name` field must be at least 3 characters long.
 - The `age` field must be non-negative.
+- The `points` field must be non-negative and a multiple of 5.
+- The `internal_tag` field is indexed but hidden from query planning, useful for internal/system metadata. 
 - The `active` field defaults to `false`.
 
 ---

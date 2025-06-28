@@ -54,6 +54,26 @@ use syn::{ Attribute, Lit };
 ///   - If provided, the field’s numeric value must be <= this value.
 ///   - Default: no maximum‐value constraint.
 ///
+/// - `starts_with`: (Optional) A required string prefix the field value must start with.
+///   - If provided, the field value must begin with this substring.
+///   - Default: not enforced.
+///
+/// - `ends_with`: (Optional) A required string suffix the field value must end with.
+///   - If provided, the field value must end with this substring.
+///   - Default: not enforced.
+///
+/// - `includes`: (Optional) A required substring the field value must contain.
+///   - If provided, the field must contain this substring somewhere.
+///   - Default: not enforced.
+///
+/// - `alphanumeric`: (Optional) Whether the field must only contain letters and digits.
+///   - If `true`, the field value must match `/^[a-zA-Z0-9]+$/`.
+///   - Default: `false` (no alphanumeric constraint).
+///
+/// - `multiple_of`: (Optional) Whether the field value must be a multiple of the given integer.
+///   - If provided, the field value must be evenly divisible by this number.
+///   - Default: not enforced. 
+/// 
 /// # Example
 ///
 /// ```rust
@@ -87,6 +107,11 @@ pub struct ValidateArgs {
     pub non_negative: Option<bool>,
     pub min: Option<i64>,
     pub max: Option<i64>,
+    pub starts_with: Option<String>,
+    pub ends_with: Option<String>,
+    pub includes: Option<String>,
+    pub alphanumeric: Option<bool>,
+    pub multiple_of: Option<u64>,
 }
 
 pub struct ValidateDefinition {
@@ -171,6 +196,46 @@ pub fn parse_validate_args(
                 } else {
                     return Err(syn::Error::new(lit.span(), "expected integer literal for `max`"));
                 }
+            } else if meta.path.is_ident("starts_with") {
+                let lit = meta.value()?.parse()?;
+                if let Lit::Str(lit_str) = lit {
+                    args.starts_with = Some(lit_str.value());
+                } else {
+                    return Err(syn::Error::new(lit.span(), "expected string literal for `starts_with`"));
+                }
+            } else if meta.path.is_ident("ends_with") {
+                let lit = meta.value()?.parse()?;
+                if let Lit::Str(lit_str) = lit {
+                    args.ends_with = Some(lit_str.value());
+                } else {
+                    return Err(syn::Error::new(lit.span(), "expected string literal for `ends_with`"));
+                }
+            } else if meta.path.is_ident("includes") {
+                let lit = meta.value()?.parse()?;
+                if let Lit::Str(lit_str) = lit {
+                    args.includes = Some(lit_str.value());
+                } else {
+                    return Err(syn::Error::new(lit.span(), "expected string literal for `includes`"));
+                }
+            } else if meta.path.is_ident("alphanumeric") {
+                args.alphanumeric = Some(true);
+            } else if meta.path.is_ident("multiple_of") {
+                let lit = meta.value()?.parse()?;
+                if let Lit::Int(lit_int) = &lit {
+                    let val = lit_int.base10_parse::<u64>()?;
+                    if val == 0 {
+                        return Err(syn::Error::new(
+                            lit.span(),
+                            "`multiple_of` must be greater than 0"
+                        ));
+                    }
+                    args.multiple_of = Some(val);
+                } else {
+                    return Err(syn::Error::new(
+                        lit.span(),
+                        "expected integer literal for `multiple_of`"
+                    ));
+                }
             } else {
                 return Err(meta.error("unknown attribute key"));
             }
@@ -197,6 +262,11 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         non_negative,
         min,
         max,
+        starts_with,
+        ends_with,
+        includes,
+        alphanumeric,
+        multiple_of,
     } = &validate_def.args;
 
     let mut checks = vec![];
@@ -442,6 +512,84 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         }
         );
     }
+
+    if let Some(start) = starts_with {
+        checks.push(
+            quote! {
+            if let Some(ref val) = self.#field_ident {
+                if !val.starts_with(#start) {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must start with '{}'", stringify!(#field_ident), #start)
+                        ),
+                        concat!("Ensure '", stringify!(#field_ident), "' starts with '", #start, "'.")
+                    ));
+                }
+            }
+        });
+    }
+    
+    if let Some(end) = ends_with {
+        checks.push(
+            quote! {
+            if let Some(ref val) = self.#field_ident {
+                if !val.ends_with(#end) {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must end with '{}'", stringify!(#field_ident), #end)
+                        ),
+                        concat!("Ensure '", stringify!(#field_ident), "' ends with '", #end, "'.")
+                    ));
+                }
+            }
+        });
+    }
+    
+    if let Some(substr) = includes {
+        checks.push(
+            quote! {
+            if let Some(ref val) = self.#field_ident {
+                if !val.contains(#substr) {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must include '{}'", stringify!(#field_ident), #substr)
+                        ),
+                        concat!("Ensure '", stringify!(#field_ident), "' includes '", #substr, "'.")
+                    ));
+                }
+            }
+        });
+    }
+    
+    if let Some(true) = alphanumeric {
+        checks.push(
+            quote! {
+            if let Some(ref val) = self.#field_ident {
+                if !val.chars().all(|c| c.is_alphanumeric()) {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            format!("Field '{}' must contain only alphanumeric characters", stringify!(#field_ident))
+                        ),
+                        concat!("Ensure '", stringify!(#field_ident), "' has only letters and numbers.")
+                    ));
+                }
+            }
+        });
+    }
+    
+    if let Some(multiple) = multiple_of {
+        checks.push(
+            quote! {
+            if self.#field_ident % #multiple != 0 {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be a multiple of {}", stringify!(#field_ident), #multiple)
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' is divisible by ", #multiple, ".")
+                ));
+            }
+        });
+    }    
 
     checks
 }
