@@ -132,7 +132,7 @@ pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<Ind
                 if version == 0 {
                     return Err(syn::Error::new(
                         lit.span(),
-                        "`text_index_version` must be >= 1",
+                        "`version` must be greater than or equal to 1",
                     ));
                 }
                 args.version = Some(version);
@@ -142,7 +142,7 @@ pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<Ind
                 if text_index_version == 0 {
                     return Err(syn::Error::new(
                         lit.span(),
-                        "`text_index_version` must be >= 1",
+                        "`text_index_version` must be greater than or equal to 1",
                     ));
                 }
                 args.text_index_version = Some(text_index_version); 

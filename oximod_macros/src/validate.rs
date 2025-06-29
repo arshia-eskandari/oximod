@@ -171,7 +171,7 @@ pub fn parse_validate_args(
                     args.pattern = Some(lit_str.value());
                 } else {
                     return Err(
-                        syn::Error::new(lit.span(), "expected integer literal for `min_length`")
+                        syn::Error::new(lit.span(), "expected integer literal for `pattern`")
                     );
                 }
             } else if meta.path.is_ident("non_empty") {
