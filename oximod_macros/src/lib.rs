@@ -60,7 +60,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 db = Some(val);
             } else {
                 return syn::Error
-                    ::new_spanned(attr, "Expected #[db(\"db_name\"]")
+                    ::new_spanned(attr, "Expected #[db(\"db_name\")]")
                     .to_compile_error()
                     .into();
             }
@@ -69,7 +69,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 collection = Some(val);
             } else {
                 return syn::Error
-                    ::new_spanned(attr, "Expected #[collection(\"collection_name\"]")
+                    ::new_spanned(attr, "Expected #[collection(\"collection_name\")]")
                     .to_compile_error()
                     .into();
             }
@@ -80,7 +80,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         Some(val) => val,
         None => {
             return syn::Error
-                ::new_spanned(&input, "Missing #[db(\"db_name\"] attribute")
+                ::new_spanned(&input, "Missing #[db(\"db_name\")] attribute")
                 .to_compile_error()
                 .into();
         }
@@ -90,7 +90,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         Some(val) => val,
         None => {
             return syn::Error
-                ::new_spanned(&input, "Missing #[collection(\"collection_name\"] attribute")
+                ::new_spanned(&input, "Missing #[collection(\"collection_name\")] attribute")
                 .to_compile_error()
                 .into();
         }
