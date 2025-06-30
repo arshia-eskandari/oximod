@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, Lit };
+use syn::{ Type, Attribute, GenericArgument, Lit, PathArguments, Ident };
 
 #[derive(Default, Debug)]
 /// Arguments for field validation in OxiMod using the `#[validate(...)]` attribute.
@@ -72,8 +72,8 @@ use syn::{ Attribute, Lit };
 ///
 /// - `multiple_of`: (Optional) Whether the field value must be a multiple of the given integer.
 ///   - If provided, the field value must be evenly divisible by this number.
-///   - Default: not enforced. 
-/// 
+///   - Default: not enforced.
+///
 /// # Example
 ///
 /// ```rust
@@ -114,15 +114,22 @@ pub struct ValidateArgs {
     pub multiple_of: Option<u64>,
 }
 
-pub struct ValidateDefinition {
-    pub field_name: String,
-    pub args: ValidateArgs,
+pub fn unwrap_option_type(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.first() {
+            if segment.ident == "Option" {
+                if let PathArguments::AngleBracketed(generic_args) = &segment.arguments {
+                    if let Some(GenericArgument::Type(inner_ty)) = generic_args.args.first() {
+                        return Some(inner_ty);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
-pub fn parse_validate_args(
-    attr: &Attribute,
-    field_name: String
-) -> syn::Result<ValidateDefinition> {
+pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
     let mut args = ValidateArgs::default();
 
     if attr.path().is_ident("validate") {
@@ -147,22 +154,6 @@ pub fn parse_validate_args(
                 }
             } else if meta.path.is_ident("required") {
                 args.required = Some(true);
-                // } else if meta.path.is_ident("enum_values") {
-                //     // 1. Grab the parenthesized group
-                //     let content;
-                //     syn::parenthesized!(content in meta.input);
-
-                //     // 2. Parse a comma-separated list of string literals
-                //     let values = content
-                //         .parse_terminated(
-                //             |buf: &syn::parse::ParseBuffer| buf.parse::<syn::LitStr>(), // note the closure
-                //             syn::Token![,]
-                //         )?
-                //         .into_iter()
-                //         .map(|lit_str| lit_str.value())
-                //         .collect::<Vec<_>>();
-
-                //     args.enum_values = Some(values);
             } else if meta.path.is_ident("email") {
                 args.email = Some(true);
             } else if meta.path.is_ident("pattern") {
@@ -201,21 +192,27 @@ pub fn parse_validate_args(
                 if let Lit::Str(lit_str) = lit {
                     args.starts_with = Some(lit_str.value());
                 } else {
-                    return Err(syn::Error::new(lit.span(), "expected string literal for `starts_with`"));
+                    return Err(
+                        syn::Error::new(lit.span(), "expected string literal for `starts_with`")
+                    );
                 }
             } else if meta.path.is_ident("ends_with") {
                 let lit = meta.value()?.parse()?;
                 if let Lit::Str(lit_str) = lit {
                     args.ends_with = Some(lit_str.value());
                 } else {
-                    return Err(syn::Error::new(lit.span(), "expected string literal for `ends_with`"));
+                    return Err(
+                        syn::Error::new(lit.span(), "expected string literal for `ends_with`")
+                    );
                 }
             } else if meta.path.is_ident("includes") {
                 let lit = meta.value()?.parse()?;
                 if let Lit::Str(lit_str) = lit {
                     args.includes = Some(lit_str.value());
                 } else {
-                    return Err(syn::Error::new(lit.span(), "expected string literal for `includes`"));
+                    return Err(
+                        syn::Error::new(lit.span(), "expected string literal for `includes`")
+                    );
                 }
             } else if meta.path.is_ident("alphanumeric") {
                 args.alphanumeric = Some(true);
@@ -224,17 +221,15 @@ pub fn parse_validate_args(
                 if let Lit::Int(lit_int) = &lit {
                     let val = lit_int.base10_parse::<u64>()?;
                     if val == 0 {
-                        return Err(syn::Error::new(
-                            lit.span(),
-                            "`multiple_of` must be greater than 0"
-                        ));
+                        return Err(
+                            syn::Error::new(lit.span(), "`multiple_of` must be greater than 0")
+                        );
                     }
                     args.multiple_of = Some(val);
                 } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `multiple_of`"
-                    ));
+                    return Err(
+                        syn::Error::new(lit.span(), "expected integer literal for `multiple_of`")
+                    );
                 }
             } else {
                 return Err(meta.error("unknown attribute key"));
@@ -244,62 +239,103 @@ pub fn parse_validate_args(
         })?;
     }
 
-    Ok(ValidateDefinition { field_name, args })
+    Ok(args)
 }
 
-pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<TokenStream> {
-    let field_ident = syn::Ident::new(&validate_def.field_name, proc_macro2::Span::call_site());
+macro_rules! opt_check {
+    (
+        $is_opt:expr,
+        $field:ident,
+        $($check:tt)*
+    ) => {
+        {
+        if $is_opt {
+            quote! {
+                if let Some(val) = &self.#$field {
+                    $($check)*
+                }
+            }
+        } else {
+            quote! {
+                {
+                    let val = &self.#$field;
+                    $($check)*
+                }
+            }
+        }
+        }
+    };
+}
+
+pub fn generate_validate_model_tokens(
+    field_ident: &Ident,
+    field_ty: &Type,
+    validate_args: ValidateArgs
+) -> Vec<TokenStream> {
     let ValidateArgs {
-        min_length,
-        max_length,
+        min_length: min_length_option,
+        max_length: max_length_option,
         required,
         // enum_values,
-        email,
-        pattern,
-        non_empty,
-        positive,
-        negative,
-        non_negative,
-        min,
-        max,
-        starts_with,
-        ends_with,
-        includes,
-        alphanumeric,
-        multiple_of,
-    } = &validate_def.args;
-
+        email: email_option,
+        pattern: pattern_option,
+        non_empty: non_empty_option,
+        positive: positive_option,
+        negative: negative_option,
+        non_negative: non_negative_option,
+        min: min_option,
+        max: max_option,
+        starts_with: starts_with_option,
+        ends_with: ends_with_option,
+        includes: includes_option,
+        alphanumeric: alphanumeric_option,
+        multiple_of: multiple_of_option,
+    } = &validate_args;
+    let is_optional = unwrap_option_type(field_ty).is_some();
     let mut checks = vec![];
 
-    if let Some(min) = min_length {
-        checks.push(
+    if let Some(min_length) = min_length_option {
+        let inner =
             quote! {
-            if self.#field_ident.len() < #min as usize {
+            if val.len() < (#min_length as usize) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Field '{}' must be at least {} characters long", stringify!(#field_ident), #min)
+                        format!("Field '{}' must be at least {} characters long",
+                                stringify!(#field_ident),
+                                #min_length
+                        )
                     ),
-                    concat!("Ensure '", stringify!(#field_ident), "' has at least ", #min, " characters.")
+                    concat!("Ensure '", stringify!(#field_ident),
+                           "' has at least ", #min_length, " characters.")
                 ));
             }
-        }
-        );
+        };
+
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+
+        checks.push(snippet);
     }
 
-    if let Some(max) = max_length {
-        checks.push(
-            quote! {
-            if self.#field_ident.len() > #max as usize {
+    if let Some(max_length) = max_length_option {
+        let inner = quote! {
+            if val.len() > (#max_length as usize) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Field '{}' must be at most {} characters long", stringify!(#field_ident), #max)
+                        format!("Field '{}' must be at most {} characters long",
+                                stringify!(#field_ident),
+                                #max_length
+                        )
                     ),
-                    concat!("Ensure '", stringify!(#field_ident), "' has at most ", #max, " characters.")
+                    concat!("Ensure '", stringify!(#field_ident),
+                           "' has at most ", #max_length, " characters.")
                 ));
             }
-        }
-        );
+        };
+    
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
+    
 
     if let Some(req) = required {
         if *req {
@@ -322,121 +358,82 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
         }
     }
 
-    // if let Some(values) = enum_values {
-    //     let allowed: Vec<proc_macro2::TokenStream> = values
-    //         .iter()
-    //         .map(|v| quote! { #v })
-    //         .collect();
-    //
-    //     checks.push(quote! {
-    //         if let Some(ref value) = self.#field_ident {
-    //             if ! [#( #allowed ),*].contains(&value.as_str()) {
-    //                 return Err(::oximod::_attach_printables!(
-    //                     ::oximod::_error::oximod_error::OximodError::ValidationError(
-    //                         format!(
-    //                             "Field '{}' must be one of: {}",
-    //                             stringify!(#field_ident),
-    //                             vec![#( #allowed.to_string() ),*].join(", ")
-    //                         )
-    //                     ),
-    //                     concat!(
-    //                         "Use one of: [",
-    //                         #( values.join(", ") ),*,
-    //                         "] for field '", stringify!(#field_ident), "'."
-    //                     )
-    //                 ));
-    //             }
-    //         }
-    //     });
-    // }
-
-    if let Some(is_email) = email {
+    if let Some(is_email) = email_option {
         if *is_email {
-            checks.push(
-                quote! {
-                if let Some(email) = &self.#field_ident {
-                    if !email.contains('@') || !email.contains('.') {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
-                                format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                            ),
-                            concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
-                        ));
-                    }
-
-                    let parts: Vec<&str> = email.split('@').collect();
-                    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
-                                format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                            ),
-                            concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
-                        ));
-                    }
-                }
-            }
-            );
-        }
-    }
-
-    if let Some(pattern) = pattern {
-        checks.push(
-            quote! {
-            if let Some(ref value) = self.#field_ident {
-                let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
-                    ::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
-                        ),
-                        concat!("Check the regex pattern for '", stringify!(#field_ident), "'.")
-                    )
-                })?;
-                if !regex.is_match(value) {
+            let inner = quote! {
+                if !val.contains('@') || !val.contains('.') {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!(
-                                "Field '{}' does not match the required pattern",
-                                stringify!(#field_ident)
-                            )
+                            format!("Field '{}' must be a valid email address", stringify!(#field_ident))
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' matches regex: ", #pattern, ".")
+                        concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
                     ));
                 }
-            }
-        }
-        );
-    }
-
-    if let Some(true) = non_empty {
-        checks.push(
-            quote! {
-            let value = &self.#field_ident;
-            if let Some(ref val) = value {
-                if val.trim().is_empty() {
+    
+                let parts: Vec<&str> = val.split('@').collect();
+                if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!("Field '{}' must be non-empty", stringify!(#field_ident))
+                            format!("Field '{}' must be a valid email address", stringify!(#field_ident))
                         ),
-                        concat!("Provide a non-empty string for '", stringify!(#field_ident), "'.")
+                        concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
                     ));
                 }
-            } else {
+            };
+    
+            let snippet = opt_check!(is_optional, field_ident, #inner);
+            checks.push(snippet);
+        }
+    }
+    
+
+    if let Some(pattern) = pattern_option {
+        let inner = quote! {
+            let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
+                ::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
+                    ),
+                    concat!("Check the regex pattern for '", stringify!(#field_ident), "'.")
+                )
+            })?;
+    
+            if !regex.is_match(val) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
-                        format!("Field '{}' is missing but marked as non-empty", stringify!(#field_ident))
+                        format!("Field '{}' does not match the required pattern", stringify!(#field_ident))
                     ),
-                    concat!("Ensure '", stringify!(#field_ident), "' is present and not empty.")
+                    concat!("Ensure '", stringify!(#field_ident), "' matches regex: ", #pattern, ".")
                 ));
             }
-        }
-        );
+        };
+    
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
+    
 
-    if let Some(positive) = positive {
+    if let Some(true) = non_empty_option {
+        let inner = quote! {
+            if val.trim().is_empty() {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must be non-empty", stringify!(#field_ident))
+                    ),
+                    concat!("Provide a non-empty string for '", stringify!(#field_ident), "'.")
+                ));
+            }
+        };
+    
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
+    }
+    
+
+    if let Some(positive) = positive_option {
         if *positive {
-            checks.push(
-                quote! {
-                if self.#field_ident <= 0 {
+            let inner = quote! {
+                if *val <= 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
                             format!("Field '{}' must be positive", stringify!(#field_ident))
@@ -444,16 +441,16 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
                         concat!("Use a positive value for '", stringify!(#field_ident), "'.")
                     ));
                 }
-            }
-            );
+            };
+            let snippet = opt_check!(is_optional, field_ident, #inner);
+            checks.push(snippet);
         }
     }
-
-    if let Some(negative) = negative {
+    
+    if let Some(negative) = negative_option {
         if *negative {
-            checks.push(
-                quote! {
-                if self.#field_ident >= 0 {
+            let inner = quote! {
+                if *val >= 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
                             format!("Field '{}' must be negative", stringify!(#field_ident))
@@ -461,16 +458,16 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
                         concat!("Use a negative value for '", stringify!(#field_ident), "'.")
                     ));
                 }
-            }
-            );
+            };
+            let snippet = opt_check!(is_optional, field_ident, #inner);
+            checks.push(snippet);
         }
     }
-
-    if let Some(non_negative) = non_negative {
+    
+    if let Some(non_negative) = non_negative_option {
         if *non_negative {
-            checks.push(
-                quote! {
-                if self.#field_ident < 0 {
+            let inner = quote! {
+                if *val < 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
                             format!("Field '{}' must be non-negative", stringify!(#field_ident))
@@ -478,15 +475,15 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
                         concat!("Use zero or a positive value for '", stringify!(#field_ident), "'.")
                     ));
                 }
-            }
-            );
+            };
+            let snippet = opt_check!(is_optional, field_ident, #inner);
+            checks.push(snippet);
         }
     }
-
-    if let Some(min) = min {
-        checks.push(
-            quote! {
-            if (self.#field_ident as i64) < #min {
+    
+    if let Some(min) = min_option {
+        let inner = quote! {
+            if (*val as i64) < #min {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at least {}", stringify!(#field_ident), #min)
@@ -494,14 +491,14 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
                     concat!("Ensure '", stringify!(#field_ident), "' is at least ", #min, ".")
                 ));
             }
-        }
-        );
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
-
-    if let Some(max) = max {
-        checks.push(
-            quote! {
-            if (self.#field_ident as i64) > #max {
+    
+    if let Some(max) = max_option {
+        let inner = quote! {
+            if (*val as i64) > #max {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be at most {}", stringify!(#field_ident), #max)
@@ -509,78 +506,74 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
                     concat!("Ensure '", stringify!(#field_ident), "' is at most ", #max, ".")
                 ));
             }
-        }
-        );
-    }
-
-    if let Some(start) = starts_with {
-        checks.push(
-            quote! {
-            if let Some(ref val) = self.#field_ident {
-                if !val.starts_with(#start) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!("Field '{}' must start with '{}'", stringify!(#field_ident), #start)
-                        ),
-                        concat!("Ensure '", stringify!(#field_ident), "' starts with '", #start, "'.")
-                    ));
-                }
-            }
-        });
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
     
-    if let Some(end) = ends_with {
-        checks.push(
-            quote! {
-            if let Some(ref val) = self.#field_ident {
-                if !val.ends_with(#end) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!("Field '{}' must end with '{}'", stringify!(#field_ident), #end)
-                        ),
-                        concat!("Ensure '", stringify!(#field_ident), "' ends with '", #end, "'.")
-                    ));
-                }
+    if let Some(start) = starts_with_option {
+        let inner = quote! {
+            if !val.starts_with(#start) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must start with '{}'", stringify!(#field_ident), #start)
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' starts with '", #start, "'.")
+                ));
             }
-        });
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
     
-    if let Some(substr) = includes {
-        checks.push(
-            quote! {
-            if let Some(ref val) = self.#field_ident {
-                if !val.contains(#substr) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!("Field '{}' must include '{}'", stringify!(#field_ident), #substr)
-                        ),
-                        concat!("Ensure '", stringify!(#field_ident), "' includes '", #substr, "'.")
-                    ));
-                }
+    if let Some(end) = ends_with_option {
+        let inner = quote! {
+            if !val.ends_with(#end) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must end with '{}'", stringify!(#field_ident), #end)
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' ends with '", #end, "'.")
+                ));
             }
-        });
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
     
-    if let Some(true) = alphanumeric {
-        checks.push(
-            quote! {
-            if let Some(ref val) = self.#field_ident {
-                if !val.chars().all(|c| c.is_alphanumeric()) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
-                            format!("Field '{}' must contain only alphanumeric characters", stringify!(#field_ident))
-                        ),
-                        concat!("Ensure '", stringify!(#field_ident), "' has only letters and numbers.")
-                    ));
-                }
+    if let Some(substr) = includes_option {
+        let inner = quote! {
+            if !val.contains(#substr) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must include '{}'", stringify!(#field_ident), #substr)
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' includes '", #substr, "'.")
+                ));
             }
-        });
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
     
-    if let Some(multiple) = multiple_of {
-        checks.push(
-            quote! {
-            if self.#field_ident % #multiple != 0 {
+    if let Some(true) = alphanumeric_option {
+        let inner = quote! {
+            if !val.chars().all(|c| c.is_alphanumeric()) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        format!("Field '{}' must contain only alphanumeric characters", stringify!(#field_ident))
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' has only letters and numbers.")
+                ));
+            }
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
+    }
+    
+    if let Some(multiple) = multiple_of_option {
+        let inner = quote! {
+            if val % #multiple != 0 {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be a multiple of {}", stringify!(#field_ident), #multiple)
@@ -588,8 +581,10 @@ pub fn generate_validate_model_tokens(validate_def: &ValidateDefinition) -> Vec<
                     concat!("Ensure '", stringify!(#field_ident), "' is divisible by ", #multiple, ".")
                 ));
             }
-        });
-    }    
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
+    }
 
     checks
 }

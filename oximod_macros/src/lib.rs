@@ -48,11 +48,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let mut db: Option<LitStr> = None;
     let mut collection: Option<LitStr> = None;
     let mut index_definitions = Vec::new();
-    let mut validate_definitions = Vec::new();
     let mut default_definitions = Vec::new();
     let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
     let mut has_id_attr = false;
     let mut setters = Vec::new();
+    let mut validations = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -111,11 +111,15 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         );
                         index_definitions.push(index_args); // <-- COLLECT
                     } else if attr.path().is_ident("validate") {
-                        let validate_definition = parse_validate_args(
-                            attr,
-                            field_name.clone()
-                        ).expect("could not parse validate args");
-                        validate_definitions.push(validate_definition);
+                        let validate_args = parse_validate_args(attr).expect(
+                            "could not parse validate args"
+                        );
+                        let validation_token = generate_validate_model_tokens(
+                            ident,
+                            &field.ty,
+                            validate_args
+                        );
+                        validations.extend(validation_token);
                     } else if attr.path().is_ident("default") {
                         let def = parse_default_args(attr, ident).expect(
                             "could not parse default args"
@@ -130,10 +134,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let index_models = index_definitions
         .iter()
         .map(|index_def| generate_index_model_tokens(index_def));
-
-    let validations = validate_definitions
-        .iter()
-        .flat_map(|validate_def| generate_validate_model_tokens(validate_def));
 
     let default_inits = default_definitions.iter().map(|def| {
         let ident = &def.field_ident;
