@@ -14,7 +14,7 @@ async fn aggregates_documents_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("aggregate_test")]
+    #[collection("logs_for_aggregates_documents_correctly")]
     pub struct LogEntry {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

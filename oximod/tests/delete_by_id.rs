@@ -13,7 +13,7 @@ async fn deletes_document_by_id_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("delete_by_id")]
+    #[collection("delete_by_id_test_deletes_document_by_id_correctly")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

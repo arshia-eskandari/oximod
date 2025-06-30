@@ -12,13 +12,13 @@ mod common;
 use common::init;
 
 // Run test: cargo nextest run creates_indexes_correctly
-#[tokio::test] // Might throw `expected Expr rust-analyzer` so disable "macro-error"
+#[tokio::test]
 async fn creates_indexes_correctly() -> TestResult {
     init().await;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
-    #[collection("index_test")]
+    #[collection("index_test_creates_indexes_correctly")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
@@ -43,7 +43,6 @@ async fn creates_indexes_correctly() -> TestResult {
         .created_at(DateTime::now())
         .active(true);
 
-    // This will trigger create_indexes() inside save
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
 
@@ -57,7 +56,7 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
-    #[collection("ttl_test")]
+    #[collection("ttl_test_removes_expired_documents")]
     pub struct Session {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
@@ -68,14 +67,12 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
 
     Session::clear().await?;
 
-    // Insert a document with a created_at timestamp in the past
     let expired_session = Session::default().created_at(
         DateTime::from_millis(DateTime::now().timestamp_millis() - 10_000)
     );
 
     expired_session.save().await?;
 
-    // Give MongoDB TTL monitor enough time to delete the expired document
     sleep(Duration::from_secs(65));
 
     let remaining = Session::find(doc! {}).await?;
@@ -91,7 +88,7 @@ async fn index_version_is_applied_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
-    #[collection("version_index_test")]
+    #[collection("index_version_is_applied_correctly")]
     pub struct VersionedIndex {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
@@ -105,11 +102,7 @@ async fn index_version_is_applied_correctly() -> TestResult {
     let item = VersionedIndex::default().data("hello".to_string());
     item.save().await?;
 
-    // Confirm the index is created with version 2
-    let mut cursor = VersionedIndex::get_collection()
-        .expect("Failed to get collection")
-        .list_indexes().await?;
-
+    let mut cursor = VersionedIndex::get_collection()?.list_indexes().await?;
     let mut found = false;
 
     while let Some(index) = cursor.try_next().await? {
@@ -148,10 +141,7 @@ async fn text_index_version_is_applied_correctly() -> TestResult {
     let item = TestModel::default().data("hello".to_string());
     item.save().await?;
 
-    let mut cursor = TestModel::get_collection()
-        .expect("Failed to get collection")
-        .list_indexes().await?;
-
+    let mut cursor = TestModel::get_collection()?.list_indexes().await?;
     let mut found = false;
 
     while let Some(index) = cursor.try_next().await? {
@@ -176,7 +166,7 @@ async fn hidden_index_is_applied_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
-    #[collection("hidden_index_test")]
+    #[collection("hidden_index_is_applied_correctly")]
     struct HiddenTest {
         #[index(hidden, name = "hidden_idx")]
         secret: String,
@@ -187,10 +177,7 @@ async fn hidden_index_is_applied_correctly() -> TestResult {
     let doc = HiddenTest::default().secret("classified".to_string());
     doc.save().await?;
 
-    let mut cursor = HiddenTest::get_collection()
-        .expect("failed to get collection")
-        .list_indexes().await?;
-
+    let mut cursor = HiddenTest::get_collection()?.list_indexes().await?;
     let mut found = false;
 
     while let Some(index) = cursor.try_next().await? {

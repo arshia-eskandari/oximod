@@ -13,7 +13,7 @@ async fn clears_collection_successfully() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("clear")]
+    #[collection("clear_test_clears_collection_successfully")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

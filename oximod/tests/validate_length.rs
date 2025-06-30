@@ -13,27 +13,28 @@ pub enum Role {
     Guess,
 }
 
-#[derive(Model, Serialize, Deserialize, Debug)]
-#[db("test")]
-#[collection("validate_length")]
-pub struct User {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    _id: Option<ObjectId>,
-
-    #[validate(min_length = 5, max_length = 10)]
-    name: String,
-
-    #[validate(email)]
-    email: Option<String>,
-
-    #[validate(required)]
-    role: Option<Role>,
-}
-
 // Run test: cargo nextest run test_min_length_violation
 #[tokio::test]
 async fn test_min_length_violation() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_length_min")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: Option<String>,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
     User::clear().await?;
 
     let user = User::default()
@@ -52,6 +53,24 @@ async fn test_min_length_violation() -> TestResult {
 #[tokio::test]
 async fn test_max_length_violation() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_length_max")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: Option<String>,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
     User::clear().await?;
 
     let user = User::default()
@@ -70,10 +89,28 @@ async fn test_max_length_violation() -> TestResult {
 #[tokio::test]
 async fn test_length_valid() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_length_valid")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: Option<String>,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
     User::clear().await?;
 
     let user = User::default()
-        .name("ValidName".to_string()) // valid
+        .name("ValidName".to_string())
         .email("user@example.com".to_string())
         .role(Role::Admin);
 

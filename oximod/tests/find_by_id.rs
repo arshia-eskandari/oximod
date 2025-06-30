@@ -13,7 +13,7 @@ async fn finds_document_by_id_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("find_by_id")]
+    #[collection("find_by_id_test_finds_document_by_id_correctly")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

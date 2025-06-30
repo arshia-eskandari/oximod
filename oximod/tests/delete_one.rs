@@ -13,7 +13,7 @@ async fn deletes_first_matching_document_only() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("delete_one")]
+    #[collection("delete_one_test_deletes_first_matching_document_only")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

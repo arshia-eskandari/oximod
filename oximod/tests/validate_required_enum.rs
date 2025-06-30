@@ -13,27 +13,28 @@ pub enum Role {
     Guess,
 }
 
-#[derive(Model, Serialize, Deserialize, Debug)]
-#[db("test")]
-#[collection("validate_required_enum")]
-pub struct User {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    _id: Option<ObjectId>,
-
-    #[validate(min_length = 5, max_length = 10)]
-    name: String,
-
-    #[validate(required, email)]
-    email: Option<String>,
-
-    #[validate(required)]
-    role: Option<Role>,
-}
-
 // Run test: cargo nextest run test_missing_required_email
 #[tokio::test]
 async fn test_missing_required_email() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_required_email_missing")]
+    struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(required, email)]
+        email: Option<String>,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
     User::clear().await?;
 
     let user = User::default().name("Valid".to_string()).role(Role::User); // ❌ missing email
@@ -48,6 +49,24 @@ async fn test_missing_required_email() -> TestResult {
 #[tokio::test]
 async fn test_missing_required_role() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_required_role_missing")]
+    struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(required, email)]
+        email: Option<String>,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
     User::clear().await?;
 
     let user = User::default().name("Valid".to_string()).email("user@example.com".to_string()); // ❌ missing role
@@ -62,12 +81,30 @@ async fn test_missing_required_role() -> TestResult {
 #[tokio::test]
 async fn test_valid_required_enum() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_required_valid")]
+    struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(required, email)]
+        email: Option<String>,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
     User::clear().await?;
 
     let user = User::default()
         .name("Valid".to_string())
         .email("user@example.com".to_string())
-        .role(Role::Admin); // ✅ allowed enum
+        .role(Role::Admin); // ✅ valid case
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());

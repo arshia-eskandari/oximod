@@ -13,7 +13,7 @@ async fn uses_get_collection_and_manual_indexing() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("manual_index_test")]
+    #[collection("manual_index_test_uses_get_collection_and_manual_indexing")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
