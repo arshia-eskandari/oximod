@@ -6,21 +6,20 @@ use oximod::Model;
 use serde::{ Deserialize, Serialize };
 use testresult::TestResult;
 
-/// A simple model used to test the `new`, `default`, and builder APIs.
-#[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
-#[db("test")]
-#[collection("builder_tests")]
-pub struct User {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    _id: Option<ObjectId>,
-    name: String,
-    age: i32,
-    active: bool,
-}
-
 // Run test: cargo nextest run new_and_default_are_equivalent
 #[tokio::test]
 async fn new_and_default_are_equivalent() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("builder_new_default_equivalent")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
     let user_new = User::new();
     let user_default = User::default();
 
@@ -31,6 +30,17 @@ async fn new_and_default_are_equivalent() -> TestResult {
 // Run test: cargo nextest run builder_sets_all_fields
 #[tokio::test]
 async fn builder_sets_all_fields() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("builder_sets_all_fields")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
     let id = ObjectId::new();
     let user = User::default().id(id.clone()).name("User1".to_string()).age(30).active(true);
 
@@ -45,9 +55,19 @@ async fn builder_sets_all_fields() -> TestResult {
 // Run test: cargo nextest run builder_partial_fields_default_rest
 #[tokio::test]
 async fn builder_partial_fields_default_rest() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("builder_partial_fields")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
     let user = User::default().name("User1".to_string());
 
-    // name should be set, rest should be their respective defaults
     assert_eq!(user.name, "User1");
     assert_eq!(user.age, 0);
     assert_eq!(user.active, false);
@@ -60,6 +80,18 @@ async fn builder_partial_fields_default_rest() -> TestResult {
 #[tokio::test]
 async fn builder_and_save_works_end_to_end() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("builder_save_end_to_end")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
     User::clear().await?;
 
     let saved_id = User::default().name("User1".to_string()).age(42).active(true).save().await?;
@@ -84,7 +116,7 @@ async fn builder_using_custom_document_id_setter() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
     #[db("test")]
-    #[collection("builder_tests")]
+    #[collection("builder_custom_id_setter")]
     #[document_id_setter_ident("my_custom_id_setter")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,7 +130,7 @@ async fn builder_using_custom_document_id_setter() -> TestResult {
     User::clear().await?;
 
     let saved_id = User::default()
-        .my_custom_id_setter(ObjectId::new()) // this provides maximum flexibility with field names
+        .my_custom_id_setter(ObjectId::new())
         .id("3894HR934HR00NJ23R324R".to_string())
         .name("User1".to_string())
         .age(42)

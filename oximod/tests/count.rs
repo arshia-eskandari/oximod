@@ -13,7 +13,7 @@ async fn counts_matching_documents_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("count")]
+    #[collection("count_test_counts_matching_documents_correctly")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

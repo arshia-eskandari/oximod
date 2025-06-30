@@ -6,33 +6,34 @@ use oximod::Model;
 use serde::{ Deserialize, Serialize };
 use testresult::TestResult;
 
-#[derive(Model, Serialize, Deserialize, Debug)]
-#[db("test")]
-#[collection("validate_pattern")]
-pub struct Product {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    _id: Option<ObjectId>,
-
-    #[validate(pattern = r"^SKU-\d{4}$")]
-    code: Option<String>,
-
-    #[validate(non_empty)]
-    name: Option<String>,
-
-    #[validate(positive)]
-    quantity: i32,
-
-    #[validate(negative)]
-    temperature: i32,
-
-    #[validate(non_negative)]
-    rating: i32,
-}
-
 // Run test: cargo nextest run test_invalid_pattern_format
 #[tokio::test]
 async fn test_invalid_pattern_format() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_pattern_invalid")]
+    struct Product {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(pattern = r"^SKU-\d{4}$")]
+        code: Option<String>,
+
+        #[validate(non_empty)]
+        name: Option<String>,
+
+        #[validate(positive)]
+        quantity: i32,
+
+        #[validate(negative)]
+        temperature: i32,
+
+        #[validate(non_negative)]
+        rating: i32,
+    }
+
     Product::clear().await?;
 
     let product = Product::default()
@@ -52,6 +53,30 @@ async fn test_invalid_pattern_format() -> TestResult {
 #[tokio::test]
 async fn test_valid_pattern_format() -> TestResult {
     init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_pattern_valid")]
+    struct Product {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(pattern = r"^SKU-\d{4}$")]
+        code: Option<String>,
+
+        #[validate(non_empty)]
+        name: Option<String>,
+
+        #[validate(positive)]
+        quantity: i32,
+
+        #[validate(negative)]
+        temperature: i32,
+
+        #[validate(non_negative)]
+        rating: i32,
+    }
+
     Product::clear().await?;
 
     let product = Product::default()

@@ -13,7 +13,7 @@ async fn finds_first_matching_document_correctly() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("find_one")]
+    #[collection("find_one_test_finds_first_matching_document_correctly")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

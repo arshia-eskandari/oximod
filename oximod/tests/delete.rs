@@ -13,7 +13,7 @@ async fn deletes_multiple_matching_documents() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("delete")]
+    #[collection("delete_test_deletes_multiple_matching_documents")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

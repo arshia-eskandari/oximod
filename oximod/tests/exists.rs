@@ -13,7 +13,7 @@ async fn checks_existence_of_matching_document() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
-    #[collection("exists")]
+    #[collection("exists_test_checks_existence_of_matching_document")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
@@ -25,7 +25,6 @@ async fn checks_existence_of_matching_document() -> TestResult {
     User::clear().await?;
 
     let user = User::default().name("User1".to_string()).age(27).active(true);
-
     user.save().await?;
 
     let exists = User::exists(doc! { "name": "User1" }).await?;
