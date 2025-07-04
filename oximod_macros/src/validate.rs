@@ -98,7 +98,6 @@ pub struct ValidateArgs {
     pub min_length: Option<u32>,
     pub max_length: Option<u32>,
     pub required: Option<bool>,
-    // pub enum_values: Option<Vec<String>>, // use rust's enum instead
     pub email: Option<bool>,
     pub pattern: Option<String>,
     pub non_empty: Option<bool>,
@@ -276,7 +275,6 @@ pub fn generate_validate_model_tokens(
         min_length: min_length_option,
         max_length: max_length_option,
         required,
-        // enum_values,
         email: email_option,
         pattern: pattern_option,
         non_empty: non_empty_option,
