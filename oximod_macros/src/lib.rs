@@ -47,12 +47,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let mut db: Option<LitStr> = None;
     let mut collection: Option<LitStr> = None;
-    let mut index_definitions = Vec::new();
     let mut default_definitions = Vec::new();
     let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
     let mut has_id_attr = false;
     let mut setters = Vec::new();
     let mut validations = Vec::new();
+    let mut indexes = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -106,10 +106,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         has_id_attr = true;
                     }
                     if attr.path().is_ident("index") {
-                        let index_args = parse_index_args(attr, field_name.clone()).expect(
+                        let index_args = parse_index_args(attr).expect(
                             "could not parse index args"
                         );
-                        index_definitions.push(index_args); // <-- COLLECT
+                        let index_token = generate_index_model_tokens(ident, index_args);
+                        indexes.push(index_token);
                     } else if attr.path().is_ident("validate") {
                         let validate_args = parse_validate_args(attr).expect(
                             "could not parse validate args"
@@ -130,10 +131,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             }
         }
     }
-
-    let index_models = index_definitions
-        .iter()
-        .map(|index_def| generate_index_model_tokens(index_def));
 
     let default_inits = default_definitions.iter().map(|def| {
         let ident = &def.field_ident;
@@ -172,7 +169,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 use ::oximod::_error::printable::Printable;
     
                 let indexes = vec![
-                    #(#index_models),*
+                    #(#indexes),*
                 ];
     
                 if !indexes.is_empty() {
