@@ -1,14 +1,13 @@
 mod index;
 mod validate;
 mod default;
-use std::collections::HashSet;
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{ parse_macro_input, DeriveInput, LitStr };
 use index::{ parse_index_args, generate_index_model_tokens };
 use validate::{ parse_validate_args, generate_validate_model_tokens };
-use default::{ parse_default_args, maybe_push_id_setter, push_field_setters };
+use default::{ parse_default_expr, push_id_setter, push_field_setters };
 
 #[proc_macro_derive(
     Model,
@@ -47,12 +46,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     let mut db: Option<LitStr> = None;
     let mut collection: Option<LitStr> = None;
-    let mut default_definitions = Vec::new();
     let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
     let mut has_id_attr = false;
     let mut setters = Vec::new();
     let mut validations = Vec::new();
     let mut indexes = Vec::new();
+    let mut inits = Vec::new();
 
     for attr in &input.attrs {
         if attr.path().is_ident("db") {
@@ -100,6 +99,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         for field in data_struct.fields.iter() {
             if let Some(ident) = &field.ident {
                 all_fields.push((ident.clone(), field.ty.clone()));
+                let mut init_expr = quote! { Default::default() };
+
                 for attr in &field.attrs {
                     let field_name = ident.to_string();
                     if field_name == "_id".to_string() {
@@ -122,35 +123,18 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         );
                         validations.extend(validation_token);
                     } else if attr.path().is_ident("default") {
-                        let def = parse_default_args(attr, ident).expect(
+                        let default_expr = parse_default_expr(attr).expect(
                             "could not parse default args"
                         );
-                        default_definitions.push(def);
+                        init_expr = quote! { #default_expr };
                     }
                 }
+                inits.push(quote! { #ident: #init_expr });
             }
         }
     }
 
-    let default_inits = default_definitions.iter().map(|def| {
-        let ident = &def.field_ident;
-        let expr = &def.default_expr;
-        quote! { #ident: #expr, }
-    });
-
-    let default_idents: HashSet<String> = default_definitions
-        .iter()
-        .map(|d| d.field_ident.to_string())
-        .collect();
-
-    let other_inits = all_fields
-        .iter()
-        .filter(|(ident, _ty)| !default_idents.contains(&ident.to_string()))
-        .map(|(ident, _ty)| {
-            quote! { #ident: Default::default(), }
-        });
-
-    maybe_push_id_setter(has_id_attr, &input.attrs, &mut setters);
+    push_id_setter(has_id_attr, &input.attrs, &mut setters);
     push_field_setters(&all_fields, &mut setters);
 
     let expanded =
@@ -186,8 +170,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
             pub fn new() -> Self {
                 #name {
-                    #(#default_inits)*
-                    #(#other_inits)*
+                    #(#inits),*
                 }
             }
         

@@ -1,21 +1,10 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, GenericArgument, LitStr, PathArguments, Type, Ident };
-pub struct DefaultDefinition {
-    pub field_ident: syn::Ident,
-    pub default_expr: proc_macro2::TokenStream,
-}
+use syn::{ Attribute, GenericArgument, LitStr, PathArguments, Type, Ident, Expr };
 
-pub fn parse_default_args(
-    attr: &Attribute,
-    field_ident: &syn::Ident
-) -> syn::Result<DefaultDefinition> {
-    // Accept #[default(Status::Pending)] or #[default(42 + 5)]
-    let expr: syn::Expr = attr.parse_args()?;
-    Ok(DefaultDefinition {
-        field_ident: field_ident.clone(),
-        default_expr: quote! { #expr },
-    })
+pub fn parse_default_expr(attr: &Attribute) -> syn::Result<Expr> {
+    let expr: Expr = attr.parse_args()?;
+    Ok(expr)
 }
 
 /// If `ty` is `Option<Inner>`, returns `Some(&Inner)`, otherwise `None`.
@@ -42,7 +31,7 @@ pub fn option_inner_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-pub fn maybe_push_id_setter(
+pub fn push_id_setter(
     has_id_attr: bool,
     input_attrs: &[Attribute],
     setters: &mut Vec<TokenStream>
