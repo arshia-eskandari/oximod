@@ -194,3 +194,32 @@ async fn hidden_index_is_applied_correctly() -> TestResult {
     assert!(found, "Expected index 'hidden_idx' not found");
     Ok(())
 }
+
+// Run test: cargo nextest run creates_indexes_correctly_fails_on_duplicate
+#[tokio::test]
+async fn creates_indexes_correctly_fails_on_duplicate() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("index_test_duplicate_fails")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(unique, name = "name_idx")]
+        name: String,
+    }
+
+    User::clear().await?;
+
+    let user1 = User::default().name("IndexUser".to_string());
+    let user2 = User::default().name("IndexUser".to_string());
+
+    user1.save().await?;
+
+    let dup_result = user2.save().await;
+    assert!(dup_result.is_err(), "Expected duplicate unique index to fail");
+
+    Ok(())
+}

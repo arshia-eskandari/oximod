@@ -43,3 +43,36 @@ async fn finds_first_matching_document_correctly() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run finds_first_matching_document_none_when_no_match
+#[tokio::test]
+async fn finds_first_matching_document_none_when_no_match() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_one_test_none_when_no_match")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let users = vec![
+        User::default().name("User1".to_string()).age(22).active(true),
+        User::default().name("User2".to_string()).age(22).active(false)
+    ];
+
+    for user in users {
+        user.save().await?;
+    }
+
+    let matched = User::find_one(doc! { "age": 99 }).await?; // No user with age 99
+    assert!(matched.is_none(), "Expected no document to match");
+
+    Ok(())
+}

@@ -43,7 +43,7 @@ async fn test_multiple_of_fails() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(multiple_of = 5)]
-        quantity: u64,
+        quantity: i64,
     }
 
     Product::clear().await?;

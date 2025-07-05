@@ -160,3 +160,79 @@ async fn test_empty_string_fails() -> TestResult {
     assert!(format!("{:?}", result).contains("must be non-empty"));
     Ok(())
 }
+
+// Run test: cargo nextest run test_min_length_fails
+#[tokio::test]
+async fn test_min_length_fails() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_min_length_fail")]
+    struct StringValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5)]
+        value: Option<String>,
+    }
+
+    StringValidation::clear().await?;
+
+    let doc = StringValidation::default().value("abc".to_string());
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("at least"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_max_length_fails
+#[tokio::test]
+async fn test_max_length_fails() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_max_length_fail")]
+    struct StringValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(max_length = 3)]
+        value: Option<String>,
+    }
+
+    StringValidation::clear().await?;
+
+    let doc = StringValidation::default().value("abcdef".to_string());
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("at most"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_pattern_fails
+#[tokio::test]
+async fn test_pattern_fails() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_pattern_fail")]
+    struct StringValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(pattern = r"^\d{4}$")]
+        value: Option<String>,
+    }
+
+    StringValidation::clear().await?;
+
+    let doc = StringValidation::default().value("abcd".to_string());
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("pattern"));
+    Ok(())
+}
+

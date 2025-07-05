@@ -46,3 +46,38 @@ async fn finds_multiple_matching_documents() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run finds_no_matching_documents
+#[tokio::test]
+async fn finds_no_matching_documents() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_test_finds_no_matching_documents")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let users = vec![
+        User::default().name("User1".to_string()).age(28).active(true),
+        User::default().name("User2".to_string()).age(28).active(true)
+    ];
+
+    for user in users {
+        user.save().await?;
+    }
+
+    // Query for age that does not exist
+    let matched_users = User::find(doc! { "age": 99 }).await?;
+
+    assert_eq!(matched_users.len(), 0, "Expected no documents to match");
+
+    Ok(())
+}

@@ -25,11 +25,7 @@ async fn updates_document_by_id_correctly() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new();
-    let user = User::default()
-        .id(id.clone())
-        .name("User1".to_string())
-        .age(31)
-        .active(true);
+    let user = User::default().id(id.clone()).name("User1".to_string()).age(31).active(true);
 
     user.save().await?;
 
@@ -43,6 +39,37 @@ async fn updates_document_by_id_correctly() -> TestResult {
         assert_eq!(u.age, 32);
         assert_eq!(u.name, "User1");
     }
+
+    Ok(())
+}
+
+// Run test: cargo nextest run updates_document_by_id_invalid_update_fails
+#[tokio::test]
+async fn updates_document_by_id_invalid_update_fails() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("update_by_id_invalid")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let id = ObjectId::new();
+    let user = User::default().id(id.clone()).name("User1".to_string()).age(31).active(true);
+
+    user.save().await?;
+
+    // Invalid update: $set is scalar
+    let result = User::update_by_id(id, doc! { "$set": "invalid" }).await;
+
+    assert!(result.is_err());
 
     Ok(())
 }

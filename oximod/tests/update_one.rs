@@ -41,3 +41,40 @@ async fn updates_first_matching_document_only() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run updates_first_matching_document_invalid_update_fails
+#[tokio::test]
+async fn updates_first_matching_document_invalid_update_fails() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("update_one_invalid")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let users = vec![
+        User::default().name("User1".to_string()).age(65).active(true),
+        User::default().name("User2".to_string()).age(65).active(true)
+    ];
+
+    for user in users {
+        user.save().await?;
+    }
+
+    // Invalid update: $set is a scalar instead of a document
+    let result = User::update_one(
+        doc! { "age": 65 },
+        doc! { "$set": "invalid" }
+    ).await;
+
+    assert!(result.is_err());
+    Ok(())
+}

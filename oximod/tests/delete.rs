@@ -39,3 +39,36 @@ async fn deletes_multiple_matching_documents() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run delete_no_matching_documents
+#[tokio::test]
+async fn delete_no_matching_documents() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("delete_test_no_matching_documents")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let users = vec![
+        User::default().name("User1".to_string()).age(45).active(true),
+        User::default().name("User2".to_string()).age(38).active(true)
+    ];
+
+    for user in users {
+        user.save().await?;
+    }
+
+    let deleted_result = User::delete(doc! { "active": false }).await?;
+    assert_eq!(deleted_result.deleted_count, 0, "No documents should have been deleted");
+
+    Ok(())
+}

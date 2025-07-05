@@ -39,3 +39,27 @@ async fn counts_matching_documents_correctly() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run counts_no_matching_documents
+#[tokio::test]
+async fn counts_no_matching_documents() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("count_test_counts_no_matching_documents")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let count = User::count(doc! { "age": 999 }).await?;
+    assert_eq!(count, 0);
+
+    Ok(())
+}

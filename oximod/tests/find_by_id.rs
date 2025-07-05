@@ -41,3 +41,29 @@ async fn finds_document_by_id_correctly() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run finds_document_by_id_returns_none_when_not_found
+#[tokio::test]
+async fn finds_document_by_id_returns_none_when_not_found() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_by_id_test_returns_none_when_not_found")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let id_that_does_not_exist = ObjectId::new();
+
+    let found = User::find_by_id(id_that_does_not_exist).await?;
+    assert!(found.is_none(), "Expected no document to be found for non-existent _id");
+
+    Ok(())
+}
