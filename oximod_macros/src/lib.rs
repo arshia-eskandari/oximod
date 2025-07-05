@@ -102,7 +102,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 let mut init_expr = quote! { Default::default() };
 
                 for attr in &field.attrs {
-                    if ident.to_string() == "_id".to_string() {
+                    if ident == "_id" {
                         has_id_attr = true;
                     }
                     if attr.path().is_ident("index") {
