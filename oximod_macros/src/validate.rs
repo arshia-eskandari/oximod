@@ -110,7 +110,7 @@ pub struct ValidateArgs {
     pub ends_with: Option<String>,
     pub includes: Option<String>,
     pub alphanumeric: Option<bool>,
-    pub multiple_of: Option<u64>,
+    pub multiple_of: Option<i64>,
 }
 
 pub fn unwrap_option_type(ty: &Type) -> Option<&Type> {
@@ -218,7 +218,7 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
             } else if meta.path.is_ident("multiple_of") {
                 let lit = meta.value()?.parse()?;
                 if let Lit::Int(lit_int) = &lit {
-                    let val = lit_int.base10_parse::<u64>()?;
+                    let val = lit_int.base10_parse::<i64>()?;
                     if val == 0 {
                         return Err(
                             syn::Error::new(lit.span(), "`multiple_of` must be greater than 0")
@@ -571,7 +571,7 @@ pub fn generate_validate_model_tokens(
     
     if let Some(multiple) = multiple_of_option {
         let inner = quote! {
-            if val % #multiple != 0 {
+            if (*val as i64) % #multiple != 0 {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
                         format!("Field '{}' must be a multiple of {}", stringify!(#field_ident), #multiple)
