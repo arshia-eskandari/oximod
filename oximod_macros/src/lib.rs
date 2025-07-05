@@ -106,15 +106,25 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         has_id_attr = true;
                     }
                     if attr.path().is_ident("index") {
-                        let index_args = parse_index_args(attr).expect(
-                            "could not parse index args"
-                        );
+                        let index_args = match parse_index_args(attr) {
+                            Ok(args) => args,
+                            Err(err) => {
+                                return syn::Error::new_spanned(attr, format!("Invalid #[index]: {err}"))
+                                    .to_compile_error()
+                                    .into();
+                            }
+                        };
                         let index_token = generate_index_model_tokens(ident, index_args);
                         indexes.push(index_token);
                     } else if attr.path().is_ident("validate") {
-                        let validate_args = parse_validate_args(attr).expect(
-                            "could not parse validate args"
-                        );
+                        let validate_args = match parse_validate_args(attr) {
+                            Ok(args) => args,
+                            Err(err) => {
+                                return syn::Error::new_spanned(attr, format!("Invalid #[validate]: {err}"))
+                                    .to_compile_error()
+                                    .into();
+                            }
+                        };
                         let validation_token = generate_validate_model_tokens(
                             ident,
                             &field.ty,
@@ -122,9 +132,14 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         );
                         validations.extend(validation_token);
                     } else if attr.path().is_ident("default") {
-                        let default_expr = parse_default_expr(attr).expect(
-                            "could not parse default args"
-                        );
+                        let default_expr = match parse_default_expr(attr) {
+                            Ok(expr) => expr,
+                            Err(err) => {
+                                return syn::Error::new_spanned(attr, format!("Invalid #[default]: {err}"))
+                                    .to_compile_error()
+                                    .into();
+                            }
+                        };
                         init_expr = quote! { #default_expr };
                     }
                 }
@@ -133,7 +148,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
     }
 
-    push_id_setter(has_id_attr, &input.attrs, &mut setters);
+    if let Err(e) = push_id_setter(has_id_attr, &input.attrs, &mut setters) {
+        return e.into();
+    } 
     push_field_setters(&all_fields, &mut setters);
 
     let expanded =

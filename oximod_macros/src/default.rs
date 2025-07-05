@@ -35,16 +35,22 @@ pub fn push_id_setter(
     has_id_attr: bool,
     input_attrs: &[Attribute],
     setters: &mut Vec<TokenStream>
-) {
+) -> Result<(), TokenStream> {
     if has_id_attr {
         let mut id_setter_name = "id".to_string();
 
         for attr in input_attrs {
             if attr.path().is_ident("document_id_setter_ident") {
-                let setter_lit: LitStr = attr
-                    .parse_args()
-                    .expect("Expected #[document_id_setter_ident(\"...\")]");
-                id_setter_name = setter_lit.value();
+                let setter_lit: syn::Result<LitStr> = attr.parse_args();
+                match setter_lit {
+                    Ok(lit) => id_setter_name = lit.value(),
+                    Err(err) => {
+                        return Err(syn::Error::new_spanned(
+                            attr,
+                            format!("Expected #[document_id_setter_ident(\"...\")]: {err}")
+                        ).to_compile_error().into());
+                    }
+                }
             }
         }
 
@@ -59,6 +65,8 @@ pub fn push_id_setter(
             };
         setters.push(id_setter);
     }
+
+    Ok(()) 
 }
 
 pub fn push_field_setters(all_fields: &[(Ident, Type)], setters: &mut Vec<TokenStream>) {
