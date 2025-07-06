@@ -116,3 +116,107 @@ async fn test_valid_email() -> TestResult {
     assert_ne!(result, ObjectId::default());
     Ok(())
 }
+
+// Run test: cargo nextest run test_missing_at_symbol_non_optional
+#[tokio::test]
+async fn test_missing_at_symbol_non_optional() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_email_missing_at_non_optional")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: String,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
+    User::clear().await?;
+
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("invalidemail.com".to_string())
+        .role(Role::Admin);
+
+    let err = user.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("valid email"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_missing_domain_dot_non_optional
+#[tokio::test]
+async fn test_missing_domain_dot_non_optional() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_email_missing_dot_non_optional")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: String,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
+    User::clear().await?;
+
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("user@domain".to_string())
+        .role(Role::Admin);
+
+    let err = user.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("valid email"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_valid_email_non_optional
+#[tokio::test]
+async fn test_valid_email_non_optional() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_email_valid_non_optional")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: String,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
+    User::clear().await?;
+
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("user@example.com".to_string())
+        .role(Role::Guess);
+
+    let result = user.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}

@@ -81,3 +81,107 @@ async fn finds_no_matching_documents() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run finds_multiple_matching_documents_by_email
+#[tokio::test]
+async fn finds_multiple_matching_documents_by_email() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_test_finds_multiple_matching_documents_by_email")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        age: i32,
+        active: bool,
+
+        #[validate(email)]
+        email: Option<String>,
+    }
+
+    User::clear().await?;
+
+    let users = vec![
+        User::default()
+            .name("User1".to_string())
+            .age(28)
+            .active(true)
+            .email("shared@example.com".to_string()),
+        User::default()
+            .name("User2".to_string())
+            .age(28)
+            .active(true)
+            .email("shared@example.com".to_string()),
+        User::default()
+            .name("User3".to_string())
+            .age(35)
+            .active(true)
+            .email("user3@example.com".to_string())
+    ];
+
+    for user in users {
+        user.save().await?;
+    }
+
+    let matched_users = User::find(doc! { "email": "shared@example.com" }).await?;
+    assert_eq!(matched_users.len(), 2);
+
+    let names: Vec<String> = matched_users
+        .into_iter()
+        .map(|u| u.name)
+        .collect();
+    assert!(names.contains(&"User1".to_string()));
+    assert!(names.contains(&"User2".to_string()));
+
+    Ok(())
+}
+
+// Run test: cargo nextest run finds_no_matching_documents_by_email
+#[tokio::test]
+async fn finds_no_matching_documents_by_email() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_test_finds_no_matching_documents_by_email")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        age: i32,
+        active: bool,
+
+        #[validate(email)]
+        email: Option<String>,
+    }
+
+    User::clear().await?;
+
+    let users = vec![
+        User::default()
+            .name("User1".to_string())
+            .age(28)
+            .active(true)
+            .email("user1@example.com".to_string()),
+        User::default()
+            .name("User2".to_string())
+            .age(28)
+            .active(true)
+            .email("user2@example.com".to_string())
+    ];
+
+    for user in users {
+        user.save().await?;
+    }
+
+    // Query for email that does not exist
+    let matched_users = User::find(doc! { "email": "notfound@example.com" }).await?;
+
+    assert_eq!(matched_users.len(), 0, "Expected no documents to match");
+
+    Ok(())
+}
