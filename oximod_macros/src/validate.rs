@@ -336,25 +336,22 @@ pub fn generate_validate_model_tokens(
     
 
     if let Some(req) = required {
-        if *req {
+        if *req && is_optional {
             checks.push(
                 quote! {
-                match self.#field_ident {
-                    Some(_) => {},
-                    None => {
+                    if self.#field_ident.is_none() {
                         return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OximodError::ValidationError(
                                 format!("Field '{}' is required", stringify!(#field_ident))
                             ),
                             concat!("Provide a value for '", stringify!(#field_ident), "'.")
                         ));
-                    },
-                    _ => {}
+                    }
                 }
-            }
             );
         }
     }
+    
 
     if let Some(is_email) = email_option {
         if *is_email {
