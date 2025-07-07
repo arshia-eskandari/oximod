@@ -1,4 +1,4 @@
-use oximod_core::feature::conn::client::get_global_client;
+use oximod::get_global_client;
 use testresult::TestResult;
 
 mod common;
