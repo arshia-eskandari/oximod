@@ -30,7 +30,8 @@ struct User {
     username: String,
 
     #[validate(email)]
-    email: Option<String>,
+    #[index(unique)]
+    email: String,
 
     #[validate(positive)]
     age: i32,
