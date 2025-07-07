@@ -267,7 +267,8 @@ macro_rules! opt_check {
 }
 
 macro_rules! is_type_safe {
-    ($cond:expr, $checks:expr, $field_ident:expr, $msg:expr) => {{
+    ($cond:expr, $checks:expr, $field_ident:expr, $msg:expr) => {
+        {
         if !$cond {
             $checks.push(quote_spanned! { $field_ident.span() =>
                 compile_error!($msg);
@@ -276,7 +277,8 @@ macro_rules! is_type_safe {
         } else {
             true
         }
-    }};
+        }
+    };
 }
 
 fn is_string(ty: &Type) -> bool {
@@ -376,13 +378,16 @@ pub fn generate_validate_model_tokens(
     let is_num = is_numeric(inner_ty);
 
     if let Some(min_length) = min_length_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(min_length)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(min_length)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if val.len() < (#min_length as usize) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -396,21 +401,24 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             };
-    
+
             let snippet = opt_check!(is_optional, field_ident, #inner);
-    
+
             checks.push(snippet);
         }
     }
 
     if let Some(max_length) = max_length_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(max_length)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(max_length)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if val.len() > (#max_length as usize) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -424,7 +432,7 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             };
-    
+
             let snippet = opt_check!(is_optional, field_ident, #inner);
             checks.push(snippet);
         }
@@ -432,13 +440,16 @@ pub fn generate_validate_model_tokens(
 
     if let Some(is_email) = email_option {
         if *is_email {
-            if is_type_safe!(
-                is_str,
-                checks,
-                field_ident,
-                "`#[validate(email)]` can only be applied to string fields"
-            ) {
-                let inner = quote! {
+            if
+                is_type_safe!(
+                    is_str,
+                    checks,
+                    field_ident,
+                    "`#[validate(email)]` can only be applied to string fields"
+                )
+            {
+                let inner =
+                    quote! {
                     if !val.contains('@') || !val.contains('.') {
                         return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -458,7 +469,7 @@ pub fn generate_validate_model_tokens(
                         ));
                     }
                 };
-    
+
                 let snippet = opt_check!(is_optional, field_ident, #inner);
                 checks.push(snippet);
             }
@@ -466,13 +477,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(pattern) = pattern_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(pattern)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(pattern)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
                     ::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -491,20 +505,23 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             };
-    
+
             let snippet = opt_check!(is_optional, field_ident, #inner);
             checks.push(snippet);
         }
     }
 
     if let Some(true) = non_empty_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(non_empty)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(non_empty)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if val.trim().is_empty() {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -514,7 +531,7 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             };
-    
+
             let snippet = opt_check!(is_optional, field_ident, #inner);
             checks.push(snippet);
         }
@@ -522,13 +539,16 @@ pub fn generate_validate_model_tokens(
 
     if let Some(positive) = positive_option {
         if *positive {
-            if is_type_safe!(
-                is_num,
-                checks,
-                field_ident,
-                "`#[validate(positive)]` can only be applied to numeric fields"
-            ) {
-                let inner = quote! {
+            if
+                is_type_safe!(
+                    is_num,
+                    checks,
+                    field_ident,
+                    "`#[validate(positive)]` can only be applied to numeric fields"
+                )
+            {
+                let inner =
+                    quote! {
                     if *val <= 0 {
                         return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -546,13 +566,16 @@ pub fn generate_validate_model_tokens(
 
     if let Some(negative) = negative_option {
         if *negative {
-            if is_type_safe!(
-                is_num,
-                checks,
-                field_ident,
-                "`#[validate(negative)]` can only be applied to numeric fields"
-            ) {
-                let inner = quote! {
+            if
+                is_type_safe!(
+                    is_num,
+                    checks,
+                    field_ident,
+                    "`#[validate(negative)]` can only be applied to numeric fields"
+                )
+            {
+                let inner =
+                    quote! {
                     if *val >= 0 {
                         return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -570,13 +593,16 @@ pub fn generate_validate_model_tokens(
 
     if let Some(non_negative) = non_negative_option {
         if *non_negative {
-            if is_type_safe!(
-                is_num,
-                checks,
-                field_ident,
-                "`#[validate(non_negative)]` can only be applied to numeric fields"
-            ) {
-                let inner = quote! {
+            if
+                is_type_safe!(
+                    is_num,
+                    checks,
+                    field_ident,
+                    "`#[validate(non_negative)]` can only be applied to numeric fields"
+                )
+            {
+                let inner =
+                    quote! {
                     if *val < 0 {
                         return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -593,13 +619,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(min) = min_option {
-        if is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(min)]` can only be applied to numeric fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_num,
+                checks,
+                field_ident,
+                "`#[validate(min)]` can only be applied to numeric fields"
+            )
+        {
+            let inner =
+                quote! {
                 if (*val as i64) < #min {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -615,13 +644,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(max) = max_option {
-        if is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(max)]` can only be applied to numeric fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_num,
+                checks,
+                field_ident,
+                "`#[validate(max)]` can only be applied to numeric fields"
+            )
+        {
+            let inner =
+                quote! {
                 if (*val as i64) > #max {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -637,13 +669,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(start) = starts_with_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(starts_with)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(starts_with)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if !val.starts_with(#start) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -659,13 +694,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(end) = ends_with_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(ends_with)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(ends_with)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if !val.ends_with(#end) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -681,13 +719,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(substr) = includes_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(includes)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(includes)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if !val.contains(#substr) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -703,13 +744,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(true) = alphanumeric_option {
-        if is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(alphanumeric)]` can only be applied to string fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_str,
+                checks,
+                field_ident,
+                "`#[validate(alphanumeric)]` can only be applied to string fields"
+            )
+        {
+            let inner =
+                quote! {
                 if !val.chars().all(|c| c.is_alphanumeric()) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -725,13 +769,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(multiple) = multiple_of_option {
-        if is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(multiple_of)]` can only be applied to numeric fields"
-        ) {
-            let inner = quote! {
+        if
+            is_type_safe!(
+                is_num,
+                checks,
+                field_ident,
+                "`#[validate(multiple_of)]` can only be applied to numeric fields"
+            )
+        {
+            let inner =
+                quote! {
                 if (*val as i64) % #multiple != 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
