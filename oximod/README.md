@@ -140,6 +140,7 @@ Accessible via `Model::new()` or `Model::default()`.
 use oximod::{set_global_client, Model};
 use serde::{Serialize, Deserialize};
 use mongodb::bson::{doc, oid::ObjectId};
+use anyhow::Result;
 
 #[derive(Debug, Serialize, Deserialize, Model)]
 #[db("my_app_db")]
@@ -169,6 +170,38 @@ struct User {
 
     #[default(false)]
     active: bool,
+}
+
+/// Initialize MongoDB connection from `.env`
+async fn init() -> Result<()> {
+    dotenvy::dotenv().ok();
+    let mongodb_uri = std::env::var("MONGODB_URI")
+        .expect("Missing MONGODB_URI in .env");
+    set_global_client(mongodb_uri).await?;
+    Ok(())
+}
+
+/// Create and save a user
+async fn save_user() -> Result<()> {
+    let user = User::new()
+        .email("alice@example.com".to_string())
+        .name("Alice".to_string())
+        .age(30)
+        .points(50)
+        .internal_tag("internal_use".to_string())
+        .active(true);
+
+    user.save().await?;
+    println!("✅ User saved: {:?}", user);
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    init().await?;
+    save_user().await?;
+    Ok(())
 }
 ```
 
