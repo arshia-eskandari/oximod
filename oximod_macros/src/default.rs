@@ -1,21 +1,10 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, GenericArgument, LitStr, PathArguments, Type, Ident };
-pub struct DefaultDefinition {
-    pub field_ident: syn::Ident,
-    pub default_expr: proc_macro2::TokenStream,
-}
+use syn::{ Attribute, GenericArgument, LitStr, PathArguments, Type, Ident, Expr };
 
-pub fn parse_default_args(
-    attr: &Attribute,
-    field_ident: &syn::Ident
-) -> syn::Result<DefaultDefinition> {
-    // Accept #[default(Status::Pending)] or #[default(42 + 5)]
-    let expr: syn::Expr = attr.parse_args()?;
-    Ok(DefaultDefinition {
-        field_ident: field_ident.clone(),
-        default_expr: quote! { #expr },
-    })
+pub fn parse_default_expr(attr: &Attribute) -> syn::Result<Expr> {
+    let expr: Expr = attr.parse_args()?;
+    Ok(expr)
 }
 
 /// If `ty` is `Option<Inner>`, returns `Some(&Inner)`, otherwise `None`.
@@ -42,20 +31,26 @@ pub fn option_inner_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-pub fn maybe_push_id_setter(
+pub fn push_id_setter(
     has_id_attr: bool,
     input_attrs: &[Attribute],
     setters: &mut Vec<TokenStream>
-) {
+) -> Result<(), TokenStream> {
     if has_id_attr {
         let mut id_setter_name = "id".to_string();
 
         for attr in input_attrs {
             if attr.path().is_ident("document_id_setter_ident") {
-                let setter_lit: LitStr = attr
-                    .parse_args()
-                    .expect("Expected #[document_id_setter_ident(\"...\")]");
-                id_setter_name = setter_lit.value();
+                let setter_lit: syn::Result<LitStr> = attr.parse_args();
+                match setter_lit {
+                    Ok(lit) => id_setter_name = lit.value(),
+                    Err(err) => {
+                        return Err(syn::Error::new_spanned(
+                            attr,
+                            format!("Expected #[document_id_setter_ident(\"...\")]: {err}")
+                        ).to_compile_error().into());
+                    }
+                }
             }
         }
 
@@ -70,6 +65,8 @@ pub fn maybe_push_id_setter(
             };
         setters.push(id_setter);
     }
+
+    Ok(()) 
 }
 
 pub fn push_field_setters(all_fields: &[(Ident, Type)], setters: &mut Vec<TokenStream>) {

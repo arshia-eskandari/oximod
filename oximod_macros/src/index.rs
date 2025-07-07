@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, Lit };
+use syn::{ Attribute, Ident, Lit };
 
 #[derive(Default, Debug)]
 /// Arguments for creating an index on a field in a MongoDB collection.
@@ -48,7 +48,7 @@ use syn::{ Attribute, Lit };
 ///   - If `true`, the index exists but will not be used by the query planner unless explicitly hinted.
 ///   - Useful for testing or safely rolling out new indexes.
 ///   - Default: `false`
-/// 
+///
 /// # Example
 ///
 /// ```rust
@@ -62,7 +62,7 @@ use syn::{ Attribute, Lit };
 /// - The `name` field is just metadata and does not conflict with others.
 /// - Version fields are **optional** and typically only needed for compatibility or performance tuning.
 /// - `text_index_version` is only applicable if the index type is explicitly `text`.
-/// - ⚠️ If both `order` and `text_index_version` are provided, `order` will be ignored. 
+/// - ⚠️ If both `order` and `text_index_version` are provided, `order` will be ignored.
 ///
 pub struct IndexArgs {
     pub unique: Option<bool>,
@@ -76,25 +76,20 @@ pub struct IndexArgs {
     pub hidden: Option<bool>,
 }
 
-#[derive(Debug)]
-pub struct IndexDefinition {
-    pub field_name: String,
-    pub args: IndexArgs,
-}
-
 macro_rules! parse_lit_to_number {
-    ($lit:expr, $ty:ty) => {{
+    ($lit:expr, $ty:ty) => {
+        {
         match $lit {
             syn::Lit::Int(lit_int) => lit_int.base10_parse::<$ty>(),
             syn::Lit::Str(lit_str) => lit_str.value().parse::<$ty>()
                 .map_err(|e| syn::Error::new(lit_str.span(), format!("could not parse number: {}", e))),
             other => Err(syn::Error::new(other.span(), "expected integer or string literal")),
         }
-    }};
+        }
+    };
 }
 
-
-pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<IndexDefinition> {
+pub fn parse_index_args(attr: &Attribute) -> syn::Result<IndexArgs> {
     let mut args = IndexArgs::default();
 
     if attr.path().is_ident("index") {
@@ -130,22 +125,23 @@ pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<Ind
                 let lit: Lit = meta.value()?.parse()?;
                 let version = parse_lit_to_number!(&lit, u32)?;
                 if version == 0 {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "`version` must be greater than or equal to 1",
-                    ));
+                    return Err(
+                        syn::Error::new(lit.span(), "`version` must be greater than or equal to 1")
+                    );
                 }
                 args.version = Some(version);
             } else if meta.path.is_ident("text_index_version") {
                 let lit: Lit = meta.value()?.parse()?;
                 let text_index_version = parse_lit_to_number!(&lit, u32)?;
                 if text_index_version == 0 {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "`text_index_version` must be greater than or equal to 1",
-                    ));
+                    return Err(
+                        syn::Error::new(
+                            lit.span(),
+                            "`text_index_version` must be greater than or equal to 1"
+                        )
+                    );
                 }
-                args.text_index_version = Some(text_index_version); 
+                args.text_index_version = Some(text_index_version);
             } else if meta.path.is_ident("hidden") {
                 args.hidden = Some(true);
             }
@@ -154,55 +150,54 @@ pub fn parse_index_args(attr: &Attribute, field_name: String) -> syn::Result<Ind
         })?;
     }
 
-    Ok(IndexDefinition { field_name, args })
+    Ok(args)
 }
 
-pub fn generate_index_model_tokens(index_def: &IndexDefinition) -> TokenStream {
-    let field = &index_def.field_name;
-    let is_text = index_def.args.text_index_version.is_some();
-    
+pub fn generate_index_model_tokens(field_ident: &Ident, index_args: IndexArgs) -> TokenStream {
+    let is_text = index_args.text_index_version.is_some();
+
     let key_entry = if is_text {
         // for text indexes, the value must be the string "text"
-        quote! { #field: "text" }
+        quote! { stringify!(#field_ident): "text" }
     } else {
         // for numeric indexes, use the order
-        let order = index_def.args.order.unwrap_or(1);
-        quote! { #field: #order }
+        let order = index_args.order.unwrap_or(1);
+        quote! { stringify!(#field_ident): #order }
     };
 
-    let unique = match index_def.args.unique {
+    let unique = match index_args.unique {
         Some(val) => quote! { Some(#val) },
         None => quote! { None },
     };
 
-    let sparse = match index_def.args.sparse {
+    let sparse = match index_args.sparse {
         Some(val) => quote! { Some(#val) },
         None => quote! { None },
     };
 
-    let background = match index_def.args.background {
+    let background = match index_args.background {
         Some(val) => quote! { Some(#val) },
         None => quote! { None },
     };
 
-    let name = match &index_def.args.name {
+    let name = match &index_args.name {
         Some(val) => quote! { Some(#val.to_string()) },
         None => quote! { None },
     };
 
-    let expire_after_secs = match index_def.args.expire_after_secs {
+    let expire_after_secs = match index_args.expire_after_secs {
         Some(secs) => quote! { Some(::std::time::Duration::from_secs(#secs as u64)) },
         None => quote! { None },
     };
 
-    let version = match index_def.args.version {
+    let version = match index_args.version {
         Some(v) if v == 1 => quote! { Some(::oximod::_mongodb::options::IndexVersion::V1) },
         Some(v) if v == 2 => quote! { Some(::oximod::_mongodb::options::IndexVersion::V2) },
         Some(v) => quote! { Some(::oximod::_mongodb::options::IndexVersion::Custom(#v)) },
         None => quote! { None },
     };
-    
-    let text_index_version = match index_def.args.text_index_version {
+
+    let text_index_version = match index_args.text_index_version {
         Some(v) if v == 1 => quote! { Some(::oximod::_mongodb::options::TextIndexVersion::V1) },
         Some(v) if v == 2 => quote! { Some(::oximod::_mongodb::options::TextIndexVersion::V2) },
         Some(v) if v == 3 => quote! { Some(::oximod::_mongodb::options::TextIndexVersion::V3) },
@@ -210,7 +205,7 @@ pub fn generate_index_model_tokens(index_def: &IndexDefinition) -> TokenStream {
         None => quote! { None },
     };
 
-    let hidden = match index_def.args.hidden {
+    let hidden = match index_args.hidden {
         Some(val) => quote! { Some(#val) },
         None => quote! { None },
     };

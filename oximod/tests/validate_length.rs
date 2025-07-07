@@ -119,3 +119,110 @@ async fn test_length_valid() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run test_min_length_violation_non_optional
+#[tokio::test]
+async fn test_min_length_violation_non_optional() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_length_min_non_optional")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: String,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
+    User::clear().await?;
+
+    let user = User::default()
+        .name("abc".to_string()) // too short
+        .email("x@y.com".to_string())
+        .role(Role::Admin);
+
+    let err = user.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("at least 5 characters"));
+
+    Ok(())
+}
+
+// Run test: cargo nextest run test_max_length_violation_non_optional
+#[tokio::test]
+async fn test_max_length_violation_non_optional() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_length_max_non_optional")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: String,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
+    User::clear().await?;
+
+    let user = User::default()
+        .name("ThisNameIsWayTooLong".to_string()) // too long
+        .email("x@y.com".to_string())
+        .role(Role::Admin);
+
+    let err = user.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("at most"));
+
+    Ok(())
+}
+
+// Run test: cargo nextest run test_length_valid_non_optional
+#[tokio::test]
+async fn test_length_valid_non_optional() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_length_valid_non_optional")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min_length = 5, max_length = 10)]
+        name: String,
+
+        #[validate(email)]
+        email: String,
+
+        #[validate(required)]
+        role: Option<Role>,
+    }
+
+    User::clear().await?;
+
+    let user = User::default()
+        .name("ValidName".to_string())
+        .email("user@example.com".to_string())
+        .role(Role::Admin);
+
+    let result = user.save().await?;
+    assert_ne!(result, ObjectId::default());
+
+    Ok(())
+}

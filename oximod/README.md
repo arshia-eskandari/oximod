@@ -29,6 +29,19 @@ Use `user.save().await?` just like before!
 
 ---
 
+### 🆕 Improvements in `v0.1.11`
+
+✅ Validations now support **non-optional fields** — for example, `#[validate(email)]` used to only work with `Option<String>`, but now `String` is supported as well.  
+✅ The `validate_usage.rs` example was updated to demonstrate this improvement.  
+✅ Many more **tests added** to ensure quality and correctness.  
+✅ Code refactored to reduce unnecessary resource allocation, with performance improvements.  
+✅ Error handling is now more robust, and several typos in error messages were fixed.  
+✅ General internal reliability improvements.
+
+If you encounter any bugs or have suggestions, **please open an issue on GitHub to report them** — your feedback helps improve OxiMod for everyone.
+
+---
+
 ## Features
 
 - **Schema Modeling with Macros**  
@@ -127,6 +140,7 @@ Accessible via `Model::new()` or `Model::default()`.
 use oximod::{set_global_client, Model};
 use serde::{Serialize, Deserialize};
 use mongodb::bson::{doc, oid::ObjectId};
+use anyhow::Result;
 
 #[derive(Debug, Serialize, Deserialize, Model)]
 #[db("my_app_db")]
@@ -136,6 +150,7 @@ struct User {
     _id: Option<ObjectId>,
 
     #[index(unique, name = "email_idx", order = -1)]
+    #[validate(email)]
     email: String,
 
     #[index(sparse)]
@@ -156,12 +171,44 @@ struct User {
     #[default(false)]
     active: bool,
 }
+
+/// Initialize MongoDB connection from `.env`
+async fn init() -> Result<()> {
+    dotenvy::dotenv().ok();
+    let mongodb_uri = std::env::var("MONGODB_URI")
+        .expect("Missing MONGODB_URI in .env");
+    set_global_client(mongodb_uri).await?;
+    Ok(())
+}
+
+/// Create and save a user
+async fn save_user() -> Result<()> {
+    let user = User::new()
+        .email("alice@example.com".to_string())
+        .name("Alice".to_string())
+        .age(30)
+        .points(50)
+        .internal_tag("internal_use".to_string())
+        .active(true);
+
+    user.save().await?;
+    println!("✅ User saved: {:?}", user);
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    init().await?;
+    save_user().await?;
+    Ok(())
+}
 ```
 
 In this example:
 
 - `#[db("my_app_db")]` and `#[collection("users")]` configure the database and collection.
-- The `email` field has a descending, unique index with a custom name.
+- The `email` field has a descending, unique index with a custom name and must contain a valid email.
 - The `phone` field is indexed only when it exists in the document (sparse).
 - The `name` field must be at least 3 characters long.
 - The `age` field must be non-negative.
@@ -194,6 +241,14 @@ Each file clears previous data on run and demonstrates isolated functionality.
 > ```env
 > MONGODB_URI=mongodb://localhost:27017
 > ```
+
+---
+
+## Contributing & Feedback
+
+We welcome all contributions, suggestions, and feedback!  
+If you discover a bug or want to request a feature, **please open an issue on GitHub**.  
+Your input helps improve OxiMod for everyone — thank you for your support.
 
 ---
 

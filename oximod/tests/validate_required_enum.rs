@@ -13,6 +13,12 @@ pub enum Role {
     Guess,
 }
 
+impl Default for Role {
+    fn default() -> Self {
+        Role::User
+    }
+}
+
 // Run test: cargo nextest run test_missing_required_email
 #[tokio::test]
 async fn test_missing_required_email() -> TestResult {
