@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::{ quote, quote_spanned };
 use syn::{ Type, Attribute, GenericArgument, Lit, PathArguments, Ident };
 
 #[derive(Default, Debug)]
@@ -315,7 +315,8 @@ pub fn generate_validate_model_tokens(
     }
 
     if let Some(max_length) = max_length_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if val.len() > (#max_length as usize) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -329,23 +330,24 @@ pub fn generate_validate_model_tokens(
                 ));
             }
         };
-    
+
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
 
     if let Some(req) = required {
         if *req {
             if !is_optional {
-                checks.push(quote_spanned! { field_ident.span() =>
+                checks.push(
+                    quote_spanned! { field_ident.span() =>
                     compile_error!(
                         concat!(
                             "Field '", stringify!(#field_ident),
                             "' cannot use #[validate(required)] because it is not Option<T>"
                         )
                     );
-                });
+                }
+                );
             } else {
                 checks.push(
                     quote! {
@@ -362,11 +364,11 @@ pub fn generate_validate_model_tokens(
             }
         }
     }
-    
 
     if let Some(is_email) = email_option {
         if *is_email {
-            let inner = quote! {
+            let inner =
+                quote! {
                 if !val.contains('@') || !val.contains('.') {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -386,15 +388,15 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             };
-    
+
             let snippet = opt_check!(is_optional, field_ident, #inner);
             checks.push(snippet);
         }
     }
-    
 
     if let Some(pattern) = pattern_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
                 ::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -413,14 +415,14 @@ pub fn generate_validate_model_tokens(
                 ));
             }
         };
-    
+
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
 
     if let Some(true) = non_empty_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if val.trim().is_empty() {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -430,15 +432,15 @@ pub fn generate_validate_model_tokens(
                 ));
             }
         };
-    
+
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
 
     if let Some(positive) = positive_option {
         if *positive {
-            let inner = quote! {
+            let inner =
+                quote! {
                 if *val <= 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -452,10 +454,11 @@ pub fn generate_validate_model_tokens(
             checks.push(snippet);
         }
     }
-    
+
     if let Some(negative) = negative_option {
         if *negative {
-            let inner = quote! {
+            let inner =
+                quote! {
                 if *val >= 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -469,10 +472,11 @@ pub fn generate_validate_model_tokens(
             checks.push(snippet);
         }
     }
-    
+
     if let Some(non_negative) = non_negative_option {
         if *non_negative {
-            let inner = quote! {
+            let inner =
+                quote! {
                 if *val < 0 {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -486,9 +490,10 @@ pub fn generate_validate_model_tokens(
             checks.push(snippet);
         }
     }
-    
+
     if let Some(min) = min_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if (*val as i64) < #min {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -501,9 +506,10 @@ pub fn generate_validate_model_tokens(
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
+
     if let Some(max) = max_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if (*val as i64) > #max {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -516,9 +522,10 @@ pub fn generate_validate_model_tokens(
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
+
     if let Some(start) = starts_with_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if !val.starts_with(#start) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -531,9 +538,10 @@ pub fn generate_validate_model_tokens(
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
+
     if let Some(end) = ends_with_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if !val.ends_with(#end) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -546,9 +554,10 @@ pub fn generate_validate_model_tokens(
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
+
     if let Some(substr) = includes_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if !val.contains(#substr) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -561,9 +570,10 @@ pub fn generate_validate_model_tokens(
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
+
     if let Some(true) = alphanumeric_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if !val.chars().all(|c| c.is_alphanumeric()) {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
@@ -576,9 +586,10 @@ pub fn generate_validate_model_tokens(
         let snippet = opt_check!(is_optional, field_ident, #inner);
         checks.push(snippet);
     }
-    
+
     if let Some(multiple) = multiple_of_option {
-        let inner = quote! {
+        let inner =
+            quote! {
             if (*val as i64) % #multiple != 0 {
                 return Err(::oximod::_attach_printables!(
                     ::oximod::_error::oximod_error::OximodError::ValidationError(
