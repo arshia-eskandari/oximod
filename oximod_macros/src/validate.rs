@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::{ Type, Attribute, GenericArgument, Lit, PathArguments, Ident };
 
 #[derive(Default, Debug)]
@@ -336,19 +336,30 @@ pub fn generate_validate_model_tokens(
     
 
     if let Some(req) = required {
-        if *req && is_optional {
-            checks.push(
-                quote! {
-                    if self.#field_ident.is_none() {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
-                                format!("Field '{}' is required", stringify!(#field_ident))
-                            ),
-                            concat!("Provide a value for '", stringify!(#field_ident), "'.")
-                        ));
+        if *req {
+            if !is_optional {
+                checks.push(quote_spanned! { field_ident.span() =>
+                    compile_error!(
+                        concat!(
+                            "Field '", stringify!(#field_ident),
+                            "' cannot use #[validate(required)] because it is not Option<T>"
+                        )
+                    );
+                });
+            } else {
+                checks.push(
+                    quote! {
+                        if self.#field_ident.is_none() {
+                            return Err(::oximod::_attach_printables!(
+                                ::oximod::_error::oximod_error::OximodError::ValidationError(
+                                    format!("Field '{}' is required", stringify!(#field_ident))
+                                ),
+                                concat!("Provide a value for '", stringify!(#field_ident), "'.")
+                            ));
+                        }
                     }
-                }
-            );
+                );
+            }
         }
     }
     
