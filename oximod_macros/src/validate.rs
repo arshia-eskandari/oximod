@@ -362,7 +362,7 @@ pub fn generate_validate_model_tokens(
                     quote! {
                         if self.#field_ident.is_none() {
                             return Err(::oximod::_attach_printables!(
-                                ::oximod::_error::oximod_error::OximodError::ValidationError(
+                                ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                     format!("Field '{}' is required", stringify!(#field_ident))
                                 ),
                                 concat!("Provide a value for '", stringify!(#field_ident), "'.")
@@ -390,7 +390,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if val.len() < (#min_length as usize) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be at least {} characters long",
                                     stringify!(#field_ident),
                                     #min_length
@@ -421,7 +421,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if val.len() > (#max_length as usize) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be at most {} characters long",
                                     stringify!(#field_ident),
                                     #max_length
@@ -452,7 +452,7 @@ pub fn generate_validate_model_tokens(
                     quote! {
                     if !val.contains('@') || !val.contains('.') {
                         return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be a valid email address", stringify!(#field_ident))
                             ),
                             concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
@@ -462,7 +462,7 @@ pub fn generate_validate_model_tokens(
                     let parts: Vec<&str> = val.split('@').collect();
                     if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
                         return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be a valid email address", stringify!(#field_ident))
                             ),
                             concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
@@ -489,7 +489,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
                     ::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
                         ),
                         concat!("Check the regex pattern for '", stringify!(#field_ident), "'.")
@@ -498,7 +498,7 @@ pub fn generate_validate_model_tokens(
     
                 if !regex.is_match(val) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' does not match the required pattern", stringify!(#field_ident))
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' matches regex: ", #pattern, ".")
@@ -524,7 +524,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if val.trim().is_empty() {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be non-empty", stringify!(#field_ident))
                         ),
                         concat!("Provide a non-empty string for '", stringify!(#field_ident), "'.")
@@ -551,7 +551,7 @@ pub fn generate_validate_model_tokens(
                     quote! {
                     if *val <= 0 {
                         return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be positive", stringify!(#field_ident))
                             ),
                             concat!("Use a positive value for '", stringify!(#field_ident), "'.")
@@ -578,7 +578,7 @@ pub fn generate_validate_model_tokens(
                     quote! {
                     if *val >= 0 {
                         return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be negative", stringify!(#field_ident))
                             ),
                             concat!("Use a negative value for '", stringify!(#field_ident), "'.")
@@ -605,7 +605,7 @@ pub fn generate_validate_model_tokens(
                     quote! {
                     if *val < 0 {
                         return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OximodError::ValidationError(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be non-negative", stringify!(#field_ident))
                             ),
                             concat!("Use zero or a positive value for '", stringify!(#field_ident), "'.")
@@ -631,7 +631,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if (*val as i64) < #min {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be at least {}", stringify!(#field_ident), #min)
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' is at least ", #min, ".")
@@ -656,7 +656,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if (*val as i64) > #max {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be at most {}", stringify!(#field_ident), #max)
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' is at most ", #max, ".")
@@ -681,7 +681,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if !val.starts_with(#start) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must start with '{}'", stringify!(#field_ident), #start)
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' starts with '", #start, "'.")
@@ -706,7 +706,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if !val.ends_with(#end) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must end with '{}'", stringify!(#field_ident), #end)
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' ends with '", #end, "'.")
@@ -731,7 +731,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if !val.contains(#substr) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must include '{}'", stringify!(#field_ident), #substr)
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' includes '", #substr, "'.")
@@ -756,7 +756,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if !val.chars().all(|c| c.is_alphanumeric()) {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must contain only alphanumeric characters", stringify!(#field_ident))
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' has only letters and numbers.")
@@ -781,7 +781,7 @@ pub fn generate_validate_model_tokens(
                 quote! {
                 if (*val as i64) % #multiple != 0 {
                     return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OximodError::ValidationError(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be a multiple of {}", stringify!(#field_ident), #multiple)
                         ),
                         concat!("Ensure '", stringify!(#field_ident), "' is divisible by ", #multiple, ".")

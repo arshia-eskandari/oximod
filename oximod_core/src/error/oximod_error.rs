@@ -2,7 +2,7 @@ use thiserror::Error;
 
 /// Represents all possible errors returned by OxiMod during database operations.
 #[derive(Debug, Error)]
-pub enum OximodError {
+pub enum OxiModError {
     /// Failed to connect to the MongoDB server.
     /// This may indicate an invalid URI, network issues, or server downtime.
     #[error("Failed to connect to db: {0}")]
