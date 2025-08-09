@@ -8,16 +8,15 @@
 //! - Save a document using the builder API
 //! - Count documents in a collection
 
-use oximod::{ set_global_client, Model };
-use mongodb::bson::{ doc, oid::ObjectId };
-use serde::{ Deserialize, Serialize };
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load MongoDB URI from .env or environment
     dotenv::dotenv().ok();
-    let mongodb_uri = std::env
-        ::var("MONGODB_URI")
+    let mongodb_uri = std::env::var("MONGODB_URI")
         .expect("MONGODB_URI must be set in your .env file or environment");
 
     // Set up the global MongoDB client

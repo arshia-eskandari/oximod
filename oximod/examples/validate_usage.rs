@@ -8,9 +8,9 @@
 //! - Apply validations like `min_length`, `email`, `positive`, `pattern`, etc.
 //! - Use Rust enums instead of enum_values
 
-use oximod::{ set_global_client, Model };
 use mongodb::bson::oid::ObjectId;
-use serde::{ Deserialize, Serialize };
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Role {
@@ -55,8 +55,7 @@ struct User {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
-    let mongodb_uri = std::env
-        ::var("MONGODB_URI")
+    let mongodb_uri = std::env::var("MONGODB_URI")
         .expect("MONGODB_URI must be set in your .env file or environment");
 
     set_global_client(mongodb_uri).await?;

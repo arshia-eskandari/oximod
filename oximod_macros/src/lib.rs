@@ -1,13 +1,13 @@
+mod default;
 mod index;
 mod validate;
-mod default;
 
+use default::{parse_default_expr, push_field_setters, push_id_setter};
+use index::{generate_index_model_tokens, parse_index_args};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ parse_macro_input, DeriveInput, LitStr };
-use index::{ parse_index_args, generate_index_model_tokens };
-use validate::{ parse_validate_args, generate_validate_model_tokens };
-use default::{ parse_default_expr, push_id_setter, push_field_setters };
+use syn::{parse_macro_input, DeriveInput, LitStr};
+use validate::{generate_validate_model_tokens, parse_validate_args};
 
 #[proc_macro_derive(
     Model,
@@ -58,8 +58,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             if let Ok(val) = attr.parse_args::<LitStr>() {
                 db = Some(val);
             } else {
-                return syn::Error
-                    ::new_spanned(attr, "Expected #[db(\"db_name\")]")
+                return syn::Error::new_spanned(attr, "Expected #[db(\"db_name\")]")
                     .to_compile_error()
                     .into();
             }
@@ -67,10 +66,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             if let Ok(val) = attr.parse_args::<LitStr>() {
                 collection = Some(val);
             } else {
-                return syn::Error
-                    ::new_spanned(attr, "Expected #[collection(\"collection_name\")]")
-                    .to_compile_error()
-                    .into();
+                return syn::Error::new_spanned(
+                    attr,
+                    "Expected #[collection(\"collection_name\")]",
+                )
+                .to_compile_error()
+                .into();
             }
         }
     }
@@ -78,8 +79,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let db = match db {
         Some(val) => val,
         None => {
-            return syn::Error
-                ::new_spanned(&input, "Missing #[db(\"db_name\")] attribute")
+            return syn::Error::new_spanned(&input, "Missing #[db(\"db_name\")] attribute")
                 .to_compile_error()
                 .into();
         }
@@ -88,10 +88,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let collection = match collection {
         Some(val) => val,
         None => {
-            return syn::Error
-                ::new_spanned(&input, "Missing #[collection(\"collection_name\")] attribute")
-                .to_compile_error()
-                .into();
+            return syn::Error::new_spanned(
+                &input,
+                "Missing #[collection(\"collection_name\")] attribute",
+            )
+            .to_compile_error()
+            .into();
         }
     };
 
@@ -109,9 +111,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         let index_args = match parse_index_args(attr) {
                             Ok(args) => args,
                             Err(err) => {
-                                return syn::Error::new_spanned(attr, format!("Invalid #[index]: {err}"))
-                                    .to_compile_error()
-                                    .into();
+                                return syn::Error::new_spanned(
+                                    attr,
+                                    format!("Invalid #[index]: {err}"),
+                                )
+                                .to_compile_error()
+                                .into();
                             }
                         };
                         let index_token = generate_index_model_tokens(ident, index_args);
@@ -120,24 +125,27 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         let validate_args = match parse_validate_args(attr) {
                             Ok(args) => args,
                             Err(err) => {
-                                return syn::Error::new_spanned(attr, format!("Invalid #[validate]: {err}"))
-                                    .to_compile_error()
-                                    .into();
+                                return syn::Error::new_spanned(
+                                    attr,
+                                    format!("Invalid #[validate]: {err}"),
+                                )
+                                .to_compile_error()
+                                .into();
                             }
                         };
-                        let validation_token = generate_validate_model_tokens(
-                            ident,
-                            &field.ty,
-                            validate_args
-                        );
+                        let validation_token =
+                            generate_validate_model_tokens(ident, &field.ty, validate_args);
                         validations.extend(validation_token);
                     } else if attr.path().is_ident("default") {
                         let default_expr = match parse_default_expr(attr) {
                             Ok(expr) => expr,
                             Err(err) => {
-                                return syn::Error::new_spanned(attr, format!("Invalid #[default]: {err}"))
-                                    .to_compile_error()
-                                    .into();
+                                return syn::Error::new_spanned(
+                                    attr,
+                                    format!("Invalid #[default]: {err}"),
+                                )
+                                .to_compile_error()
+                                .into();
                             }
                         };
                         init_expr = quote! { #default_expr };
@@ -150,11 +158,10 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     if let Err(e) = push_id_setter(has_id_attr, &input.attrs, &mut setters) {
         return e.into();
-    } 
+    }
     push_field_setters(&all_fields, &mut setters);
 
-    let expanded =
-        quote! {
+    let expanded = quote! {
 
         impl #name {
             fn validate(&self) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
@@ -162,16 +169,16 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 #(#validations)*
                 Ok(())
             }
-            
+
             async fn _create_indexes(
                 collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
             ) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
                 use ::oximod::_error::printable::Printable;
-    
+
                 let indexes = vec![
                     #(#indexes),*
                 ];
-    
+
                 if !indexes.is_empty() {
                     collection.create_indexes(indexes).await.map_err(|e| {
                         ::oximod::_attach_printables!(
@@ -180,7 +187,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         )
                     })?;
                 }
-    
+
                 Ok(())
             }
 
@@ -189,7 +196,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     #(#inits),*
                 }
             }
-        
+
             #(#setters)*
         }
 
@@ -201,18 +208,18 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         impl ::oximod::_feature::model::Model for #name {
 
             fn get_collection() -> Result<
-                ::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>, 
+                ::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>,
                 ::oximod::_error::oximod_error::OxiModError
             > {
                 let client = ::oximod::_feature::conn::client::get_global_client()?;
                 let db = client.database(#db);
                 Ok(db.collection::<::oximod::_mongodb::bson::Document>(#collection))
             }
-            
+
             async fn save(&self) -> Result<::oximod::_mongodb::bson::oid::ObjectId, ::oximod::_error::oximod_error::OxiModError> {
-                self.validate()?; 
+                self.validate()?;
                 let collection = Self::get_collection()?;
-                Self::_create_indexes(&collection).await?; 
+                Self::_create_indexes(&collection).await?;
                 use ::oximod::_error::printable::Printable;
 
                 let document = ::oximod::_mongodb::bson::to_document(&self).map_err(|e| {

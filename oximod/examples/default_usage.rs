@@ -8,9 +8,9 @@
 //! - Use enum and scalar defaults
 //! - Build a model using the fluent API
 
-use oximod::{ set_global_client, Model };
 use mongodb::bson::oid::ObjectId;
-use serde::{ Deserialize, Serialize };
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Status {
@@ -60,7 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .age(30)
         .verified(true)
         .status(Status::Active)
-        .save().await?;
+        .save()
+        .await?;
     println!("✅ Saved custom user with _id: {}", custom_user);
 
     Ok(())

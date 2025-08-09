@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,8 +25,14 @@ async fn finds_first_matching_document_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(22).active(true),
-        User::default().name("User2".to_string()).age(22).active(false)
+        User::default()
+            .name("User1".to_string())
+            .age(22)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(22)
+            .active(false),
     ];
 
     for user in users {
@@ -63,8 +69,14 @@ async fn finds_first_matching_document_none_when_no_match() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(22).active(true),
-        User::default().name("User2".to_string()).age(22).active(false)
+        User::default()
+            .name("User1".to_string())
+            .age(22)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(22)
+            .active(false),
     ];
 
     for user in users {
@@ -109,7 +121,7 @@ async fn finds_first_matching_document_by_email() -> TestResult {
             .name("User2".to_string())
             .age(25)
             .active(false)
-            .email("user2@example.com".to_string())
+            .email("user2@example.com".to_string()),
     ];
 
     for user in users {
@@ -159,7 +171,7 @@ async fn finds_first_matching_document_by_email_none_when_no_match() -> TestResu
             .name("User2".to_string())
             .age(25)
             .active(false)
-            .email("user2@example.com".to_string())
+            .email("user2@example.com".to_string()),
     ];
 
     for user in users {
@@ -167,7 +179,10 @@ async fn finds_first_matching_document_by_email_none_when_no_match() -> TestResu
     }
 
     let matched = User::find_one(doc! { "email": "notfound@example.com" }).await?;
-    assert!(matched.is_none(), "Expected no user to match non-existing email");
+    assert!(
+        matched.is_none(),
+        "Expected no user to match non-existing email"
+    );
 
     Ok(())
 }

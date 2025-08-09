@@ -1,7 +1,7 @@
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -24,7 +24,10 @@ async fn saves_document_without_id_correctly() -> TestResult {
 
     User::clear().await?;
 
-    let user = User::default().name("User1".to_string()).age(25).active(true);
+    let user = User::default()
+        .name("User1".to_string())
+        .age(25)
+        .active(true);
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
 
@@ -50,7 +53,11 @@ async fn saves_document_with_id_correctly() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new();
-    let user = User::default().id(id.clone()).name("User1".to_string()).age(30).active(false);
+    let user = User::default()
+        .id(id.clone())
+        .name("User1".to_string())
+        .age(30)
+        .active(false);
     let result = user.save().await?;
     assert_eq!(result, id);
 

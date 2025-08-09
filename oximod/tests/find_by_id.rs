@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,7 +25,11 @@ async fn finds_document_by_id_correctly() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new();
-    let user = User::default().id(id.clone()).name("User1".to_string()).age(33).active(true);
+    let user = User::default()
+        .id(id.clone())
+        .name("User1".to_string())
+        .age(33)
+        .active(true);
 
     user.save().await?;
 
@@ -63,7 +67,10 @@ async fn finds_document_by_id_returns_none_when_not_found() -> TestResult {
     let id_that_does_not_exist = ObjectId::new();
 
     let found = User::find_by_id(id_that_does_not_exist).await?;
-    assert!(found.is_none(), "Expected no document to be found for non-existent _id");
+    assert!(
+        found.is_none(),
+        "Expected no document to be found for non-existent _id"
+    );
 
     Ok(())
 }
@@ -139,7 +146,10 @@ async fn finds_document_by_id_returns_none_when_not_found_with_email() -> TestRe
     let id_that_does_not_exist = ObjectId::new();
 
     let found = User::find_by_id(id_that_does_not_exist).await?;
-    assert!(found.is_none(), "Expected no document to be found for non-existent _id");
+    assert!(
+        found.is_none(),
+        "Expected no document to be found for non-existent _id"
+    );
 
     Ok(())
 }

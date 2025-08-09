@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,8 +25,14 @@ async fn updates_first_matching_document_only() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(65).active(true),
-        User::default().name("User2".to_string()).age(65).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(65)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(65)
+            .active(true),
     ];
 
     for user in users {
@@ -61,8 +67,14 @@ async fn updates_first_matching_document_invalid_update_fails() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(65).active(true),
-        User::default().name("User2".to_string()).age(65).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(65)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(65)
+            .active(true),
     ];
 
     for user in users {
@@ -99,8 +111,14 @@ async fn updates_one_optional_email_to_valid() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(65).active(true),
-        User::default().name("User2".to_string()).age(65).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(65)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(65)
+            .active(true),
     ];
 
     for user in users {
@@ -110,8 +128,9 @@ async fn updates_one_optional_email_to_valid() -> TestResult {
     // Set email of first matching user to a valid email
     let result = User::update_one(
         doc! { "age": 65 },
-        doc! { "$set": { "email": "user@example.com" } }
-    ).await?;
+        doc! { "$set": { "email": "user@example.com" } },
+    )
+    .await?;
 
     assert_eq!(result.matched_count, 1);
     assert_eq!(result.modified_count, 1);

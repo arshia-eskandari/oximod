@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -24,7 +24,10 @@ async fn checks_existence_of_matching_document() -> TestResult {
 
     User::clear().await?;
 
-    let user = User::default().name("User1".to_string()).age(27).active(true);
+    let user = User::default()
+        .name("User1".to_string())
+        .age(27)
+        .active(true);
     user.save().await?;
 
     let exists = User::exists(doc! { "name": "User1" }).await?;

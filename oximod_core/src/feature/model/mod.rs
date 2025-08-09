@@ -1,11 +1,10 @@
+use crate::error::oximod_error::OxiModError;
 use async_trait;
 use mongodb::{
-    bson::{ self, oid::ObjectId, Document },
-    results::{ DeleteResult, UpdateResult },
-    Collection,
-    Cursor,
+    bson::{self, oid::ObjectId, Document},
+    results::{DeleteResult, UpdateResult},
+    Collection, Cursor,
 };
-use crate::error::oximod_error::OxiModError;
 
 /// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro.
 #[async_trait::async_trait]
@@ -54,7 +53,7 @@ pub trait Model {
     /// ```
     async fn update(
         filter: impl Into<bson::Document> + Send,
-        update: impl Into<bson::Document> + Send
+        update: impl Into<bson::Document> + Send,
     ) -> Result<UpdateResult, OxiModError>;
     /// Updates the **first document** in the collection that matches the given filter.
     ///
@@ -72,7 +71,7 @@ pub trait Model {
     /// ```
     async fn update_one(
         filter: impl Into<bson::Document> + Send,
-        update: impl Into<bson::Document> + Send
+        update: impl Into<bson::Document> + Send,
     ) -> Result<UpdateResult, OxiModError>;
     /// Deletes all documents in the collection that match the given filter.
     ///
@@ -102,7 +101,7 @@ pub trait Model {
     /// assert_eq!(result.deleted_count, 1);
     /// ```
     async fn delete_one(
-        filter: impl Into<bson::Document> + Send
+        filter: impl Into<bson::Document> + Send,
     ) -> Result<DeleteResult, OxiModError>;
     /// Finds all documents in the collection that match the given filter.
     ///
@@ -118,7 +117,8 @@ pub trait Model {
     /// assert!(!users.is_empty());
     /// ```
     async fn find(filter: impl Into<bson::Document> + Send) -> Result<Vec<Self>, OxiModError>
-        where Self: Sized;
+    where
+        Self: Sized;
     /// Finds the **first document** in the collection that matches the given filter.
     ///
     /// # Parameters
@@ -133,8 +133,11 @@ pub trait Model {
     ///     println!("Found user: {}", user.name);
     /// }
     /// ```
-    async fn find_one(filter: impl Into<bson::Document> + Send) -> Result<Option<Self>, OxiModError>
-        where Self: Sized;
+    async fn find_one(
+        filter: impl Into<bson::Document> + Send,
+    ) -> Result<Option<Self>, OxiModError>
+    where
+        Self: Sized;
     /// Finds a document in the collection by its MongoDB `_id` field.
     ///
     /// # Parameters
@@ -151,7 +154,9 @@ pub trait Model {
     ///     println!("Found: {}", u.name);
     /// }
     /// ```
-    async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OxiModError> where Self: Sized;
+    async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OxiModError>
+    where
+        Self: Sized;
     /// Updates a document by its MongoDB `_id` field.
     ///
     /// # Parameters
@@ -169,7 +174,7 @@ pub trait Model {
     /// ```
     async fn update_by_id(
         id: ObjectId,
-        update: impl Into<bson::Document> + Send
+        update: impl Into<bson::Document> + Send,
     ) -> Result<UpdateResult, OxiModError>;
     /// Deletes a document from the collection by its MongoDB `_id` field.
     ///
@@ -249,6 +254,6 @@ pub trait Model {
     /// }
     /// ```
     async fn aggregate(
-        pipeline: impl Into<Vec<bson::Document>> + Send
+        pipeline: impl Into<Vec<bson::Document>> + Send,
     ) -> Result<Cursor<bson::Document>, OxiModError>;
 }

@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
 // Run test: cargo nextest run new_and_default_are_equivalent
@@ -42,7 +42,11 @@ async fn builder_sets_all_fields() -> TestResult {
     }
 
     let id = ObjectId::new();
-    let user = User::default().id(id.clone()).name("User1".to_string()).age(30).active(true);
+    let user = User::default()
+        .id(id.clone())
+        .name("User1".to_string())
+        .age(30)
+        .active(true);
 
     assert_eq!(user._id, Some(id));
     assert_eq!(user.name, "User1");
@@ -94,7 +98,12 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
 
     User::clear().await?;
 
-    let saved_id = User::default().name("User1".to_string()).age(42).active(true).save().await?;
+    let saved_id = User::default()
+        .name("User1".to_string())
+        .age(42)
+        .active(true)
+        .save()
+        .await?;
 
     assert_ne!(saved_id, ObjectId::default());
 
@@ -135,7 +144,8 @@ async fn builder_using_custom_document_id_setter() -> TestResult {
         .name("User1".to_string())
         .age(42)
         .active(true)
-        .save().await?;
+        .save()
+        .await?;
 
     assert_ne!(saved_id, ObjectId::default());
 

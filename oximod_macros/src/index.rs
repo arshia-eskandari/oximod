@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, Ident, Lit };
+use syn::{Attribute, Ident, Lit};
 
 #[derive(Default, Debug)]
 /// Arguments for creating an index on a field in a MongoDB collection.
@@ -77,16 +77,18 @@ pub struct IndexArgs {
 }
 
 macro_rules! parse_lit_to_number {
-    ($lit:expr, $ty:ty) => {
-        {
+    ($lit:expr, $ty:ty) => {{
         match $lit {
             syn::Lit::Int(lit_int) => lit_int.base10_parse::<$ty>(),
-            syn::Lit::Str(lit_str) => lit_str.value().parse::<$ty>()
-                .map_err(|e| syn::Error::new(lit_str.span(), format!("could not parse number: {}", e))),
-            other => Err(syn::Error::new(other.span(), "expected integer or string literal")),
+            syn::Lit::Str(lit_str) => lit_str.value().parse::<$ty>().map_err(|e| {
+                syn::Error::new(lit_str.span(), format!("could not parse number: {}", e))
+            }),
+            other => Err(syn::Error::new(
+                other.span(),
+                "expected integer or string literal",
+            )),
         }
-        }
-    };
+    }};
 }
 
 pub fn parse_index_args(attr: &Attribute) -> syn::Result<IndexArgs> {
@@ -114,32 +116,29 @@ pub fn parse_index_args(attr: &Attribute) -> syn::Result<IndexArgs> {
                 if let Lit::Int(lit_int) = lit {
                     args.expire_after_secs = Some(lit_int.base10_parse::<i32>()?);
                 } else {
-                    return Err(
-                        syn::Error::new(
-                            lit.span(),
-                            "expected integer literal for `expire_after_secs`"
-                        )
-                    );
+                    return Err(syn::Error::new(
+                        lit.span(),
+                        "expected integer literal for `expire_after_secs`",
+                    ));
                 }
             } else if meta.path.is_ident("version") {
                 let lit: Lit = meta.value()?.parse()?;
                 let version = parse_lit_to_number!(&lit, u32)?;
                 if version == 0 {
-                    return Err(
-                        syn::Error::new(lit.span(), "`version` must be greater than or equal to 1")
-                    );
+                    return Err(syn::Error::new(
+                        lit.span(),
+                        "`version` must be greater than or equal to 1",
+                    ));
                 }
                 args.version = Some(version);
             } else if meta.path.is_ident("text_index_version") {
                 let lit: Lit = meta.value()?.parse()?;
                 let text_index_version = parse_lit_to_number!(&lit, u32)?;
                 if text_index_version == 0 {
-                    return Err(
-                        syn::Error::new(
-                            lit.span(),
-                            "`text_index_version` must be greater than or equal to 1"
-                        )
-                    );
+                    return Err(syn::Error::new(
+                        lit.span(),
+                        "`text_index_version` must be greater than or equal to 1",
+                    ));
                 }
                 args.text_index_version = Some(text_index_version);
             } else if meta.path.is_ident("hidden") {

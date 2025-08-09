@@ -8,9 +8,9 @@
 //! - Update a document by its `_id`
 //! - Delete a document by its `_id`
 
-use oximod::{ set_global_client, Model };
-use mongodb::bson::{ doc, oid::ObjectId };
-use serde::{ Deserialize, Serialize };
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

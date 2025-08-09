@@ -6,8 +6,8 @@
 //! - Use a pre-save hook using an `impl` block
 //! - Log or modify state before a document is saved
 
-use oximod::{set_global_client, Model};
 use mongodb::bson::{oid::ObjectId, DateTime};
+use oximod::{set_global_client, Model};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Model)]
@@ -43,7 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .message("System started".to_string())
         .timestamp(DateTime::now().timestamp_millis())
         .print_message()
-        .save().await?;
+        .save()
+        .await?;
     println!("✅ Saved log with _id: {}", log);
 
     Ok(())

@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -75,7 +75,9 @@ async fn test_missing_required_role() -> TestResult {
 
     User::clear().await?;
 
-    let user = User::default().name("Valid".to_string()).email("user@example.com".to_string()); // ❌ missing role
+    let user = User::default()
+        .name("Valid".to_string())
+        .email("user@example.com".to_string()); // ❌ missing role
 
     let err = user.save().await;
     assert!(err.is_err());

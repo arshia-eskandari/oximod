@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,7 +25,11 @@ async fn deletes_document_by_id_correctly() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new();
-    let user = User::default().id(id.clone()).name("User1".to_string()).age(40).active(true);
+    let user = User::default()
+        .id(id.clone())
+        .name("User1".to_string())
+        .age(40)
+        .active(true);
 
     user.save().await?;
 
@@ -60,8 +64,7 @@ async fn delete_by_id_no_matching_document() -> TestResult {
 
     let deleted = User::delete_by_id(id).await?;
     assert_eq!(
-        deleted.deleted_count,
-        0,
+        deleted.deleted_count, 0,
         "No documents should have been deleted for non-existent ID"
     );
 
@@ -135,8 +138,7 @@ async fn delete_by_id_no_matching_document_with_email() -> TestResult {
 
     let deleted = User::delete_by_id(id).await?;
     assert_eq!(
-        deleted.deleted_count,
-        0,
+        deleted.deleted_count, 0,
         "No documents should have been deleted for non-existent ID"
     );
 

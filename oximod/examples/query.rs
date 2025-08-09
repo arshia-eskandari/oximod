@@ -8,9 +8,9 @@
 //! - Query with `find_one`
 //! - Check if a document exists
 
-use oximod::{ set_global_client, Model };
-use mongodb::bson::{ doc, oid::ObjectId };
-use serde::{ Deserialize, Serialize };
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let users = vec![
         User::new().name("Alice".to_string()).age(30).active(true),
         User::new().name("Bob".to_string()).age(40).active(false),
-        User::new().name("Charlie".to_string()).age(25).active(true)
+        User::new().name("Charlie".to_string()).age(25).active(true),
     ];
 
     for user in &users {

@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ Attribute, GenericArgument, LitStr, PathArguments, Type, Ident, Expr };
+use syn::{Attribute, Expr, GenericArgument, Ident, LitStr, PathArguments, Type};
 
 pub fn parse_default_expr(attr: &Attribute) -> syn::Result<Expr> {
     let expr: Expr = attr.parse_args()?;
@@ -34,7 +34,7 @@ pub fn option_inner_type(ty: &Type) -> Option<&Type> {
 pub fn push_id_setter(
     has_id_attr: bool,
     input_attrs: &[Attribute],
-    setters: &mut Vec<TokenStream>
+    setters: &mut Vec<TokenStream>,
 ) -> Result<(), TokenStream> {
     if has_id_attr {
         let mut id_setter_name = "id".to_string();
@@ -47,26 +47,27 @@ pub fn push_id_setter(
                     Err(err) => {
                         return Err(syn::Error::new_spanned(
                             attr,
-                            format!("Expected #[document_id_setter_ident(\"...\")]: {err}")
-                        ).to_compile_error().into());
+                            format!("Expected #[document_id_setter_ident(\"...\")]: {err}"),
+                        )
+                        .to_compile_error()
+                        .into());
                     }
                 }
             }
         }
 
         let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
-        let id_setter =
-            quote! {
-                /// Set the MongoDB ObjectId
-                pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
-                    self._id = Some(id);
-                    self
-                }
-            };
+        let id_setter = quote! {
+            /// Set the MongoDB ObjectId
+            pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {
+                self._id = Some(id);
+                self
+            }
+        };
         setters.push(id_setter);
     }
 
-    Ok(()) 
+    Ok(())
 }
 
 pub fn push_field_setters(all_fields: &[(Ident, Type)], setters: &mut Vec<TokenStream>) {

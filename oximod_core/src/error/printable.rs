@@ -14,7 +14,8 @@ pub trait Printable {
     }
 
     fn attach_printables(self, capture: Backtrace, suggest_msg: Option<&str>) -> Self
-        where Self: Sized
+    where
+        Self: Sized,
     {
         self.backtrace(capture);
         if let Some(msg) = suggest_msg {
