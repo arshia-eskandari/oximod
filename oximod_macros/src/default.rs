@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Attribute, Expr, GenericArgument, Ident, LitStr, PathArguments, Type};
+use syn::{Attribute, Expr, GenericArgument, Ident, PathArguments, Type};
 
 pub fn parse_default_expr(attr: &Attribute) -> syn::Result<Expr> {
     let expr: Expr = attr.parse_args()?;
@@ -33,29 +33,10 @@ pub fn option_inner_type(ty: &Type) -> Option<&Type> {
 
 pub fn push_id_setter(
     has_id_attr: bool,
-    input_attrs: &[Attribute],
     setters: &mut Vec<TokenStream>,
+    id_setter_name: String,
 ) -> Result<(), TokenStream> {
     if has_id_attr {
-        let mut id_setter_name = "id".to_string();
-
-        for attr in input_attrs {
-            if attr.path().is_ident("document_id_setter_ident") {
-                let setter_lit: syn::Result<LitStr> = attr.parse_args();
-                match setter_lit {
-                    Ok(lit) => id_setter_name = lit.value(),
-                    Err(err) => {
-                        return Err(syn::Error::new_spanned(
-                            attr,
-                            format!("Expected #[document_id_setter_ident(\"...\")]: {err}"),
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
-            }
-        }
-
         let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
         let id_setter = quote! {
             /// Set the MongoDB ObjectId

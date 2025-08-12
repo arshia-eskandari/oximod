@@ -7,6 +7,8 @@ pub use oximod_macros::Model;
 #[doc(hidden)]
 pub use oximod_core::feature as _feature;
 #[doc(hidden)]
+pub use oximod_core::helpers as _helpers;
+#[doc(hidden)]
 pub mod _error {
     pub use oximod_core::error::oximod_error;
     pub use oximod_core::error::printable;

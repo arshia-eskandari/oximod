@@ -1,17 +1,26 @@
 mod default;
+mod helpers;
 mod index;
 mod validate;
 
-use default::{parse_default_expr, push_field_setters, push_id_setter};
-use index::{generate_index_model_tokens, parse_index_args};
+use helpers::{collect_field_info, collect_model_attrs, setup_setters};
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, LitStr};
-use validate::{generate_validate_model_tokens, parse_validate_args};
+use syn::{parse_macro_input, DeriveInput, Ident};
 
 #[proc_macro_derive(
     Model,
-    attributes(db, collection, index, validate, default, document_id_setter_ident)
+    attributes(
+        db,
+        collection,
+        index,
+        validate,
+        default,
+        document_id_setter_ident,
+        index_max_retries,
+        index_max_init_seconds,
+    )
 )]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
 ///
@@ -43,9 +52,8 @@ use validate::{generate_validate_model_tokens, parse_validate_args};
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let index_once_async_ident = Ident::new(&format!("INDEX_INIT_{}", name), Span::call_site());
 
-    let mut db: Option<LitStr> = None;
-    let mut collection: Option<LitStr> = None;
     let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
     let mut has_id_attr = false;
     let mut setters = Vec::new();
@@ -53,115 +61,38 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let mut indexes = Vec::new();
     let mut inits = Vec::new();
 
-    for attr in &input.attrs {
-        if attr.path().is_ident("db") {
-            if let Ok(val) = attr.parse_args::<LitStr>() {
-                db = Some(val);
-            } else {
-                return syn::Error::new_spanned(attr, "Expected #[db(\"db_name\")]")
-                    .to_compile_error()
-                    .into();
-            }
-        } else if attr.path().is_ident("collection") {
-            if let Ok(val) = attr.parse_args::<LitStr>() {
-                collection = Some(val);
-            } else {
-                return syn::Error::new_spanned(
-                    attr,
-                    "Expected #[collection(\"collection_name\")]",
-                )
-                .to_compile_error()
-                .into();
-            }
-        }
-    }
+    let (collection, db, index_max_retries, index_max_init_seconds, document_id_setter_ident) =
+        match collect_model_attrs(&input.attrs) {
+            Ok(vals) => vals,
+            Err(err_tokens) => return err_tokens.into(),
+        };
 
-    let db = match db {
-        Some(val) => val,
-        None => {
-            return syn::Error::new_spanned(&input, "Missing #[db(\"db_name\")] attribute")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    let collection = match collection {
-        Some(val) => val,
-        None => {
-            return syn::Error::new_spanned(
-                &input,
-                "Missing #[collection(\"collection_name\")] attribute",
-            )
-            .to_compile_error()
-            .into();
-        }
-    };
-
-    if let syn::Data::Struct(data_struct) = &input.data {
-        for field in data_struct.fields.iter() {
-            if let Some(ident) = &field.ident {
-                all_fields.push((ident.clone(), field.ty.clone()));
-                let mut init_expr = quote! { Default::default() };
-
-                for attr in &field.attrs {
-                    if ident == "_id" {
-                        has_id_attr = true;
-                    }
-                    if attr.path().is_ident("index") {
-                        let index_args = match parse_index_args(attr) {
-                            Ok(args) => args,
-                            Err(err) => {
-                                return syn::Error::new_spanned(
-                                    attr,
-                                    format!("Invalid #[index]: {err}"),
-                                )
-                                .to_compile_error()
-                                .into();
-                            }
-                        };
-                        let index_token = generate_index_model_tokens(ident, index_args);
-                        indexes.push(index_token);
-                    } else if attr.path().is_ident("validate") {
-                        let validate_args = match parse_validate_args(attr) {
-                            Ok(args) => args,
-                            Err(err) => {
-                                return syn::Error::new_spanned(
-                                    attr,
-                                    format!("Invalid #[validate]: {err}"),
-                                )
-                                .to_compile_error()
-                                .into();
-                            }
-                        };
-                        let validation_token =
-                            generate_validate_model_tokens(ident, &field.ty, validate_args);
-                        validations.extend(validation_token);
-                    } else if attr.path().is_ident("default") {
-                        let default_expr = match parse_default_expr(attr) {
-                            Ok(expr) => expr,
-                            Err(err) => {
-                                return syn::Error::new_spanned(
-                                    attr,
-                                    format!("Invalid #[default]: {err}"),
-                                )
-                                .to_compile_error()
-                                .into();
-                            }
-                        };
-                        init_expr = quote! { #default_expr };
-                    }
-                }
-                inits.push(quote! { #ident: #init_expr });
-            }
-        }
-    }
-
-    if let Err(e) = push_id_setter(has_id_attr, &input.attrs, &mut setters) {
+    if let Err(e) = collect_field_info(
+        &input,
+        &mut all_fields,
+        &mut has_id_attr,
+        &mut indexes,
+        &mut validations,
+        &mut inits,
+    ) {
         return e.into();
     }
-    push_field_setters(&all_fields, &mut setters);
+
+    if let Err(e) = setup_setters(
+        has_id_attr,
+        &all_fields,
+        &mut setters,
+        document_id_setter_ident.clone(),
+    ) {
+        return e.into();
+    }
 
     let expanded = quote! {
+        static #index_once_async_ident: ::oximod::_helpers::once_async::OnceAsync =
+            ::oximod::_helpers::once_async::OnceAsync::new_with_options(
+                Some(#index_max_retries),
+                Some(::std::time::Duration::from_secs(#index_max_init_seconds as u64)),
+            );
 
         impl #name {
             fn validate(&self) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
@@ -175,20 +106,24 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             ) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
                 use ::oximod::_error::printable::Printable;
 
-                let indexes = vec![
-                    #(#indexes),*
-                ];
+                #index_once_async_ident
+                    .run_once(|| async move {
+                        let indexes = vec![
+                            #(#indexes),*
+                        ];
 
-                if !indexes.is_empty() {
-                    collection.create_indexes(indexes).await.map_err(|e| {
-                        ::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::IndexError(e.to_string()),
-                            "Failed to create indexes on the collection."
-                        )
-                    })?;
-                }
+                        if !indexes.is_empty() {
+                            collection.create_indexes(indexes).await.map_err(|e| {
+                                ::oximod::_attach_printables!(
+                                    ::oximod::_error::oximod_error::OxiModError::IndexError(e.to_string()),
+                                    "Failed to create indexes on the collection."
+                                )
+                            })?;
+                        }
 
-                Ok(())
+                        Ok(())
+                    })
+                    .await
             }
 
             pub fn new() -> Self {

@@ -16,4 +16,5 @@ macro_rules! attach_printables {
 
 pub mod error;
 pub mod feature;
+pub mod helpers;
 pub use error::printable::Printable;
