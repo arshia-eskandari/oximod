@@ -1,39 +1,34 @@
-use crate::default::{parse_default_expr, push_field_setters, push_id_setter};
-use crate::index::{generate_index_model_tokens, parse_index_args};
-use crate::validate::{generate_validate_model_tokens, parse_validate_args};
-use proc_macro2::TokenStream;
+use crate::default::{push_field_setters, push_id_setter};
+use crate::index::generate_index_model_tokens;
+use crate::parsers::{parse_attr_value, parse_default_expr, parse_index_args, parse_validate_args};
+use crate::validate::generate_validate_model_tokens;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{Attribute, DeriveInput, Ident, LitInt, LitStr, Type};
+use std::{fmt::Display, str::FromStr};
+use syn::{spanned::Spanned, Attribute, DeriveInput, Ident, Type};
 
-pub fn parse_lit_str(attr: &Attribute, expected_name: &str) -> Result<LitStr, TokenStream> {
-    attr.parse_args::<LitStr>().map_err(|_| {
-        syn::Error::new_spanned(attr, format!("Expected #[{}(\"...\")]", expected_name))
-            .to_compile_error()
-    })
+/// Generates a compile error token stream for a missing required attribute,
+/// using the first attribute's span if available or the call site otherwise.
+fn missing_attr_ts(attrs: &[Attribute], msg: &str) -> TokenStream {
+    if let Some(first) = attrs.first() {
+        syn::Error::new(first.span(), msg).to_compile_error()
+    } else {
+        syn::Error::new(Span::call_site(), msg).to_compile_error()
+    }
 }
 
-pub fn parse_lit_u32(attr: &Attribute, expected_name: &str) -> Result<u32, TokenStream> {
-    let lit = attr.parse_args::<LitInt>().map_err(|_| {
-        syn::Error::new_spanned(attr, format!("Expected #[{}(<u32>)]", expected_name))
-            .to_compile_error()
-    })?;
-    lit.base10_parse::<u32>().map_err(|e| {
-        syn::Error::new_spanned(attr, format!("Invalid u32 for {}: {}", expected_name, e))
-            .to_compile_error()
-    })
+/// Parses a single-value attribute into type `T` and converts any parse errors
+/// into a compile error token stream.
+fn parse_attr_value_ts<T>(attr: &Attribute, msg: Option<&str>) -> Result<T, TokenStream>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    parse_attr_value::<T>(attr, msg).map_err(|e| e.to_compile_error())
 }
 
-pub fn parse_lit_u8(attr: &Attribute, expected_name: &str) -> Result<u8, TokenStream> {
-    let lit = attr.parse_args::<LitInt>().map_err(|_| {
-        syn::Error::new_spanned(attr, format!("Expected #[{}(<u8>)]", expected_name))
-            .to_compile_error()
-    })?;
-    lit.base10_parse::<u8>().map_err(|e| {
-        syn::Error::new_spanned(attr, format!("Invalid u8 for {}: {}", expected_name, e))
-            .to_compile_error()
-    })
-}
-
+/// Collects and validates top-level model attributes, returning core model
+/// configuration values or compile error token streams on failure.
 pub fn collect_model_attrs(
     attrs: &[Attribute],
 ) -> Result<(String, String, u32, u8, String), TokenStream> {
@@ -46,49 +41,39 @@ pub fn collect_model_attrs(
     for attr in attrs {
         let path = attr.path();
         if path.is_ident("collection") {
-            collection = Some(parse_lit_str(attr, "collection")?.value());
+            collection = Some(parse_attr_value_ts::<String>(
+                attr,
+                Some("Invalid `collection` attribute"),
+            )?);
         } else if path.is_ident("db") {
-            db = Some(parse_lit_str(attr, "db")?.value());
+            db = Some(parse_attr_value_ts::<String>(
+                attr,
+                Some("Invalid `db` attribute"),
+            )?);
         } else if path.is_ident("index_max_retries") {
-            index_max_retries = parse_lit_u32(attr, "index_max_retries")?;
+            index_max_retries =
+                parse_attr_value_ts::<u32>(attr, Some("Invalid `index_max_retries` attribute"))?;
         } else if path.is_ident("index_max_init_seconds") {
-            index_max_init_seconds = parse_lit_u8(attr, "index_max_init_seconds")?;
+            index_max_init_seconds = parse_attr_value_ts::<u8>(
+                attr,
+                Some("Invalid `index_max_init_seconds` attribute"),
+            )?;
         } else if path.is_ident("document_id_setter_ident") {
-            document_id_setter_ident = parse_lit_str(attr, "document_id_setter_ident")?.value();
+            document_id_setter_ident = parse_attr_value_ts::<String>(
+                attr,
+                Some("Invalid `document_id_setter_ident` attribute"),
+            )?;
         }
     }
 
-    let collection = match collection {
-        Some(v) => v,
-        None => {
-            return Err(syn::Error::new_spanned(
-                attrs.get(0).unwrap_or(&Attribute {
-                    pound_token: Default::default(),
-                    style: syn::AttrStyle::Outer,
-                    bracket_token: Default::default(),
-                    meta: syn::parse_quote!(doc = "missing collection"),
-                }),
-                "Missing #[collection(\"collection_name\")] attribute",
-            )
-            .to_compile_error());
-        }
-    };
+    let collection = collection.ok_or_else(|| {
+        missing_attr_ts(
+            attrs,
+            r#"Missing #[collection("collection_name")] attribute"#,
+        )
+    })?;
 
-    let db = match db {
-        Some(v) => v,
-        None => {
-            return Err(syn::Error::new_spanned(
-                attrs.get(0).unwrap_or(&Attribute {
-                    pound_token: Default::default(),
-                    style: syn::AttrStyle::Outer,
-                    bracket_token: Default::default(),
-                    meta: syn::parse_quote!(doc = "missing db"),
-                }),
-                "Missing #[db(\"db_name\")] attribute",
-            )
-            .to_compile_error())
-        }
-    };
+    let db = db.ok_or_else(|| missing_attr_ts(attrs, r#"Missing #[db("db_name")] attribute"#))?;
 
     Ok((
         collection,
@@ -99,6 +84,9 @@ pub fn collect_model_attrs(
     ))
 }
 
+/// Extracts field identifiers and types, processes supported field-level
+/// attributes (e.g., `#[index]`, `#[validate]`, `#[default]`), and generates
+/// associated token streams for indexes, validations, and initializations.
 pub fn collect_field_info(
     input: &DeriveInput,
     all_fields: &mut Vec<(Ident, Type)>,
@@ -159,15 +147,15 @@ pub fn collect_field_info(
     Ok(())
 }
 
+/// Generates setter method token streams for all fields, including a document
+/// ID setter if required.
 pub fn setup_setters(
     has_id_attr: bool,
     all_fields: &[(Ident, Type)],
     setters: &mut Vec<TokenStream>,
     document_id_setter_ident: String,
 ) -> Result<(), TokenStream> {
-    if let Err(e) = push_id_setter(has_id_attr, setters, document_id_setter_ident) {
-        return Err(e);
-    }
+    push_id_setter(has_id_attr, setters, document_id_setter_ident)?;
     push_field_setters(all_fields, setters);
     Ok(())
 }

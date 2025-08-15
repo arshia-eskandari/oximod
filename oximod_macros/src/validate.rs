@@ -1,6 +1,7 @@
+use crate::parsers::unwrap_option_type;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
-use syn::{Attribute, GenericArgument, Ident, Lit, PathArguments, Type};
+use syn::{Ident, Type};
 
 #[derive(Default, Debug)]
 /// Arguments for field validation in OxiMod using the `#[validate(...)]` attribute.
@@ -113,148 +114,6 @@ pub struct ValidateArgs {
     pub multiple_of: Option<i64>,
 }
 
-pub fn unwrap_option_type(ty: &Type) -> Option<&Type> {
-    if let Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.first() {
-            if segment.ident == "Option" {
-                if let PathArguments::AngleBracketed(generic_args) = &segment.arguments {
-                    if let Some(GenericArgument::Type(inner_ty)) = generic_args.args.first() {
-                        return Some(inner_ty);
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
-    let mut args = ValidateArgs::default();
-
-    if attr.path().is_ident("validate") {
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("min_length") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.min_length = Some(lit_int.base10_parse::<u32>()?);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `min_length`",
-                    ));
-                }
-            } else if meta.path.is_ident("max_length") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.max_length = Some(lit_int.base10_parse::<u32>()?);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `max_length`",
-                    ));
-                }
-            } else if meta.path.is_ident("required") {
-                args.required = Some(true);
-            } else if meta.path.is_ident("email") {
-                args.email = Some(true);
-            } else if meta.path.is_ident("pattern") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Str(lit_str) = lit {
-                    args.pattern = Some(lit_str.value());
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `pattern`",
-                    ));
-                }
-            } else if meta.path.is_ident("non_empty") {
-                args.non_empty = Some(true);
-            } else if meta.path.is_ident("positive") {
-                args.positive = Some(true);
-            } else if meta.path.is_ident("negative") {
-                args.negative = Some(true);
-            } else if meta.path.is_ident("non_negative") {
-                args.non_negative = Some(true);
-            } else if meta.path.is_ident("min") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.min = Some(lit_int.base10_parse::<i64>()?);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `min`",
-                    ));
-                }
-            } else if meta.path.is_ident("max") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.max = Some(lit_int.base10_parse::<i64>()?);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `max`",
-                    ));
-                }
-            } else if meta.path.is_ident("starts_with") {
-                let lit = meta.value()?.parse()?;
-                if let Lit::Str(lit_str) = lit {
-                    args.starts_with = Some(lit_str.value());
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected string literal for `starts_with`",
-                    ));
-                }
-            } else if meta.path.is_ident("ends_with") {
-                let lit = meta.value()?.parse()?;
-                if let Lit::Str(lit_str) = lit {
-                    args.ends_with = Some(lit_str.value());
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected string literal for `ends_with`",
-                    ));
-                }
-            } else if meta.path.is_ident("includes") {
-                let lit = meta.value()?.parse()?;
-                if let Lit::Str(lit_str) = lit {
-                    args.includes = Some(lit_str.value());
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected string literal for `includes`",
-                    ));
-                }
-            } else if meta.path.is_ident("alphanumeric") {
-                args.alphanumeric = Some(true);
-            } else if meta.path.is_ident("multiple_of") {
-                let lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = &lit {
-                    let val = lit_int.base10_parse::<i64>()?;
-                    if val == 0 {
-                        return Err(syn::Error::new(
-                            lit.span(),
-                            "`multiple_of` must be greater than 0",
-                        ));
-                    }
-                    args.multiple_of = Some(val);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `multiple_of`",
-                    ));
-                }
-            } else {
-                return Err(meta.error("unknown attribute key"));
-            }
-
-            Ok(())
-        })?;
-    }
-
-    Ok(args)
-}
-
 macro_rules! opt_check {
     (
         $is_opt:expr,
@@ -293,6 +152,7 @@ macro_rules! is_type_safe {
     }};
 }
 
+/// Returns `true` if the type is a string-like type (`String` or `&str`), otherwise `false`.
 fn is_string(ty: &Type) -> bool {
     match ty {
         Type::Path(tp) => {
@@ -303,6 +163,7 @@ fn is_string(ty: &Type) -> bool {
     }
 }
 
+/// Returns `true` if the type is a built-in numeric primitive (integer or float), otherwise `false`.
 fn is_numeric(ty: &Type) -> bool {
     match ty {
         Type::Path(tp) => {
@@ -328,6 +189,8 @@ fn is_numeric(ty: &Type) -> bool {
     }
 }
 
+/// Generates validation `TokenStream`s for a field based on `ValidateArgs`,
+/// producing compile-time and runtime checks appropriate to the field’s type.
 pub fn generate_validate_model_tokens(
     field_ident: &Ident,
     field_ty: &Type,
@@ -439,39 +302,37 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    if let Some(is_email) = email_option {
-        if *is_email {
-            if is_type_safe!(
-                is_str,
-                checks,
-                field_ident,
-                "`#[validate(email)]` can only be applied to string fields"
-            ) {
-                let inner = quote! {
-                    if !val.contains('@') || !val.contains('.') {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                            ),
-                            concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
-                        ));
-                    }
-
-                    let parts: Vec<&str> = val.split('@').collect();
-                    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                            ),
-                            concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
-                        ));
-                    }
-                };
-
-                let snippet = opt_check!(is_optional, field_ident, #inner);
-                checks.push(snippet);
+    if matches!(email_option, Some(true))
+        && is_type_safe!(
+            is_str,
+            checks,
+            field_ident,
+            "`#[validate(email)]` can only be applied to string fields"
+        )
+    {
+        let inner = quote! {
+            if !val.contains('@') || !val.contains('.') {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                    ),
+                    concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
+                ));
             }
-        }
+
+            let parts: Vec<&str> = val.split('@').collect();
+            if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                    ),
+                    concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
+                ));
+            }
+        };
+
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
 
     if let Some(pattern) = pattern_option {
@@ -529,76 +390,70 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    if let Some(positive) = positive_option {
-        if *positive {
-            if is_type_safe!(
-                is_num,
-                checks,
-                field_ident,
-                "`#[validate(positive)]` can only be applied to numeric fields"
-            ) {
-                let inner = quote! {
-                    if *val <= 0 {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be positive", stringify!(#field_ident))
-                            ),
-                            concat!("Use a positive value for '", stringify!(#field_ident), "'.")
-                        ));
-                    }
-                };
-                let snippet = opt_check!(is_optional, field_ident, #inner);
-                checks.push(snippet);
+    if matches!(positive_option, Some(true))
+        && is_type_safe!(
+            is_num,
+            checks,
+            field_ident,
+            "`#[validate(positive)]` can only be applied to numeric fields"
+        )
+    {
+        let inner = quote! {
+            if *val <= 0 {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be positive", stringify!(#field_ident))
+                    ),
+                    concat!("Use a positive value for '", stringify!(#field_ident), "'.")
+                ));
             }
-        }
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
 
-    if let Some(negative) = negative_option {
-        if *negative {
-            if is_type_safe!(
-                is_num,
-                checks,
-                field_ident,
-                "`#[validate(negative)]` can only be applied to numeric fields"
-            ) {
-                let inner = quote! {
-                    if *val >= 0 {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be negative", stringify!(#field_ident))
-                            ),
-                            concat!("Use a negative value for '", stringify!(#field_ident), "'.")
-                        ));
-                    }
-                };
-                let snippet = opt_check!(is_optional, field_ident, #inner);
-                checks.push(snippet);
+    if matches!(negative_option, Some(true))
+        && is_type_safe!(
+            is_num,
+            checks,
+            field_ident,
+            "`#[validate(negative)]` can only be applied to numeric fields"
+        )
+    {
+        let inner = quote! {
+            if *val >= 0 {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be negative", stringify!(#field_ident))
+                    ),
+                    concat!("Use a negative value for '", stringify!(#field_ident), "'.")
+                ));
             }
-        }
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
 
-    if let Some(non_negative) = non_negative_option {
-        if *non_negative {
-            if is_type_safe!(
-                is_num,
-                checks,
-                field_ident,
-                "`#[validate(non_negative)]` can only be applied to numeric fields"
-            ) {
-                let inner = quote! {
-                    if *val < 0 {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be non-negative", stringify!(#field_ident))
-                            ),
-                            concat!("Use zero or a positive value for '", stringify!(#field_ident), "'.")
-                        ));
-                    }
-                };
-                let snippet = opt_check!(is_optional, field_ident, #inner);
-                checks.push(snippet);
+    if matches!(non_negative_option, Some(true))
+        && is_type_safe!(
+            is_num,
+            checks,
+            field_ident,
+            "`#[validate(non_negative)]` can only be applied to numeric fields"
+        )
+    {
+        let inner = quote! {
+            if *val < 0 {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be non-negative", stringify!(#field_ident))
+                    ),
+                    concat!("Use zero or a positive value for '", stringify!(#field_ident), "'.")
+                ));
             }
-        }
+        };
+        let snippet = opt_check!(is_optional, field_ident, #inner);
+        checks.push(snippet);
     }
 
     if let Some(min) = min_option {

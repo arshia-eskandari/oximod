@@ -1,36 +1,10 @@
+use crate::parsers::option_inner_type;
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Attribute, Expr, GenericArgument, Ident, PathArguments, Type};
+use syn::{Ident, Type};
 
-pub fn parse_default_expr(attr: &Attribute) -> syn::Result<Expr> {
-    let expr: Expr = attr.parse_args()?;
-    Ok(expr)
-}
-
-/// If `ty` is `Option<Inner>`, returns `Some(&Inner)`, otherwise `None`.
-pub fn option_inner_type(ty: &Type) -> Option<&Type> {
-    // We only care about a simple `Option<...>` path type
-    if let Type::Path(type_path) = ty {
-        // Must be exactly one segment, i.e. `Option`
-        if type_path.path.segments.len() == 1 {
-            let segment = &type_path.path.segments[0];
-            if segment.ident == "Option" {
-                // Look for the angle-bracketed args: `<Inner>`
-                if let PathArguments::AngleBracketed(params) = &segment.arguments {
-                    // We expect exactly one generic argument
-                    if params.args.len() == 1 {
-                        // And that argument must itself be a type
-                        if let GenericArgument::Type(inner_ty) = &params.args[0] {
-                            return Some(inner_ty);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
+/// Appends a setter method for the `_id` field if it exists, using the provided
+/// setter name and accepting a MongoDB `ObjectId`.
 pub fn push_id_setter(
     has_id_attr: bool,
     setters: &mut Vec<TokenStream>,
@@ -51,6 +25,8 @@ pub fn push_id_setter(
     Ok(())
 }
 
+/// Appends setter methods for all non-`_id` fields, generating `Option`-aware
+/// setters for optional types and direct setters for non-optional types.
 pub fn push_field_setters(all_fields: &[(Ident, Type)], setters: &mut Vec<TokenStream>) {
     for (ident, ty) in all_fields.iter().filter(|(ident, _)| ident != "_id") {
         let setter = if let Some(inner) = option_inner_type(ty) {

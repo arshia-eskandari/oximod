@@ -1,6 +1,8 @@
 mod default;
 mod helpers;
 mod index;
+#[macro_use]
+mod parsers;
 mod validate;
 
 use helpers::{collect_field_info, collect_model_attrs, setup_setters};
@@ -52,7 +54,7 @@ use syn::{parse_macro_input, DeriveInput, Ident};
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    let index_once_async_ident = Ident::new(&format!("INDEX_INIT_{}", name), Span::call_site());
+    let index_once_async_ident = Ident::new(&format!("INDEX_INIT_{name}"), Span::call_site());
 
     let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
     let mut has_id_attr = false;
