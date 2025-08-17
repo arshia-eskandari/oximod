@@ -1,6 +1,6 @@
 use crate::parsers::unwrap_option_type;
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned};
 use syn::{Ident, Type};
 
 #[derive(Default, Debug)]
@@ -155,9 +155,9 @@ macro_rules! is_type_safe {
 /// Returns `true` if the type is a string-like type (`String` or `&str`), otherwise `false`.
 fn is_string(ty: &Type) -> bool {
     match ty {
-        Type::Path(tp) => {
-            let seg = &tp.path.segments.first().unwrap().ident;
-            seg == "String" || seg == "&str"
+        syn::Type::Path(tp) => tp.path.is_ident("String"),
+        syn::Type::Reference(r) => {
+            matches!(&*r.elem, syn::Type::Path(tp) if tp.path.is_ident("str"))
         }
         _ => false,
     }
@@ -192,6 +192,7 @@ fn is_numeric(ty: &Type) -> bool {
 /// Generates validation `TokenStream`s for a field based on `ValidateArgs`,
 /// producing compile-time and runtime checks appropriate to the field’s type.
 pub fn generate_validate_model_tokens(
+    struct_ident: &Ident,
     field_ident: &Ident,
     field_ty: &Type,
     validate_args: ValidateArgs,
@@ -214,9 +215,10 @@ pub fn generate_validate_model_tokens(
         alphanumeric: alphanumeric_option,
         multiple_of: multiple_of_option,
     } = &validate_args;
-    let is_optional = unwrap_option_type(field_ty).is_some();
+    let opt_inner = unwrap_option_type(field_ty);
+    let is_optional = opt_inner.is_some();
+    let inner_ty = opt_inner.unwrap_or(field_ty);
     let mut checks = vec![];
-    let inner_ty = unwrap_option_type(field_ty).unwrap_or(field_ty);
 
     if let Some(req) = required {
         if *req {
@@ -311,23 +313,28 @@ pub fn generate_validate_model_tokens(
         )
     {
         let inner = quote! {
-            if !val.contains('@') || !val.contains('.') {
-                return Err(::oximod::_attach_printables!(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                    ),
-                    concat!("Provide a valid email for '", stringify!(#field_ident), "'.")
-                ));
-            }
-
-            let parts: Vec<&str> = val.split('@').collect();
-            if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() || !parts[1].contains('.') {
-                return Err(::oximod::_attach_printables!(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be a valid email address", stringify!(#field_ident))
-                    ),
-                    concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
-                ));
+            match val.split_once('@') {
+                Some((local, domain)) if !local.is_empty() && !domain.is_empty() => {
+                    match domain.rsplit_once('.') {
+                        Some((lhs, rhs)) if !lhs.is_empty() && !rhs.is_empty() => { /* OK */ }
+                        _ => {
+                            return Err(::oximod::_attach_printables!(
+                                ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                    format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                                ),
+                                concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
+                            ));
+                        }
+                    }
+                }
+                _ => {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                            format!("Field '{}' must be a valid email address", stringify!(#field_ident))
+                        ),
+                        concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
+                    ));
+                }
             }
         };
 
@@ -342,22 +349,54 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(pattern)]` can only be applied to string fields"
         ) {
+            // Build a unique ALL-CAPS static name per (struct, field)
+            let upper_field_name = field_ident.to_string().to_uppercase();
+            let upper_struct_name = struct_ident.to_string().to_uppercase();
+            let re_ident = format_ident!("__OXIMOD_RE_{}_{}", upper_struct_name, upper_field_name);
+
+            // Generate code that compiles the regex once and caches the Result
             let inner = quote! {
-                let regex = ::oximod::_regex::Regex::new(#pattern).map_err(|e| {
-                    ::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Invalid regex pattern in validation for '{}': {}", stringify!(#field_ident), e)
-                        ),
-                        concat!("Check the regex pattern for '", stringify!(#field_ident), "'.")
-                    )
-                })?;
+                // std-only, stable API
+                static #re_ident: ::std::sync::OnceLock<
+                    Result<::oximod::_regex::Regex, ::oximod::_regex::Error>
+                > = ::std::sync::OnceLock::new();
+
+                // First call compiles; subsequent calls reuse the cached Result
+                let regex = #re_ident
+                    .get_or_init(|| ::oximod::_regex::Regex::new(#pattern))
+                    .as_ref()
+                    .map_err(|e| {
+                        ::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                format!(
+                                    "Invalid regex pattern in validation for '{}': {}",
+                                    stringify!(#field_ident),
+                                    e
+                                )
+                            ),
+                            concat!(
+                                "Check the regex pattern for '",
+                                stringify!(#field_ident),
+                                "'."
+                            )
+                        )
+                    })?;
 
                 if !regex.is_match(val) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' does not match the required pattern", stringify!(#field_ident))
+                            format!(
+                                "Field '{}' does not match the required pattern",
+                                stringify!(#field_ident)
+                            )
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' matches regex: ", #pattern, ".")
+                        concat!(
+                            "Ensure '",
+                            stringify!(#field_ident),
+                            "' matches regex: ",
+                            #pattern,
+                            "."
+                        )
                     ));
                 }
             };
@@ -574,7 +613,7 @@ pub fn generate_validate_model_tokens(
             "`#[validate(alphanumeric)]` can only be applied to string fields"
         ) {
             let inner = quote! {
-                if !val.chars().all(|c| c.is_alphanumeric()) {
+                if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must contain only alphanumeric characters", stringify!(#field_ident))

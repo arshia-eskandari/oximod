@@ -128,8 +128,12 @@ pub fn collect_field_info(
                         syn::Error::new_spanned(attr, format!("Invalid #[validate]: {err}"))
                             .to_compile_error()
                     })?;
-                    let validation_tokens =
-                        generate_validate_model_tokens(ident, &field.ty, validate_args);
+                    let validation_tokens = generate_validate_model_tokens(
+                        &input.ident,
+                        ident,
+                        &field.ty,
+                        validate_args,
+                    );
                     validations.extend(validation_tokens);
                 } else if attr.path().is_ident("default") {
                     let default_expr = parse_default_expr(attr).map_err(|err| {
