@@ -1,7 +1,13 @@
-use crate::parsers::unwrap_option_type;
-use proc_macro2::TokenStream;
+use crate::parsers::{parse_f64_for_range, parse_u128_for_range, unwrap_option_type};
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
-use syn::{Ident, Type};
+use syn::{Ident, LitFloat, LitInt, Type};
+
+#[derive(Debug)]
+pub enum LitNum {
+    Int { lit: syn::LitInt, neg: bool },
+    Float { lit: syn::LitFloat, neg: bool },
+}
 
 #[derive(Default, Debug)]
 /// Arguments for field validation in OxiMod using the `#[validate(...)]` attribute.
@@ -105,13 +111,77 @@ pub struct ValidateArgs {
     pub positive: Option<bool>,
     pub negative: Option<bool>,
     pub non_negative: Option<bool>,
-    pub min: Option<i64>,
-    pub max: Option<i64>,
+    pub min: Option<LitNum>,
+    pub max: Option<LitNum>,
     pub starts_with: Option<String>,
     pub ends_with: Option<String>,
     pub includes: Option<String>,
     pub alphanumeric: Option<bool>,
-    pub multiple_of: Option<i64>,
+    pub multiple_of: Option<syn::LitInt>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum PrimitiveNum {
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    Isize,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    Usize,
+    F32,
+    F64,
+    NonNumeric,
+}
+
+pub fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
+    use PrimitiveNum::*;
+    let inner = crate::parsers::unwrap_option_type(ty).unwrap_or(ty);
+
+    let syn::Type::Path(tp) = inner else {
+        return NonNumeric;
+    };
+    let Some(seg) = tp.path.segments.last() else {
+        return NonNumeric;
+    };
+    let id = &seg.ident;
+
+    if id == "i8" {
+        I8
+    } else if id == "i16" {
+        I16
+    } else if id == "i32" {
+        I32
+    } else if id == "i64" {
+        I64
+    } else if id == "i128" {
+        I128
+    } else if id == "isize" {
+        Isize
+    } else if id == "u8" {
+        U8
+    } else if id == "u16" {
+        U16
+    } else if id == "u32" {
+        U32
+    } else if id == "u64" {
+        U64
+    } else if id == "u128" {
+        U128
+    } else if id == "usize" {
+        Usize
+    } else if id == "f32" {
+        F32
+    } else if id == "f64" {
+        F64
+    } else {
+        NonNumeric
+    }
 }
 
 macro_rules! opt_check {
@@ -163,32 +233,283 @@ fn is_string(ty: &Type) -> bool {
     }
 }
 
-/// Returns `true` if the type is a built-in numeric primitive (integer or float), otherwise `false`.
 fn is_numeric(ty: &Type) -> bool {
-    match ty {
-        Type::Path(tp) => {
-            let seg = &tp.path.segments.first().unwrap().ident;
-            matches!(
-                seg.to_string().as_str(),
-                "i8" | "i16"
-                    | "i32"
-                    | "i64"
-                    | "i128"
-                    | "u8"
-                    | "u16"
-                    | "u32"
-                    | "u64"
-                    | "u128"
-                    | "f32"
-                    | "f64"
-                    | "isize"
-                    | "usize"
-            )
-        }
-        _ => false,
+    !matches!(primitive_of(ty), PrimitiveNum::NonNumeric)
+}
+
+fn emit_int_lit(lit: &LitInt, neg: bool) -> TokenStream {
+    if neg {
+        quote! { - #lit }
+    } else {
+        quote! { #lit }
     }
 }
 
+fn emit_float_from_float(lit: &LitFloat, neg: bool) -> TokenStream {
+    if neg {
+        quote! { - #lit }
+    } else {
+        quote! { #lit }
+    }
+}
+
+fn emit_float_from_int(lit: &LitInt, neg: bool) -> TokenStream {
+    let s = {
+        let mut s = String::from(lit.base10_digits());
+        if !s.contains('.') {
+            s.push_str(".0");
+        }
+        s
+    };
+    let lf = LitFloat::new(&s, lit.span());
+    if neg {
+        quote! { - #lf }
+    } else {
+        quote! { #lf }
+    }
+}
+
+fn check_int_fits_primitive(
+    span: Span,
+    neg: bool,
+    mag: u128,
+    prim: PrimitiveNum,
+) -> Option<TokenStream> {
+    use PrimitiveNum::*;
+    let err = |msg: &str| Some(quote_spanned! { span => compile_error!(#msg); });
+
+    let fits_signed = |min: i128, max: i128| -> bool {
+        if neg {
+            let m = match i128::try_from(mag) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+            -m >= min && -m <= max
+        } else {
+            let m = match i128::try_from(mag) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+            m >= min && m <= max
+        }
+    };
+    let fits_unsigned = |max: u128| -> bool {
+        if neg {
+            return false;
+        }
+        mag <= max
+    };
+
+    match prim {
+        I8 => {
+            if !fits_signed(i8::MIN as i128, i8::MAX as i128) {
+                return err("numeric bound does not fit `i8`");
+            }
+        }
+        I16 => {
+            if !fits_signed(i16::MIN as i128, i16::MAX as i128) {
+                return err("numeric bound does not fit `i16`");
+            }
+        }
+        I32 => {
+            if !fits_signed(i32::MIN as i128, i32::MAX as i128) {
+                return err("numeric bound does not fit `i32`");
+            }
+        }
+        I64 => {
+            if !fits_signed(i64::MIN as i128, i64::MAX as i128) {
+                return err("numeric bound does not fit `i64`");
+            }
+        }
+        I128 => {
+            if neg {
+                if mag > (i128::MAX as u128) + 1 {
+                    return err("numeric bound does not fit `i128`");
+                }
+            } else if mag > i128::MAX as u128 {
+                return err("numeric bound does not fit `i128`");
+            }
+        }
+        Isize => { /* let rustc enforce target width */ }
+
+        U8 => {
+            if !fits_unsigned(u8::MAX as u128) {
+                return err("numeric bound does not fit `u8`");
+            }
+        }
+        U16 => {
+            if !fits_unsigned(u16::MAX as u128) {
+                return err("numeric bound does not fit `u16`");
+            }
+        }
+        U32 => {
+            if !fits_unsigned(u32::MAX as u128) {
+                return err("numeric bound does not fit `u32`");
+            }
+        }
+        U64 => {
+            if !fits_unsigned(u64::MAX as u128) {
+                return err("numeric bound does not fit `u64`");
+            }
+        }
+        U128 => {
+            if neg {
+                return err("negative bound not allowed for unsigned type");
+            }
+        }
+        Usize => { /* let rustc enforce target width */ }
+
+        F32 | F64 | PrimitiveNum::NonNumeric => {}
+    }
+    None
+}
+
+fn check_float_fits_primitive(span: Span, v: f64, prim: PrimitiveNum) -> Option<TokenStream> {
+    use PrimitiveNum::*;
+    let err = |msg: &str| Some(quote_spanned! { span => compile_error!(#msg); });
+
+    if !v.is_finite() {
+        return err("float bound must be finite");
+    }
+    match prim {
+        F32 => {
+            if v < f32::MIN as f64 || v > f32::MAX as f64 {
+                return err("float bound does not fit `f32`");
+            }
+        }
+        F64 => { /* any finite f64 is OK */ }
+        _ => {}
+    }
+    None
+}
+
+/// Produce a RHS numeric token appropriate for the field's `prim` type from a `LitNum` bound.
+/// - Emits compile_error! into `compile_errors` if the field is non-numeric,
+///   or the literal doesn't fit the field's primitive.
+/// - Returns Some(rhs_tokens) if OK, None if a compile_error! was emitted.
+///
+/// Requirements:
+/// - `emit_int_lit`, `emit_float_from_int`, `emit_float_from_float`
+/// - `parse_u128_for_range`, `parse_f64_for_range`
+/// - `check_int_fits_primitive`, `check_float_fits_primitive`
+/// - `PrimitiveNum` enum + `primitive_of(...)` already in your module
+pub(crate) fn rhs_for_numeric_bound(
+    prim: PrimitiveNum,
+    bound: &LitNum,
+    field_ident: &Ident,
+    compile_errors: &mut Vec<TokenStream>,
+) -> Option<TokenStream> {
+    match (prim, bound) {
+        // Non-numeric fields
+        (PrimitiveNum::NonNumeric, _) => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("`#[validate(min)]`/`max` can only be applied to numeric fields");
+            });
+            None
+        }
+
+        // Integer fields + integer literal
+        (
+            PrimitiveNum::I8
+            | PrimitiveNum::I16
+            | PrimitiveNum::I32
+            | PrimitiveNum::I64
+            | PrimitiveNum::I128
+            | PrimitiveNum::Isize
+            | PrimitiveNum::U8
+            | PrimitiveNum::U16
+            | PrimitiveNum::U32
+            | PrimitiveNum::U64
+            | PrimitiveNum::U128
+            | PrimitiveNum::Usize,
+            &LitNum::Int { ref lit, neg },
+        ) => {
+            if let Ok(mag) = parse_u128_for_range(lit) {
+                if let Some(err) = check_int_fits_primitive(lit.span(), neg, mag, prim) {
+                    compile_errors.push(err);
+                    return None;
+                }
+            }
+            Some(emit_int_lit(lit, neg))
+        }
+
+        // ❗ Integer fields + float literal → reject
+        (
+            PrimitiveNum::I8
+            | PrimitiveNum::I16
+            | PrimitiveNum::I32
+            | PrimitiveNum::I64
+            | PrimitiveNum::I128
+            | PrimitiveNum::Isize
+            | PrimitiveNum::U8
+            | PrimitiveNum::U16
+            | PrimitiveNum::U32
+            | PrimitiveNum::U64
+            | PrimitiveNum::U128
+            | PrimitiveNum::Usize,
+            &LitNum::Float { ref lit, .. },
+        ) => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("float literal is not allowed for integer field in `#[validate(min)]`/`max`");
+            });
+            None
+        }
+
+        // Float fields + integer literal → emit as float
+        (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Int { ref lit, neg }) => {
+            Some(emit_float_from_int(lit, neg))
+        }
+
+        // Float fields + float literal
+        (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Float { ref lit, neg }) => {
+            if matches!(prim, PrimitiveNum::F32) {
+                if let Ok(v64) = parse_f64_for_range(lit) {
+                    let signed = if neg { -v64 } else { v64 };
+                    if let Some(err) = check_float_fits_primitive(lit.span(), signed, prim) {
+                        compile_errors.push(err);
+                        return None;
+                    }
+                }
+            }
+            Some(emit_float_from_float(lit, neg))
+        }
+    }
+}
+
+/// Produce a RHS integer token for `multiple_of` (integers only).
+/// - Emits compile_error! if field is float or non-numeric, or literal doesn't fit.
+/// - Returns Some(rhs) if OK, None if error.
+pub(crate) fn rhs_for_integer_multiple_of(
+    prim: PrimitiveNum,
+    lit: &LitInt,
+    field_ident: &Ident,
+    compile_errors: &mut Vec<TokenStream>,
+) -> Option<TokenStream> {
+    match prim {
+        PrimitiveNum::F32 | PrimitiveNum::F64 => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("`#[validate(multiple_of)]` is not allowed on float fields");
+            });
+            None
+        }
+        PrimitiveNum::NonNumeric => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("`#[validate(multiple_of)]` can only be applied to integer fields");
+            });
+            None
+        }
+        // Integer primitives
+        _ => {
+            if let Ok(mag) = parse_u128_for_range(lit) {
+                if let Some(err) = check_int_fits_primitive(lit.span(), false, mag, prim) {
+                    compile_errors.push(err);
+                    return None;
+                }
+            }
+            Some(quote! { #lit })
+        }
+    }
+}
 /// Generates validation `TokenStream`s for a field based on `ValidateArgs`,
 /// producing compile-time and runtime checks appropriate to the field’s type.
 pub fn generate_validate_model_tokens(
@@ -235,6 +556,7 @@ pub fn generate_validate_model_tokens(
     // Type gates
     let is_str = is_string(inner_ty);
     let is_num = is_numeric(inner_ty);
+    let prim = primitive_of(inner_ty);
 
     // --- required ---
     if matches!(required, Some(true)) {
@@ -270,7 +592,7 @@ pub fn generate_validate_model_tokens(
             "`#[validate(min_length)]` can only be applied to string fields"
         ) {
             field_rules_val.push(quote! {
-                if val.len() < (#min_length as usize) {
+                if val.len() > (#min_length as usize) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!(
@@ -492,18 +814,18 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(min)]` can only be applied to numeric fields"
         ) {
-            field_rules_val.push(quote! {
-                if (*val as i64) < #min {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be at least {}", #field_name_str, #min)
-                        ),
-                        &format!(
-                            "Ensure '{}' is at least {}", stringify!(#field_ident), #min
-                        )
-                    ));
-                }
-            });
+            if let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors) {
+                field_rules_val.push(quote! {
+                    if *val > #rhs {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                format!("Field '{}' must be at least {}", #field_name_str, #rhs)
+                            ),
+                            &format!("Ensure '{}' is at least {}", stringify!(#field_ident), #rhs)
+                        ));
+                    }
+                });
+            }
         }
     }
 
@@ -515,18 +837,18 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(max)]` can only be applied to numeric fields"
         ) {
-            field_rules_val.push(quote! {
-                if (*val as i64) > #max {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be at most {}", #field_name_str, #max)
-                        ),
-                        &format!(
-                            "Ensure '{}' is at most {}", stringify!(#field_ident), #max
-                        )
-                    ));
-                }
-            });
+            if let Some(rhs) = rhs_for_numeric_bound(prim, max, field_ident, &mut compile_errors) {
+                field_rules_val.push(quote! {
+                    if *val > #rhs {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                format!("Field '{}' must be at most {}", #field_name_str, #rhs)
+                            ),
+                            &format!("Ensure '{}' is at most {}", stringify!(#field_ident), #rhs)
+                        ));
+                    }
+                });
+            }
         }
     }
 
@@ -628,18 +950,20 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(multiple_of)]` can only be applied to numeric fields"
         ) {
-            field_rules_val.push(quote! {
-                if (*val as i64) % #multiple != 0 {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be a multiple of {}", #field_name_str, #multiple)
-                        ),
-                        &format!(
-                            "Ensure '{}' is a multiple of {}", stringify!(#field_ident), #multiple
-                        )
-                    ));
-                }
-            });
+            if let Some(rhs) =
+                rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
+            {
+                field_rules_val.push(quote! {
+            if (*val % #rhs) != 0 {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                    ),
+                    &format!("Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs)
+                ));
+            }
+        });
+            }
         }
     }
 

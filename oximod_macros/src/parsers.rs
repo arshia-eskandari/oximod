@@ -1,7 +1,13 @@
-use crate::{index::IndexArgs, validate::ValidateArgs};
+use crate::{
+    index::IndexArgs,
+    validate::{LitNum, ValidateArgs},
+};
 use std::fmt::Display;
 use std::str::FromStr;
-use syn::{spanned::Spanned, Attribute, Expr, GenericArgument, Lit, Meta, PathArguments, Type};
+use syn::{
+    spanned::Spanned, Attribute, Expr, ExprLit, ExprUnary, GenericArgument, Lit, LitFloat, LitInt,
+    Meta, PathArguments, Type, UnOp,
+};
 
 /// Parses and returns the expression provided as the argument to the given attribute.
 pub fn parse_default_expr(attr: &Attribute) -> syn::Result<Expr> {
@@ -31,6 +37,62 @@ pub fn option_inner_type(ty: &Type) -> Option<&Type> {
         }
     }
     None
+}
+
+/// Parse an expression that is a numeric literal, optionally with a leading `-`.
+/// Accepts: `42`, `-42`, `3.14`, `-3.14`.
+fn parse_num_lit_expr(expr: Expr) -> syn::Result<LitNum> {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(lit), ..
+        }) => Ok(LitNum::Int { lit, neg: false }),
+        Expr::Lit(ExprLit {
+            lit: Lit::Float(lit),
+            ..
+        }) => Ok(LitNum::Float { lit, neg: false }),
+        Expr::Unary(ExprUnary {
+            op: UnOp::Neg(_),
+            expr,
+            ..
+        }) => {
+            // Expect `-<literal>`
+            match *expr {
+                Expr::Lit(ExprLit {
+                    lit: Lit::Int(lit), ..
+                }) => Ok(LitNum::Int { lit, neg: true }),
+                Expr::Lit(ExprLit {
+                    lit: Lit::Float(lit),
+                    ..
+                }) => Ok(LitNum::Float { lit, neg: true }),
+                other => Err(syn::Error::new_spanned(
+                    other,
+                    "expected a numeric literal after unary '-'",
+                )),
+            }
+        }
+        other => Err(syn::Error::new_spanned(
+            other,
+            "expected a numeric literal (optionally with a leading '-')",
+        )),
+    }
+}
+
+/// Ensure an integer literal is strictly greater than zero.
+/// (LitInt is always non-negative; we only need to reject zero.)
+fn litint_strictly_positive(lit: &syn::LitInt) -> syn::Result<()> {
+    // Use base10_digits() to ignore formatting/underscores/bases
+    let digits = lit.base10_digits();
+    // Permit non-decimal bases if you want; if not, this is fine for `base10_*` usage.
+    let val: u128 = digits
+        .parse()
+        .map_err(|e| syn::Error::new(lit.span(), format!("invalid integer literal: {e}")))?;
+    if val == 0 {
+        return Err(syn::Error::new(
+            lit.span(),
+            "`multiple_of` must be greater than 0",
+        ));
+    }
+    Ok(())
 }
 
 /// Usage:
@@ -237,25 +299,11 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
             } else if meta.path.is_ident("non_negative") {
                 args.non_negative = Some(true);
             } else if meta.path.is_ident("min") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.min = Some(lit_int.base10_parse::<i64>()?);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `min`",
-                    ));
-                }
+                let expr: Expr = meta.value()?.parse()?;
+                args.min = Some(parse_num_lit_expr(expr)?);
             } else if meta.path.is_ident("max") {
-                let lit: Lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = lit {
-                    args.max = Some(lit_int.base10_parse::<i64>()?);
-                } else {
-                    return Err(syn::Error::new(
-                        lit.span(),
-                        "expected integer literal for `max`",
-                    ));
-                }
+                let expr: Expr = meta.value()?.parse()?;
+                args.max = Some(parse_num_lit_expr(expr)?);
             } else if meta.path.is_ident("starts_with") {
                 let lit = meta.value()?.parse()?;
                 if let Lit::Str(lit_str) = lit {
@@ -290,15 +338,9 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
                 args.alphanumeric = Some(true);
             } else if meta.path.is_ident("multiple_of") {
                 let lit = meta.value()?.parse()?;
-                if let Lit::Int(lit_int) = &lit {
-                    let val = lit_int.base10_parse::<i64>()?;
-                    if val == 0 {
-                        return Err(syn::Error::new(
-                            lit.span(),
-                            "`multiple_of` must be greater than 0",
-                        ));
-                    }
-                    args.multiple_of = Some(val);
+                if let Lit::Int(lit_int) = lit {
+                    litint_strictly_positive(&lit_int)?;
+                    args.multiple_of = Some(lit_int);
                 } else {
                     return Err(syn::Error::new(
                         lit.span(),
@@ -314,4 +356,16 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
     }
 
     Ok(args)
+}
+
+pub fn parse_u128_for_range(lit: &LitInt) -> syn::Result<u128> {
+    lit.base10_digits()
+        .parse::<u128>()
+        .map_err(|e| syn::Error::new(lit.span(), format!("invalid integer literal: {e}")))
+}
+
+pub fn parse_f64_for_range(lit: &LitFloat) -> syn::Result<f64> {
+    lit.base10_digits()
+        .parse::<f64>()
+        .map_err(|e| syn::Error::new(lit.span(), format!("invalid float literal: {e}")))
 }
