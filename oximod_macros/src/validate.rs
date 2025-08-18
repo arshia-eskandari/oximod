@@ -215,7 +215,7 @@ pub fn generate_validate_model_tokens(
         alphanumeric: alphanumeric_option,
         multiple_of: multiple_of_option,
     } = &validate_args;
-    let field_name_str: &str = stringify!(field_ident);
+    let field_name_str: &str = stringify!(#field_ident);
 
     let opt_inner = unwrap_option_type(field_ty);
     let is_optional = opt_inner.is_some();
@@ -254,7 +254,7 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' is required", #field_name_str)
                         ),
-                        concat!("Provide a value for '", stringify!(#field_ident), "'.")
+                        concat!("Provide a value for '", stringify!(#field_ident), "'")
                     ));
                 }
             });
@@ -279,9 +279,8 @@ pub fn generate_validate_model_tokens(
                                 #min_length
                             )
                         ),
-                        concat!(
-                            "Ensure '", stringify!(#field_ident),
-                            "' has at least ", #min_length, " characters."
+                        &format!(
+                            "Ensure '{}' has at least {} characters", stringify!(#field_ident), #min_length
                         )
                     ));
                 }
@@ -307,9 +306,8 @@ pub fn generate_validate_model_tokens(
                                 #max_length
                             )
                         ),
-                        concat!(
-                            "Ensure '", stringify!(#field_ident),
-                            "' has at most ", #max_length, " characters."
+                        &format!(
+                            "Ensure '{}' has at most {} characters", stringify!(#field_ident), #max_length
                         )
                     ));
                 }
@@ -336,7 +334,7 @@ pub fn generate_validate_model_tokens(
                                 ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                     format!("Field '{}' must be a valid email address", #field_name_str)
                                 ),
-                                concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
+                                concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain")
                             ));
                         }
                     }
@@ -346,7 +344,7 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be a valid email address", #field_name_str)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain.")
+                        concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain")
                     ));
                 }
             }
@@ -381,7 +379,7 @@ pub fn generate_validate_model_tokens(
                                     #field_name_str, e
                                 )
                             ),
-                            concat!("Check the regex pattern for '", stringify!(#field_ident), "'.")
+                            concat!("Check the regex pattern for '", stringify!(#field_ident), "'")
                         )
                     })?;
 
@@ -393,9 +391,8 @@ pub fn generate_validate_model_tokens(
                                 #field_name_str
                             )
                         ),
-                        concat!(
-                            "Ensure '", stringify!(#field_ident),
-                            "' matches regex: ", #pattern, "."
+                        &format!(
+                            "Ensure '{}' matches regex {}", stringify!(#field_ident), #pattern
                         )
                     ));
                 }
@@ -417,7 +414,7 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be non-empty", #field_name_str)
                         ),
-                        concat!("Provide a non-empty string for '", stringify!(#field_ident), "'.")
+                        concat!("Provide a non-empty string for '", stringify!(#field_ident), "'")
                     ));
                 }
             });
@@ -439,7 +436,7 @@ pub fn generate_validate_model_tokens(
                     ::oximod::_error::oximod_error::OxiModError::ValidationError(
                         format!("Field '{}' must be positive", #field_name_str)
                     ),
-                    concat!("Use a positive value for '", stringify!(#field_ident), "'.")
+                    concat!("Use a positive value for '", stringify!(#field_ident), "'")
                 ));
             }
         });
@@ -460,7 +457,7 @@ pub fn generate_validate_model_tokens(
                     ::oximod::_error::oximod_error::OxiModError::ValidationError(
                         format!("Field '{}' must be negative", #field_name_str)
                     ),
-                    concat!("Use a negative value for '", stringify!(#field_ident), "'.")
+                    concat!("Use a negative value for '", stringify!(#field_ident), "'")
                 ));
             }
         });
@@ -481,7 +478,7 @@ pub fn generate_validate_model_tokens(
                     ::oximod::_error::oximod_error::OxiModError::ValidationError(
                         format!("Field '{}' must be non-negative", #field_name_str)
                     ),
-                    concat!("Use zero or a positive value for '", stringify!(#field_ident), "'.")
+                    concat!("Use zero or a positive value for '", stringify!(#field_ident), "'")
                 ));
             }
         });
@@ -501,7 +498,9 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be at least {}", #field_name_str, #min)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' is at least ", #min, ".")
+                        &format!(
+                            "Ensure '{}' is at least {}", stringify!(#field_ident), #min
+                        )
                     ));
                 }
             });
@@ -522,7 +521,9 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be at most {}", #field_name_str, #max)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' is at most ", #max, ".")
+                        &format!(
+                            "Ensure '{}' is at most {}", stringify!(#field_ident), #max
+                        )
                     ));
                 }
             });
@@ -543,7 +544,9 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must start with '{}'", #field_name_str, #start)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' starts with '", #start, "'.")
+                        &format!(
+                            "Ensure '{}' starts with {}", stringify!(#field_ident), #start
+                        )
                     ));
                 }
             });
@@ -564,7 +567,9 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must end with '{}'", #field_name_str, #end)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' ends with '", #end, "'.")
+                        &format!(
+                            "Ensure '{}' ends with {}", stringify!(#field_ident), #end
+                        )
                     ));
                 }
             });
@@ -585,7 +590,9 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must include '{}'", #field_name_str, #substr)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' includes '", #substr, "'.")
+                        &format!(
+                            "Ensure '{}' includes {}", stringify!(#field_ident), #substr
+                        )
                     ));
                 }
             });
@@ -606,7 +613,7 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must contain only alphanumeric characters", #field_name_str)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' has only letters and numbers.")
+                        concat!("Ensure '", stringify!(#field_ident), "' has only letters and numbers")
                     ));
                 }
             });
@@ -627,7 +634,9 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must be a multiple of {}", #field_name_str, #multiple)
                         ),
-                        concat!("Ensure '", stringify!(#field_ident), "' is divisible by ", #multiple, ".")
+                        &format!(
+                            "Ensure '{}' is a multiple of {}", stringify!(#field_ident), #multiple
+                        )
                     ));
                 }
             });
