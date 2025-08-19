@@ -233,8 +233,8 @@ fn is_string(ty: &Type) -> bool {
     }
 }
 
-fn is_numeric(ty: &Type) -> bool {
-    !matches!(primitive_of(ty), PrimitiveNum::NonNumeric)
+fn is_numeric(prim: &PrimitiveNum) -> bool {
+    prim != &PrimitiveNum::NonNumeric
 }
 
 fn emit_int_lit(lit: &LitInt, neg: bool) -> TokenStream {
@@ -383,6 +383,11 @@ fn check_float_fits_primitive(span: Span, v: f64, prim: PrimitiveNum) -> Option<
     None
 }
 
+fn is_signed(prim: PrimitiveNum) -> bool {
+    use PrimitiveNum::*;
+    matches!(prim, I8 | I16 | I32 | I64 | I128 | Isize | F32 | F64)
+}
+
 /// Produce a RHS numeric token appropriate for the field's `prim` type from a `LitNum` bound.
 /// - Emits compile_error! into `compile_errors` if the field is non-numeric,
 ///   or the literal doesn't fit the field's primitive.
@@ -447,7 +452,7 @@ fn rhs_for_numeric_bound(
             | PrimitiveNum::U64
             | PrimitiveNum::U128
             | PrimitiveNum::Usize,
-            &LitNum::Float { ref lit, .. },
+            &LitNum::Float { lit: _, .. },
         ) => {
             compile_errors.push(quote_spanned! { field_ident.span() =>
                 compile_error!("float literal is not allowed for integer field in `#[validate(min)]`/`max`");
@@ -498,9 +503,14 @@ fn rhs_for_integer_multiple_of(
             });
             None
         }
-        // Integer primitives
         _ => {
             if let Ok(mag) = parse_u128_for_range(lit) {
+                if mag == 0 {
+                    compile_errors.push(quote_spanned! { lit.span() =>
+                        compile_error!("`multiple_of` must be non-zero");
+                    });
+                    return None;
+                }
                 if let Some(err) = check_int_fits_primitive(lit.span(), false, mag, prim) {
                     compile_errors.push(err);
                     return None;
@@ -510,6 +520,7 @@ fn rhs_for_integer_multiple_of(
         }
     }
 }
+
 /// Generates validation `TokenStream`s for a field based on `ValidateArgs`,
 /// producing compile-time and runtime checks appropriate to the field’s type.
 pub fn generate_validate_model_tokens(
@@ -536,29 +547,22 @@ pub fn generate_validate_model_tokens(
         alphanumeric: alphanumeric_option,
         multiple_of: multiple_of_option,
     } = &validate_args;
-    let field_name_str: &str = stringify!(#field_ident);
+    let field_name_str = field_ident.to_string();
 
     let opt_inner = unwrap_option_type(field_ty);
     let is_optional = opt_inner.is_some();
     let inner_ty = opt_inner.unwrap_or(field_ty);
 
-    // Final output for this field
     let mut checks: Vec<TokenStream> = Vec::new();
 
-    // Per-field accumulators:
-    // - compile-time failures
     let mut compile_errors: Vec<TokenStream> = Vec::new();
-    // - rules that need a bound `val`
     let mut field_rules_val: Vec<TokenStream> = Vec::new();
-    // - rules that directly access self.#field_ident (no `val`)
     let mut field_rules_direct: Vec<TokenStream> = Vec::new();
 
-    // Type gates
     let is_str = is_string(inner_ty);
-    let is_num = is_numeric(inner_ty);
     let prim = primitive_of(inner_ty);
+    let is_num = is_numeric(&prim);
 
-    // --- required ---
     if matches!(required, Some(true)) {
         if !is_optional {
             compile_errors.push(quote_spanned! { field_ident.span() =>
@@ -583,7 +587,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- min_length ---
     if let Some(min_length) = min_length_option {
         if is_type_safe!(
             is_str,
@@ -610,7 +613,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- max_length ---
     if let Some(max_length) = max_length_option {
         if is_type_safe!(
             is_str,
@@ -637,7 +639,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- email ---
     if matches!(email_option, Some(true))
         && is_type_safe!(
             is_str,
@@ -673,7 +674,6 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    // --- pattern (std-only stable OnceLock<Result<Regex, Error>>) ---
     if let Some(pattern) = pattern_option {
         if is_type_safe!(
             is_str,
@@ -722,7 +722,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- non_empty ---
     if let Some(true) = non_empty_option {
         if is_type_safe!(
             is_str,
@@ -743,10 +742,9 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- positive ---
     if matches!(positive_option, Some(true))
         && is_type_safe!(
-            is_num,
+            is_num && is_signed(prim),
             checks,
             field_ident,
             "`#[validate(positive)]` can only be applied to numeric fields"
@@ -764,10 +762,9 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    // --- negative ---
     if matches!(negative_option, Some(true))
         && is_type_safe!(
-            is_num,
+            is_num && is_signed(prim),
             checks,
             field_ident,
             "`#[validate(negative)]` can only be applied to numeric fields"
@@ -785,10 +782,9 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    // --- non_negative ---
     if matches!(non_negative_option, Some(true))
         && is_type_safe!(
-            is_num,
+            is_num && is_signed(prim),
             checks,
             field_ident,
             "`#[validate(non_negative)]` can only be applied to numeric fields"
@@ -806,7 +802,6 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    // --- min ---
     if let Some(min) = min_option {
         if is_type_safe!(
             is_num,
@@ -829,7 +824,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- max ---
     if let Some(max) = max_option {
         if is_type_safe!(
             is_num,
@@ -852,7 +846,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- starts_with ---
     if let Some(start) = starts_with_option {
         if is_type_safe!(
             is_str,
@@ -875,7 +868,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- ends_with ---
     if let Some(end) = ends_with_option {
         if is_type_safe!(
             is_str,
@@ -898,7 +890,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- includes ---
     if let Some(substr) = includes_option {
         if is_type_safe!(
             is_str,
@@ -921,7 +912,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- alphanumeric (ASCII fast path) ---
     if let Some(true) = alphanumeric_option {
         if is_type_safe!(
             is_str,
@@ -942,7 +932,6 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // --- multiple_of ---
     if let Some(multiple) = multiple_of_option {
         if is_type_safe!(
             is_num,
@@ -967,20 +956,14 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    // ---------- EMIT ONCE PER FIELD ----------
-
-    // 1) compile-time failures
     checks.extend(compile_errors);
 
-    // 2) rules that operate directly on self.#field_ident
     if !field_rules_direct.is_empty() {
         checks.push(quote! { { #(#field_rules_direct)* } });
     }
 
-    // 3) rules that need a bound `val` — wrap ONCE with opt_check!
     if !field_rules_val.is_empty() {
         let grouped = opt_check!(is_optional, field_ident, {
-            // (optional) bind a readable name once; zero-cost in release
             #(#field_rules_val)*
         });
         checks.push(grouped);
