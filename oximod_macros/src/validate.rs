@@ -139,7 +139,7 @@ enum PrimitiveNum {
     NonNumeric,
 }
 
-pub fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
+fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
     use PrimitiveNum::*;
     let inner = crate::parsers::unwrap_option_type(ty).unwrap_or(ty);
 
@@ -393,7 +393,7 @@ fn check_float_fits_primitive(span: Span, v: f64, prim: PrimitiveNum) -> Option<
 /// - `parse_u128_for_range`, `parse_f64_for_range`
 /// - `check_int_fits_primitive`, `check_float_fits_primitive`
 /// - `PrimitiveNum` enum + `primitive_of(...)` already in your module
-pub(crate) fn rhs_for_numeric_bound(
+fn rhs_for_numeric_bound(
     prim: PrimitiveNum,
     bound: &LitNum,
     field_ident: &Ident,
@@ -479,7 +479,7 @@ pub(crate) fn rhs_for_numeric_bound(
 /// Produce a RHS integer token for `multiple_of` (integers only).
 /// - Emits compile_error! if field is float or non-numeric, or literal doesn't fit.
 /// - Returns Some(rhs) if OK, None if error.
-pub(crate) fn rhs_for_integer_multiple_of(
+fn rhs_for_integer_multiple_of(
     prim: PrimitiveNum,
     lit: &LitInt,
     field_ident: &Ident,
@@ -592,7 +592,7 @@ pub fn generate_validate_model_tokens(
             "`#[validate(min_length)]` can only be applied to string fields"
         ) {
             field_rules_val.push(quote! {
-                if val.len() > (#min_length as usize) {
+                if val.len() < (#min_length as usize) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!(
@@ -816,7 +816,7 @@ pub fn generate_validate_model_tokens(
         ) {
             if let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors) {
                 field_rules_val.push(quote! {
-                    if *val > #rhs {
+                    if *val < #rhs {
                         return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be at least {}", #field_name_str, #rhs)
