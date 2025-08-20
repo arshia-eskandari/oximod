@@ -357,7 +357,11 @@ fn check_int_fits_primitive(
                 return err("negative bound not allowed for unsigned type");
             }
         }
-        Usize => { /* let rustc enforce target width */ }
+        Usize => {
+            if neg {
+                return err("negative bound not allowed for unsigned type");
+            }
+        }
 
         F32 | F64 | PrimitiveNum::NonNumeric => {}
     }
@@ -388,6 +392,14 @@ fn is_signed(prim: PrimitiveNum) -> bool {
     matches!(prim, I8 | I16 | I32 | I64 | I128 | Isize | F32 | F64)
 }
 
+fn is_integer(prim: PrimitiveNum) -> bool {
+    use PrimitiveNum::*;
+    matches!(
+        prim,
+        I8 | I16 | I32 | I64 | I128 | Isize | U8 | U16 | U32 | U64 | U128 | Usize
+    )
+}
+
 /// Produce a RHS numeric token appropriate for the field's `prim` type from a `LitNum` bound.
 /// - Emits compile_error! into `compile_errors` if the field is non-numeric,
 ///   or the literal doesn't fit the field's primitive.
@@ -405,7 +417,6 @@ fn rhs_for_numeric_bound(
     compile_errors: &mut Vec<TokenStream>,
 ) -> Option<TokenStream> {
     match (prim, bound) {
-        // Non-numeric fields
         (PrimitiveNum::NonNumeric, _) => {
             compile_errors.push(quote_spanned! { field_ident.span() =>
                 compile_error!("`#[validate(min)]`/`max` can only be applied to numeric fields");
@@ -413,7 +424,6 @@ fn rhs_for_numeric_bound(
             None
         }
 
-        // Integer fields + integer literal
         (
             PrimitiveNum::I8
             | PrimitiveNum::I16
@@ -429,16 +439,21 @@ fn rhs_for_numeric_bound(
             | PrimitiveNum::Usize,
             &LitNum::Int { ref lit, neg },
         ) => {
-            if let Ok(mag) = parse_u128_for_range(lit) {
-                if let Some(err) = check_int_fits_primitive(lit.span(), neg, mag, prim) {
-                    compile_errors.push(err);
+            match parse_u128_for_range(lit) {
+                Ok(mag) => {
+                    if let Some(err) = check_int_fits_primitive(lit.span(), neg, mag, prim) {
+                        compile_errors.push(err);
+                        return None;
+                    }
+                }
+                Err(e) => {
+                    compile_errors.push(e.to_compile_error());
                     return None;
                 }
             }
             Some(emit_int_lit(lit, neg))
         }
 
-        // ❗ Integer fields + float literal → reject
         (
             PrimitiveNum::I8
             | PrimitiveNum::I16
@@ -460,12 +475,25 @@ fn rhs_for_numeric_bound(
             None
         }
 
-        // Float fields + integer literal → emit as float
         (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Int { ref lit, neg }) => {
+            if matches!(prim, PrimitiveNum::F32) {
+                match parse_u128_for_range(lit) {
+                    Ok(v) => {
+                        let v = if neg { -(v as f64) } else { v as f64 };
+                        if let Some(err) = check_float_fits_primitive(lit.span(), v, prim) {
+                            compile_errors.push(err);
+                            return None;
+                        }
+                    }
+                    Err(e) => {
+                        compile_errors.push(e.to_compile_error());
+                        return None;
+                    }
+                }
+            }
             Some(emit_float_from_int(lit, neg))
         }
 
-        // Float fields + float literal
         (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Float { ref lit, neg }) => {
             if matches!(prim, PrimitiveNum::F32) {
                 if let Ok(v64) = parse_f64_for_range(lit) {
@@ -747,7 +775,7 @@ pub fn generate_validate_model_tokens(
             is_num && is_signed(prim),
             checks,
             field_ident,
-            "`#[validate(positive)]` can only be applied to numeric fields"
+            "`#[validate(positive)]` can only be applied to integer fields"
         )
     {
         field_rules_val.push(quote! {
@@ -767,7 +795,7 @@ pub fn generate_validate_model_tokens(
             is_num && is_signed(prim),
             checks,
             field_ident,
-            "`#[validate(negative)]` can only be applied to numeric fields"
+            "`#[validate(negative)]` can only be applied to integer fields"
         )
     {
         field_rules_val.push(quote! {
@@ -787,7 +815,7 @@ pub fn generate_validate_model_tokens(
             is_num && is_signed(prim),
             checks,
             field_ident,
-            "`#[validate(non_negative)]` can only be applied to numeric fields"
+            "`#[validate(non_negative)]` can only be applied to integer fields"
         )
     {
         field_rules_val.push(quote! {
@@ -934,10 +962,10 @@ pub fn generate_validate_model_tokens(
 
     if let Some(multiple) = multiple_of_option {
         if is_type_safe!(
-            is_num,
+            is_num && is_integer(prim),
             checks,
             field_ident,
-            "`#[validate(multiple_of)]` can only be applied to numeric fields"
+            "`#[validate(multiple_of)]` can only be applied to integer fields"
         ) {
             if let Some(rhs) =
                 rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
