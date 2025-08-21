@@ -97,6 +97,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             );
 
         impl #name {
+            #[inline(always)]
             fn validate(&self) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
                 use ::oximod::_error::printable::Printable;
                 #(#validations)*
