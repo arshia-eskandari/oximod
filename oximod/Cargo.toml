@@ -18,7 +18,11 @@ oximod_core = { version = "0.1.10", path = "../oximod_core" }
 oximod_macros = { version = "0.1.12", path = "../oximod_macros" }
 serde = "1.0.219"
 futures-util = "0.3.31"
-regex = "1.11.1"
+
+[dependencies.regex]
+version = "1.11.1"
+default-features = false
+features = ["std"]
 
 [dev-dependencies]
 dotenv = "0.15.0"

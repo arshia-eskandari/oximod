@@ -175,44 +175,41 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(pattern)]` can only be applied to string fields"
         ) {
-            let upper_field_name = field_ident.to_string().to_uppercase();
-            let upper_struct_name = struct_ident.to_string().to_uppercase();
-            let re_ident = format_ident!("__OXIMOD_RE_{}_{}", upper_struct_name, upper_field_name);
+            if let Err(e) = ::regex::Regex::new(pattern) {
+                let msg =
+                    format!("Invalid regex pattern in validation for '{field_name_str}': {e}");
+                compile_errors.push(quote_spanned! { field_ident.span() =>
+                    compile_error!(#msg);
+                });
+            } else {
+                let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
 
-            field_rules_val.push(quote! {
-                static #re_ident: ::std::sync::OnceLock<
-                    Result<::oximod::_regex::Regex, ::oximod::_regex::Error>
-                > = ::std::sync::OnceLock::new();
+                let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
 
-                let regex = #re_ident
-                    .get_or_init(|| ::oximod::_regex::Regex::new(#pattern))
-                    .as_ref()
-                    .map_err(|e| {
-                        ::oximod::_attach_printables!(
+                field_rules_val.push(quote! {
+                    #[allow(non_upper_case_globals)]
+                    static #re_ident: ::std::sync::OnceLock<::oximod::_regex::Regex> =
+                        ::std::sync::OnceLock::new();
+
+                    let regex = #re_ident
+                        .get_or_init(|| ::oximod::_regex::Regex::new(#pattern_lit).unwrap());
+
+                    if !regex.is_match(val) {
+                        return Err(::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!(
-                                    "Invalid regex pattern in validation for '{}': {}",
-                                    #field_name_str, e
+                                    "Field '{}' does not match the required pattern",
+                                    #field_name_str
                                 )
                             ),
-                            concat!("Check the regex pattern for '", stringify!(#field_ident), "'")
-                        )
-                    })?;
-
-                if !regex.is_match(val) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!(
-                                "Field '{}' does not match the required pattern",
-                                #field_name_str
+                            concat!(
+                                "Ensure '", stringify!(#field_ident),
+                                "' matches regex ",
                             )
-                        ),
-                        &format!(
-                            "Ensure '{}' matches regex {}", stringify!(#field_ident), #pattern
-                        )
-                    ));
-                }
-            });
+                        ));
+                    }
+                });
+            }
         }
     }
 
