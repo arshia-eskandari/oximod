@@ -1,0 +1,376 @@
+use crate::parsers::{parse_f64_for_range, parse_u128_for_range};
+use crate::validate::args::{LitNum, PrimitiveNum};
+use proc_macro2::{Span, TokenStream};
+use quote::{quote, quote_spanned};
+use syn::{Ident, LitFloat, LitInt, Type};
+
+pub fn is_signed(prim: PrimitiveNum) -> bool {
+    use PrimitiveNum::*;
+    matches!(prim, I8 | I16 | I32 | I64 | I128 | Isize | F32 | F64)
+}
+
+pub fn is_integer(prim: PrimitiveNum) -> bool {
+    use PrimitiveNum::*;
+    matches!(
+        prim,
+        I8 | I16 | I32 | I64 | I128 | Isize | U8 | U16 | U32 | U64 | U128 | Usize
+    )
+}
+
+pub fn is_string(ty: &Type) -> bool {
+    match ty {
+        syn::Type::Path(tp) => tp.path.is_ident("String"),
+        syn::Type::Reference(r) => {
+            matches!(&*r.elem, syn::Type::Path(tp) if tp.path.is_ident("str"))
+        }
+        _ => false,
+    }
+}
+
+pub fn is_numeric(prim: &PrimitiveNum) -> bool {
+    prim != &PrimitiveNum::NonNumeric
+}
+
+pub fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
+    use PrimitiveNum::*;
+    let inner = crate::parsers::unwrap_option_type(ty).unwrap_or(ty);
+
+    let syn::Type::Path(tp) = inner else {
+        return NonNumeric;
+    };
+    let Some(seg) = tp.path.segments.last() else {
+        return NonNumeric;
+    };
+    let id = &seg.ident;
+
+    if id == "i8" {
+        I8
+    } else if id == "i16" {
+        I16
+    } else if id == "i32" {
+        I32
+    } else if id == "i64" {
+        I64
+    } else if id == "i128" {
+        I128
+    } else if id == "isize" {
+        Isize
+    } else if id == "u8" {
+        U8
+    } else if id == "u16" {
+        U16
+    } else if id == "u32" {
+        U32
+    } else if id == "u64" {
+        U64
+    } else if id == "u128" {
+        U128
+    } else if id == "usize" {
+        Usize
+    } else if id == "f32" {
+        F32
+    } else if id == "f64" {
+        F64
+    } else {
+        NonNumeric
+    }
+}
+
+pub fn emit_int_lit(lit: &LitInt, neg: bool) -> TokenStream {
+    if neg {
+        quote! { - #lit }
+    } else {
+        quote! { #lit }
+    }
+}
+
+pub fn emit_float_from_float(lit: &LitFloat, neg: bool) -> TokenStream {
+    if neg {
+        quote! { - #lit }
+    } else {
+        quote! { #lit }
+    }
+}
+
+pub fn emit_float_from_int(lit: &LitInt, neg: bool) -> TokenStream {
+    let s = {
+        let mut s = String::from(lit.base10_digits());
+        if !s.contains('.') {
+            s.push_str(".0");
+        }
+        s
+    };
+    let lf = LitFloat::new(&s, lit.span());
+    if neg {
+        quote! { - #lf }
+    } else {
+        quote! { #lf }
+    }
+}
+
+fn check_int_fits_primitive(
+    span: Span,
+    neg: bool,
+    mag: u128,
+    prim: PrimitiveNum,
+) -> Option<TokenStream> {
+    use PrimitiveNum::*;
+    let err = |msg: &str| Some(quote_spanned! { span => compile_error!(#msg); });
+
+    let fits_signed = |min: i128, max: i128| -> bool {
+        if neg {
+            let m = match i128::try_from(mag) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+            -m >= min && -m <= max
+        } else {
+            let m = match i128::try_from(mag) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+            m >= min && m <= max
+        }
+    };
+    let fits_unsigned = |max: u128| -> bool {
+        if neg {
+            return false;
+        }
+        mag <= max
+    };
+
+    match prim {
+        I8 => {
+            if !fits_signed(i8::MIN as i128, i8::MAX as i128) {
+                return err("numeric bound does not fit `i8`");
+            }
+        }
+        I16 => {
+            if !fits_signed(i16::MIN as i128, i16::MAX as i128) {
+                return err("numeric bound does not fit `i16`");
+            }
+        }
+        I32 => {
+            if !fits_signed(i32::MIN as i128, i32::MAX as i128) {
+                return err("numeric bound does not fit `i32`");
+            }
+        }
+        I64 => {
+            if !fits_signed(i64::MIN as i128, i64::MAX as i128) {
+                return err("numeric bound does not fit `i64`");
+            }
+        }
+        I128 => {
+            if neg {
+                if mag > (i128::MAX as u128) + 1 {
+                    return err("numeric bound does not fit `i128`");
+                }
+            } else if mag > i128::MAX as u128 {
+                return err("numeric bound does not fit `i128`");
+            }
+        }
+        Isize => { /* let rustc enforce target width */ }
+
+        U8 => {
+            if !fits_unsigned(u8::MAX as u128) {
+                return err("numeric bound does not fit `u8`");
+            }
+        }
+        U16 => {
+            if !fits_unsigned(u16::MAX as u128) {
+                return err("numeric bound does not fit `u16`");
+            }
+        }
+        U32 => {
+            if !fits_unsigned(u32::MAX as u128) {
+                return err("numeric bound does not fit `u32`");
+            }
+        }
+        U64 => {
+            if !fits_unsigned(u64::MAX as u128) {
+                return err("numeric bound does not fit `u64`");
+            }
+        }
+        U128 => {
+            if neg {
+                return err("negative bound not allowed for unsigned type");
+            }
+        }
+        Usize => {
+            if neg {
+                return err("negative bound not allowed for unsigned type");
+            }
+        }
+
+        F32 | F64 | PrimitiveNum::NonNumeric => {}
+    }
+    None
+}
+
+fn check_float_fits_primitive(span: Span, v: f64, prim: PrimitiveNum) -> Option<TokenStream> {
+    use PrimitiveNum::*;
+    let err = |msg: &str| Some(quote_spanned! { span => compile_error!(#msg); });
+
+    if !v.is_finite() {
+        return err("float bound must be finite");
+    }
+    match prim {
+        F32 => {
+            if v < f32::MIN as f64 || v > f32::MAX as f64 {
+                return err("float bound does not fit `f32`");
+            }
+        }
+        F64 => { /* any finite f64 is OK */ }
+        _ => {}
+    }
+    None
+}
+
+/// Produce a RHS numeric token appropriate for the field's `prim` type from a `LitNum` bound.
+/// - Emits compile_error! into `compile_errors` if the field is non-numeric,
+///   or the literal doesn't fit the field's primitive.
+/// - Returns Some(rhs_tokens) if OK, None if a compile_error! was emitted.
+///
+/// Requirements:
+/// - `emit_int_lit`, `emit_float_from_int`, `emit_float_from_float`
+/// - `parse_u128_for_range`, `parse_f64_for_range`
+/// - `check_int_fits_primitive`, `check_float_fits_primitive`
+/// - `PrimitiveNum` enum + `primitive_of(...)` already in your module
+pub fn rhs_for_numeric_bound(
+    prim: PrimitiveNum,
+    bound: &LitNum,
+    field_ident: &Ident,
+    compile_errors: &mut Vec<TokenStream>,
+) -> Option<TokenStream> {
+    match (prim, bound) {
+        (PrimitiveNum::NonNumeric, _) => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("`#[validate(min)]`/`max` can only be applied to numeric fields");
+            });
+            None
+        }
+
+        (
+            PrimitiveNum::I8
+            | PrimitiveNum::I16
+            | PrimitiveNum::I32
+            | PrimitiveNum::I64
+            | PrimitiveNum::I128
+            | PrimitiveNum::Isize
+            | PrimitiveNum::U8
+            | PrimitiveNum::U16
+            | PrimitiveNum::U32
+            | PrimitiveNum::U64
+            | PrimitiveNum::U128
+            | PrimitiveNum::Usize,
+            &LitNum::Int { ref lit, neg },
+        ) => {
+            match parse_u128_for_range(lit) {
+                Ok(mag) => {
+                    if let Some(err) = check_int_fits_primitive(lit.span(), neg, mag, prim) {
+                        compile_errors.push(err);
+                        return None;
+                    }
+                }
+                Err(e) => {
+                    compile_errors.push(e.to_compile_error());
+                    return None;
+                }
+            }
+            Some(emit_int_lit(lit, neg))
+        }
+
+        (
+            PrimitiveNum::I8
+            | PrimitiveNum::I16
+            | PrimitiveNum::I32
+            | PrimitiveNum::I64
+            | PrimitiveNum::I128
+            | PrimitiveNum::Isize
+            | PrimitiveNum::U8
+            | PrimitiveNum::U16
+            | PrimitiveNum::U32
+            | PrimitiveNum::U64
+            | PrimitiveNum::U128
+            | PrimitiveNum::Usize,
+            &LitNum::Float { lit: _, .. },
+        ) => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("float literal is not allowed for integer field in `#[validate(min)]`/`max`");
+            });
+            None
+        }
+
+        (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Int { ref lit, neg }) => {
+            if matches!(prim, PrimitiveNum::F32) {
+                match parse_u128_for_range(lit) {
+                    Ok(v) => {
+                        let v = if neg { -(v as f64) } else { v as f64 };
+                        if let Some(err) = check_float_fits_primitive(lit.span(), v, prim) {
+                            compile_errors.push(err);
+                            return None;
+                        }
+                    }
+                    Err(e) => {
+                        compile_errors.push(e.to_compile_error());
+                        return None;
+                    }
+                }
+            }
+            Some(emit_float_from_int(lit, neg))
+        }
+
+        (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Float { ref lit, neg }) => {
+            if matches!(prim, PrimitiveNum::F32) {
+                if let Ok(v64) = parse_f64_for_range(lit) {
+                    let signed = if neg { -v64 } else { v64 };
+                    if let Some(err) = check_float_fits_primitive(lit.span(), signed, prim) {
+                        compile_errors.push(err);
+                        return None;
+                    }
+                }
+            }
+            Some(emit_float_from_float(lit, neg))
+        }
+    }
+}
+
+/// Produce a RHS integer token for `multiple_of` (integers only).
+/// - Emits compile_error! if field is float or non-numeric, or literal doesn't fit.
+/// - Returns Some(rhs) if OK, None if error.
+pub fn rhs_for_integer_multiple_of(
+    prim: PrimitiveNum,
+    lit: &LitInt,
+    field_ident: &Ident,
+    compile_errors: &mut Vec<TokenStream>,
+) -> Option<TokenStream> {
+    match prim {
+        PrimitiveNum::F32 | PrimitiveNum::F64 => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("`#[validate(multiple_of)]` is not allowed on float fields");
+            });
+            None
+        }
+        PrimitiveNum::NonNumeric => {
+            compile_errors.push(quote_spanned! { field_ident.span() =>
+                compile_error!("`#[validate(multiple_of)]` can only be applied to integer fields");
+            });
+            None
+        }
+        _ => {
+            if let Ok(mag) = parse_u128_for_range(lit) {
+                if mag == 0 {
+                    compile_errors.push(quote_spanned! { lit.span() =>
+                        compile_error!("`multiple_of` must be non-zero");
+                    });
+                    return None;
+                }
+                if let Some(err) = check_int_fits_primitive(lit.span(), false, mag, prim) {
+                    compile_errors.push(err);
+                    return None;
+                }
+            }
+            Some(quote! { #lit })
+        }
+    }
+}

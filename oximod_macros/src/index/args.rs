@@ -1,0 +1,73 @@
+#[derive(Default, Debug)]
+/// Arguments for creating an index on a field in a MongoDB collection.
+///
+/// This struct is populated from the `#[index(...)]` attribute
+/// and specifies the behavior of the index.
+///
+/// # Fields
+///
+/// - `unique`: (Optional) Whether the index enforces a unique constraint.
+///   - If `true`, MongoDB will reject documents that cause duplicate values for the indexed field.
+///   - Default: `false`
+///
+/// - `sparse`: (Optional) Whether the index skips documents that are missing the field.
+///   - If `true`, documents that do not have the indexed field will not be included in the index.
+///   - Default: `false`
+///
+/// - `name`: (Optional) The custom name for the index.
+///   - Useful for identifying indexes manually.
+///   - If not provided, MongoDB will generate a default name.
+///
+/// - `background`: (Optional) Whether the index is built in the background.
+///   - If `true`, index creation does not block database operations.
+///   - Default: `false`
+///
+/// - `order`: (Optional) The order of the index.
+///   - `1` for ascending order, `-1` for descending order.
+///   - Default: `1`
+///
+/// - `expire_after_secs`: (Optional) The time-to-live (TTL) for the index.
+///   - If set, documents will be automatically deleted after the specified number of seconds.
+///   - If not provided, documents will not automatically expire.
+///
+/// - `version`: (Optional) The version of the index structure to use.
+///   - Applies to standard indexes (e.g., B-tree).
+///   - Most common values are `1` or `2`; `Custom(N)` can also be specified.
+///   - Only meaningful for certain index types; may be ignored for default scalar indexes.
+///
+/// - `text_index_version`: (Optional) The version of the text index structure to use.
+///   - Applies only to `text` indexes.
+///   - Supported values include `1`, `2`, and `3`, or `Custom(N)`.
+///   - Use this to explicitly control MongoDB's text indexing behavior.
+///
+/// - `hidden`: (Optional) Whether the index is hidden from the query planner.
+///   - If `true`, the index exists but will not be used by the query planner unless explicitly hinted.
+///   - Useful for testing or safely rolling out new indexes.
+///   - Default: `false`
+///
+/// # Example
+///
+/// ```rust
+/// #[index(unique = true, sparse = true, name = "email_idx", background = true, order = -1)]
+/// email: String,
+/// ```
+///
+/// # Notes
+/// - These fields **can be combined freely** — for example, you can have an index that is both `unique` and `sparse`.
+/// - MongoDB allows combining `unique`, `sparse`, and `background`.
+/// - The `name` field is just metadata and does not conflict with others.
+/// - Version fields are **optional** and typically only needed for compatibility or performance tuning.
+/// - `text_index_version` is only applicable if the index type is explicitly `text`.
+/// - ⚠️ If both `order` and `text_index_version` are provided, `order` will be ignored.
+///
+pub struct IndexArgs {
+    pub unique: Option<bool>,
+    pub sparse: Option<bool>,
+    pub name: Option<String>,
+    pub background: Option<bool>,
+    pub order: Option<i32>,
+    pub expire_after_secs: Option<i32>,
+    pub version: Option<u32>,
+    pub text_index_version: Option<u32>,
+    pub hidden: Option<bool>,
+}
