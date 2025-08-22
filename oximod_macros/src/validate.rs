@@ -52,6 +52,9 @@ pub fn generate_validate_model_tokens(
     let mut compile_errors: Vec<TokenStream> = Vec::new();
     let mut field_rules_val: Vec<TokenStream> = Vec::new();
     let mut field_rules_direct: Vec<TokenStream> = Vec::new();
+    let mut min_rhs_ts: Option<TokenStream> = None;
+    let mut max_rhs_ts: Option<TokenStream> = None;
+    let mut numeric_checks: Vec<TokenStream> = Vec::new();
 
     let is_str = is_string(inner_ty);
     let prim = primitive_of(inner_ty);
@@ -290,50 +293,6 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    if let Some(min) = min_option {
-        if is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(min)]` can only be applied to numeric fields"
-        ) {
-            if let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors) {
-                field_rules_val.push(quote! {
-                    if *val < #rhs {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be at least {}", #field_name_str, #rhs)
-                            ),
-                            &format!("Ensure '{}' is at least {}", stringify!(#field_ident), #rhs)
-                        ));
-                    }
-                });
-            }
-        }
-    }
-
-    if let Some(max) = max_option {
-        if is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(max)]` can only be applied to numeric fields"
-        ) {
-            if let Some(rhs) = rhs_for_numeric_bound(prim, max, field_ident, &mut compile_errors) {
-                field_rules_val.push(quote! {
-                    if *val > #rhs {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be at most {}", #field_name_str, #rhs)
-                            ),
-                            &format!("Ensure '{}' is at most {}", stringify!(#field_ident), #rhs)
-                        ));
-                    }
-                });
-            }
-        }
-    }
-
     if let Some(start) = starts_with_option {
         if is_type_safe!(
             is_str,
@@ -420,6 +379,58 @@ pub fn generate_validate_model_tokens(
         }
     }
 
+    if let Some(min) = min_option {
+        if is_type_safe!(
+            is_num,
+            checks,
+            field_ident,
+            "`#[validate(min)]` can only be applied to numeric fields"
+        ) {
+            if let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors) {
+                min_rhs_ts = Some(rhs);
+            }
+        }
+    }
+
+    if let Some(max) = max_option {
+        if is_type_safe!(
+            is_num,
+            checks,
+            field_ident,
+            "`#[validate(max)]` can only be applied to numeric fields"
+        ) {
+            if let Some(rhs) = rhs_for_numeric_bound(prim, max, field_ident, &mut compile_errors) {
+                max_rhs_ts = Some(rhs);
+            }
+        }
+    }
+
+    if let Some(min_rhs) = &min_rhs_ts {
+        numeric_checks.push(quote! {
+            if v < #min_rhs {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be at least {}", #field_name_str, #min_rhs)
+                    ),
+                    &format!("Ensure '{}' is at least {}", stringify!(#field_ident), #min_rhs)
+                ));
+            }
+        });
+    }
+
+    if let Some(max_rhs) = &max_rhs_ts {
+        numeric_checks.push(quote! {
+            if v > #max_rhs {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be at most {}", #field_name_str, #max_rhs)
+                    ),
+                    &format!("Ensure '{}' is at most {}", stringify!(#field_ident), #max_rhs)
+                ));
+            }
+        });
+    }
+
     if let Some(multiple) = multiple_of_option {
         if is_type_safe!(
             is_num && is_integer(prim),
@@ -430,20 +441,50 @@ pub fn generate_validate_model_tokens(
             if let Some(rhs) =
                 rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
             {
-                field_rules_val.push(quote! {
-            if (*val % #rhs) != 0 {
-                return Err(::oximod::_attach_printables!(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
-                    ),
-                    &format!("Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs)
-                ));
-            }
-        });
+                let mut used_mask = false;
+
+                if !is_signed(prim) {
+                    if let Ok(mag) = crate::parsers::parse_u128_for_range(multiple) {
+                        if mag != 0 && (mag & (mag - 1)) == 0 {
+                            let mask = mag - 1;
+                            let mask_lit = syn::LitInt::new(&mask.to_string(), multiple.span());
+
+                            numeric_checks.push(quote! {
+                            if (v & #mask_lit) != 0 {
+                                return Err(::oximod::_attach_printables!(
+                                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                        format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                                    ),
+                                    &format!("Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs)
+                                ));
+                            }
+                        });
+                            used_mask = true;
+                        }
+                    }
+                }
+
+                if !used_mask {
+                    numeric_checks.push(quote! {
+                    if (v % #rhs) != 0 {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                            ),
+                            &format!("Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs)
+                        ));
+                    }
+                });
+                }
             }
         }
     }
-
+    if !numeric_checks.is_empty() {
+        field_rules_val.push(quote! {
+            let v = *val;
+            #(#numeric_checks)*
+        });
+    }
     checks.extend(compile_errors);
 
     if !field_rules_direct.is_empty() {
