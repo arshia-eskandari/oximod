@@ -141,29 +141,26 @@ pub fn generate_validate_model_tokens(
             "`#[validate(email)]` can only be applied to string fields"
         )
     {
+        let re_ident = format_ident!("__oximod_email_re_{}_{}", struct_ident, field_ident);
+        let email_pat = syn::LitStr::new(
+            r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+            field_ident.span(),
+        );
+
         field_rules_val.push(quote! {
-            match val.split_once('@') {
-                Some((local, domain)) if !local.is_empty() && !domain.is_empty() => {
-                    match domain.rsplit_once('.') {
-                        Some((lhs, rhs)) if !lhs.is_empty() && !rhs.is_empty() => { /* OK */ }
-                        _ => {
-                            return Err(::oximod::_attach_printables!(
-                                ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                    format!("Field '{}' must be a valid email address", #field_name_str)
-                                ),
-                                concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain")
-                            ));
-                        }
-                    }
-                }
-                _ => {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be a valid email address", #field_name_str)
-                        ),
-                        concat!("Ensure '", stringify!(#field_ident), "' is in the format local@domain")
-                    ));
-                }
+            #[allow(non_upper_case_globals)]
+            static #re_ident: ::std::sync::OnceLock<::oximod::_regex::Regex> =
+                ::std::sync::OnceLock::new();
+
+            let __re = #re_ident.get_or_init(|| ::oximod::_regex::Regex::new(#email_pat).unwrap());
+
+            if !__re.is_match(val) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must be a valid email address", #field_name_str)
+                    ),
+                    "Use an address like name@example.com"
+                ));
             }
         });
     }

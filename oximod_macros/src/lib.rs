@@ -104,6 +104,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 Ok(())
             }
 
+            #[cold]
+            #[inline(never)]
             async fn _create_indexes(
                 collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
             ) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
@@ -129,13 +131,17 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .await
             }
 
+            #[inline]
             pub fn new() -> Self {
                 #name {
                     #(#inits),*
                 }
             }
 
-            #(#setters)*
+            #(
+                #[inline]
+                #setters
+            )*
         }
 
         impl ::std::default::Default for #name {
