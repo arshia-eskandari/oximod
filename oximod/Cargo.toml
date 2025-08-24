@@ -28,3 +28,6 @@ features = ["std"]
 dotenv = "0.15.0"
 testresult = "0.4.1"
 tokio = { version = "1.43.0", features = ["full"] }
+
+[features]
+debug-print = ["oximod_core/debug-print"]

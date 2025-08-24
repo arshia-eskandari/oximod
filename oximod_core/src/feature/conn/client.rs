@@ -1,4 +1,4 @@
-use crate::{attach_printables, error::oximod_error::OxiModError, Printable};
+use crate::{attach_printables, error::oximod_error::OxiModError};
 use mongodb::Client;
 use std::sync::{Arc, OnceLock};
 

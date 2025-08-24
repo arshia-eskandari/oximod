@@ -99,7 +99,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         impl #name {
             #[inline(always)]
             fn validate(&self) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
-                use ::oximod::_error::printable::Printable;
                 #(#validations)*
                 Ok(())
             }
@@ -109,7 +108,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn _create_indexes(
                 collection: &::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>
             ) -> Result<(), ::oximod::_error::oximod_error::OxiModError> {
-                use ::oximod::_error::printable::Printable;
 
                 #index_once_async_ident
                     .run_once(|| async move {
@@ -121,7 +119,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                             collection.create_indexes(indexes).await.map_err(|e| {
                                 ::oximod::_attach_printables!(
                                     ::oximod::_error::oximod_error::OxiModError::IndexError(e.to_string()),
-                                    "Failed to create indexes on the collection."
+                                    @static "Failed to create indexes on the collection."
                                 )
                             })?;
                         }
@@ -164,19 +162,18 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 self.validate()?;
                 let collection = Self::get_collection()?;
                 Self::_create_indexes(&collection).await?;
-                use ::oximod::_error::printable::Printable;
 
                 let document = ::oximod::_mongodb::bson::to_document(&self).map_err(|e| {
                     ::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::SerializationError(e.to_string()),
-                        "Failed to serialize model. Are all field types supported by bson::to_document()?"
+                        @static "Failed to serialize model. Are all field types supported by bson::to_document()?"
                     )
                 })?;
 
                 let result = collection.insert_one(document).await.map_err(|e| {
                     ::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                        "Failed to insert document. Check if the mongodb server is reachable and the collection exists."
+                        @static "Failed to insert document. Check if the mongodb server is reachable and the collection exists."
                     )
                 })?;
 
@@ -184,7 +181,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     Some(id) => Ok(id),
                     None => Err( ::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::SerializationError("inserted_id is not an ObjectId".to_string()),
-                        "Expected inserted_id to be an ObjectId but received something else. This may happen if you're using a custom _id."
+                        @static "Expected inserted_id to be an ObjectId but received something else. This may happen if you're using a custom _id."
                     ))
                 }
             }
@@ -194,7 +191,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 update: impl Into<::oximod::_mongodb::bson::Document> + Send
             ) -> Result<::oximod::_mongodb::results::UpdateResult, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
 
                 let result = collection
@@ -203,7 +199,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to update documents. Check your update operators and filter structure."
+                            @static "Failed to update documents. Check your update operators and filter structure."
                         )
                     })?;
 
@@ -215,7 +211,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 update: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::UpdateResult, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
 
                 let result = collection
@@ -224,7 +219,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to update a document. Make sure your update syntax is valid and the filter matches at least one document."
+                            @static "Failed to update a document. Make sure your update syntax is valid and the filter matches at least one document."
                         )
                     })?;
 
@@ -235,7 +230,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
 
                 let result = collection
@@ -244,7 +238,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to delete documents. Ensure your filter is valid and matches the correct documents."
+                            @static "Failed to delete documents. Ensure your filter is valid and matches the correct documents."
                         )
                     })?;
 
@@ -255,7 +249,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
 
                 let result = collection
@@ -264,7 +257,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to delete a single document. Ensure your filter is valid and matches the correct document."
+                            @static "Failed to delete a single document. Ensure your filter is valid and matches the correct document."
                         )
                     })?;
 
@@ -278,7 +271,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 Self: Sized,
             {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
 
                 let mut cursor = collection
@@ -287,7 +279,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to execute find query. Double-check your filter syntax or collection state."
+                            @static "Failed to execute find query. Double-check your filter syntax or collection state."
                         )
                     })?;
 
@@ -297,14 +289,14 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     let doc = doc.map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Cursor failed to retrieve a document. This may indicate a deserialization or network error mid-stream."
+                            @static "Cursor failed to retrieve a document. This may indicate a deserialization or network error mid-stream."
                         )
                     })?;
 
                     let parsed = ::oximod::_mongodb::bson::from_document(doc).map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::SerializationError(e.to_string()),
-                            "Failed to deserialize document into model. Check field types and optionality."
+                            @static "Failed to deserialize document into model. Check field types and optionality."
                         )
                     })?;
 
@@ -321,7 +313,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 Self: Sized,
             {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
 
                 let result = collection
@@ -330,7 +321,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to run find_one query. Ensure your filter is structured properly and the collection is accessible."
+                            @static "Failed to run find_one query. Ensure your filter is structured properly and the collection is accessible."
                         )
                     })?;
 
@@ -339,7 +330,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         let parsed = ::oximod::_mongodb::bson::from_document(doc).map_err(|e| {
                             ::oximod::_attach_printables!(
                                 ::oximod::_error::oximod_error::OxiModError::SerializationError(e.to_string()),
-                                "Could not deserialize document into model. Check for type mismatches or missing #[serde] attributes."
+                                @static "Could not deserialize document into model. Check for type mismatches or missing #[serde] attributes."
                             )
                         })?;
                         Ok(Some(parsed))
@@ -354,12 +345,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             where
                 Self: Sized,
             {
-                use ::oximod::_error::printable::Printable;
 
                 Self::find_one(::oximod::_mongodb::bson::doc! { "_id": id }).await.map_err(|e| {
                     ::oximod::_attach_printables!(
                         e,
-                        "Failed to find document by _id. Confirm the ID is valid and the document exists."
+                        @static "Failed to find document by _id. Confirm the ID is valid and the document exists."
                     )
                 })
             }
@@ -368,12 +358,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 id: ::oximod::_mongodb::bson::oid::ObjectId,
                 update: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<::oximod::_mongodb::results::UpdateResult, ::oximod::_error::oximod_error::OxiModError> {
-                use ::oximod::_error::printable::Printable;
 
                 Self::update_one(::oximod::_mongodb::bson::doc! { "_id": id }, update).await.map_err(|e| {
                     ::oximod::_attach_printables!(
                         e,
-                        "Failed to update document by _id. Check if the document exists and if your update operators are valid."
+                        @static "Failed to update document by _id. Check if the document exists and if your update operators are valid."
                     )
                 })
             }
@@ -381,12 +370,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn delete_by_id(
                 id: ::oximod::_mongodb::bson::oid::ObjectId,
             ) -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OxiModError> {
-                use ::oximod::_error::printable::Printable;
 
                 Self::delete_one(::oximod::_mongodb::bson::doc! { "_id": id }).await.map_err(|e| {
                     ::oximod::_attach_printables!(
                         e,
-                        "Failed to delete document by _id. Ensure the ID is correct and that the document exists."
+                        @static "Failed to delete document by _id. Ensure the ID is correct and that the document exists."
                     )
                 })
             }
@@ -395,7 +383,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<u64, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
                 let count = collection
                     .count_documents(filter.into())
@@ -403,7 +390,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to count documents. Make sure the filter is well-formed and the collection is accessible."
+                            @static "Failed to count documents. Make sure the filter is well-formed and the collection is accessible."
                         )
                     })?;
 
@@ -413,21 +400,19 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             async fn exists(
                 filter: impl Into<::oximod::_mongodb::bson::Document> + Send,
             ) -> Result<bool, ::oximod::_error::oximod_error::OxiModError> {
-                use ::oximod::_error::printable::Printable;
 
                 Self::find_one(filter).await
                     .map(|opt| opt.is_some())
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             e,
-                            "Failed to check document existence. Make sure your filter is valid and your connection is healthy."
+                            @static "Failed to check document existence. Make sure your filter is valid and your connection is healthy."
                         )
                     })
             }
 
             async fn clear() -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
                 let result = collection
                     .delete_many(::oximod::_mongodb::bson::doc! {})
@@ -435,7 +420,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .map_err(|e| {
                         ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::ConnectionError(e.to_string()),
-                            "Failed to clear the collection. Ensure the mongodb connection is valid and the collection is writable."
+                            @static "Failed to clear the collection. Ensure the mongodb connection is valid and the collection is writable."
                         )
                     })?;
 
@@ -446,12 +431,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 pipeline: impl Into<Vec<::oximod::_mongodb::bson::Document>> + Send
             ) -> Result<::oximod::_mongodb::Cursor<oximod::_mongodb::bson::Document>, ::oximod::_error::oximod_error::OxiModError> {
                 let collection = Self::get_collection()?;
-                use ::oximod::_error::printable::Printable;
 
                 let result = collection.aggregate(pipeline.into()).await.map_err(|e| {
                     ::oximod::_attach_printables!(
                             ::oximod::_error::oximod_error::OxiModError::AggregationError(e.to_string()),
-                            "Failed to aggregate. Ensure your pipeline is valid and the collection is readable."
+                            @static "Failed to aggregate. Ensure your pipeline is valid and the collection is readable."
                     )
                 })?;
 
