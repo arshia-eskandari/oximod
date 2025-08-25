@@ -230,3 +230,30 @@ async fn creates_indexes_correctly_fails_on_duplicate() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run index_init_respects_overridden_retry_and_timeout
+#[tokio::test]
+async fn index_init_respects_overridden_retry_and_timeout() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("index_init_overrides")]
+    #[index_max_retries(7)]
+    #[index_max_init_seconds(45)]
+    pub struct UserOverride {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(name = "overrides_name_idx")]
+        name: String,
+    }
+
+    UserOverride::clear().await?;
+
+    let doc = UserOverride::default().name("User1".to_string());
+    let result = doc.save().await?;
+    assert_ne!(result, ObjectId::default());
+
+    Ok(())
+}
