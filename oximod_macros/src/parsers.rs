@@ -2,6 +2,7 @@ use crate::{
     index::IndexArgs,
     validate::{LitNum, ValidateArgs},
 };
+use proc_macro2::TokenStream;
 use std::fmt::Display;
 use std::str::FromStr;
 use syn::{
@@ -160,7 +161,7 @@ pub fn lit_from_attr(attr: &Attribute) -> syn::Result<Lit> {
 ///
 /// Works for `String` and numeric primitives (u*/i*/f*), i.e., any `T` that
 /// implements `FromStr`.
-pub fn parse_attr_value<T>(attr: &Attribute, msg: Option<&str>) -> syn::Result<T>
+fn parse_attr_value<T>(attr: &Attribute, msg: Option<&str>) -> syn::Result<T>
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -368,4 +369,14 @@ pub fn parse_f64_for_range(lit: &LitFloat) -> syn::Result<f64> {
     lit.base10_digits()
         .parse::<f64>()
         .map_err(|e| syn::Error::new(lit.span(), format!("invalid float literal: {e}")))
+}
+
+/// Parses a single-value attribute into type `T` and converts any parse errors
+/// into a compile error token stream.
+pub fn parse_attr_value_ts<T>(attr: &Attribute, msg: Option<&str>) -> Result<T, TokenStream>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    parse_attr_value::<T>(attr, msg).map_err(|e| e.to_compile_error())
 }

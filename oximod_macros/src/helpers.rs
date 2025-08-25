@@ -1,10 +1,11 @@
 use crate::default::{push_field_setter, push_id_setter};
 use crate::index::generate_index_model_tokens;
-use crate::parsers::{parse_attr_value, parse_default_expr, parse_index_args, parse_validate_args};
+use crate::parsers::{
+    parse_attr_value_ts, parse_default_expr, parse_index_args, parse_validate_args,
+};
 use crate::validate::generate_validate_model_tokens;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use std::{fmt::Display, str::FromStr};
 use syn::{spanned::Spanned, Attribute, DeriveInput};
 
 /// Generates a compile error token stream for a missing required attribute,
@@ -15,16 +16,6 @@ fn missing_attr_ts(attrs: &[Attribute], msg: &str) -> TokenStream {
     } else {
         syn::Error::new(Span::call_site(), msg).to_compile_error()
     }
-}
-
-/// Parses a single-value attribute into type `T` and converts any parse errors
-/// into a compile error token stream.
-fn parse_attr_value_ts<T>(attr: &Attribute, msg: Option<&str>) -> Result<T, TokenStream>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Display,
-{
-    parse_attr_value::<T>(attr, msg).map_err(|e| e.to_compile_error())
 }
 
 /// Collects and validates top-level model attributes, returning core model
