@@ -41,7 +41,7 @@ pub fn generate_validate_model_tokens(
         alphanumeric: alphanumeric_option,
         multiple_of: multiple_of_option,
     } = &validate_args;
-    let field_name_str = field_ident.to_string();
+    let field_name_str = stringify!(#field_ident);
 
     let opt_inner = unwrap_option_type(field_ty);
     let is_optional = opt_inner.is_some();
@@ -101,9 +101,8 @@ pub fn generate_validate_model_tokens(
                                 #min_length
                             )
                         ),
-                        @static &format!(
+                        @fmt
                             "Ensure '{}' has at least {} characters", stringify!(#field_ident), #min_length
-                        )
                     ));
                 }
             });
@@ -127,9 +126,8 @@ pub fn generate_validate_model_tokens(
                                 #max_length
                             )
                         ),
-                        @static &format!(
+                        @fmt
                             "Ensure '{}' has at most {} characters", stringify!(#field_ident), #max_length
-                        )
                     ));
                 }
             });
@@ -202,10 +200,7 @@ pub fn generate_validate_model_tokens(
                                     #field_name_str
                                 )
                             ),
-                            @static concat!(
-                                "Ensure '", stringify!(#field_ident),
-                                "' matches regex ",
-                            )
+                            @fmt "Ensure '{}' matches regex {}", stringify!(#field_ident), #pattern_lit
                         ));
                     }
                 });
@@ -306,9 +301,8 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must start with '{}'", #field_name_str, #start)
                         ),
-                        @static &format!(
+                        @fmt
                             "Ensure '{}' starts with {}", stringify!(#field_ident), #start
-                        )
                     ));
                 }
             });
@@ -328,9 +322,8 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must end with '{}'", #field_name_str, #end)
                         ),
-                        @static &format!(
+                        @fmt
                             "Ensure '{}' ends with {}", stringify!(#field_ident), #end
-                        )
                     ));
                 }
             });
@@ -350,9 +343,8 @@ pub fn generate_validate_model_tokens(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
                             format!("Field '{}' must include '{}'", #field_name_str, #substr)
                         ),
-                        @static &format!(
+                        @fmt
                             "Ensure '{}' includes {}", stringify!(#field_ident), #substr
-                        )
                     ));
                 }
             });
@@ -412,7 +404,7 @@ pub fn generate_validate_model_tokens(
                     ::oximod::_error::oximod_error::OxiModError::ValidationError(
                         format!("Field '{}' must be at least {}", #field_name_str, #min_rhs)
                     ),
-                    @static &format!("Ensure '{}' is at least {}", stringify!(#field_ident), #min_rhs)
+                    @fmt "Ensure '{}' is at least {}", stringify!(#field_ident), #min_rhs
                 ));
             }
         });
@@ -425,7 +417,7 @@ pub fn generate_validate_model_tokens(
                     ::oximod::_error::oximod_error::OxiModError::ValidationError(
                         format!("Field '{}' must be at most {}", #field_name_str, #max_rhs)
                     ),
-                    @static &format!("Ensure '{}' is at most {}", stringify!(#field_ident), #max_rhs)
+                    @fmt "Ensure '{}' is at most {}", stringify!(#field_ident), #max_rhs
                 ));
             }
         });
@@ -455,7 +447,7 @@ pub fn generate_validate_model_tokens(
                                     ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                         format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
                                     ),
-                                    @static &format!("Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs)
+                                    @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
                                 ));
                             }
                         });
@@ -471,7 +463,7 @@ pub fn generate_validate_model_tokens(
                             ::oximod::_error::oximod_error::OxiModError::ValidationError(
                                 format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
                             ),
-                            @static &format!("Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs)
+                            @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
                         ));
                     }
                 });

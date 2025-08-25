@@ -4,11 +4,13 @@ use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::{Ident, LitFloat, LitInt, Type};
 
+#[inline]
 pub fn is_signed(prim: PrimitiveNum) -> bool {
     use PrimitiveNum::*;
     matches!(prim, I8 | I16 | I32 | I64 | I128 | Isize | F32 | F64)
 }
 
+#[inline]
 pub fn is_integer(prim: PrimitiveNum) -> bool {
     use PrimitiveNum::*;
     matches!(
@@ -17,20 +19,31 @@ pub fn is_integer(prim: PrimitiveNum) -> bool {
     )
 }
 
+#[inline]
 pub fn is_string(ty: &Type) -> bool {
     match ty {
-        syn::Type::Path(tp) => tp.path.is_ident("String"),
-        syn::Type::Reference(r) => {
-            matches!(&*r.elem, syn::Type::Path(tp) if tp.path.is_ident("str"))
-        }
+        Type::Path(tp) => tp.path.is_ident("String")
+            || tp.path.is_ident("Cow") // Cow<'_, str>
+                && tp.path.segments.last().map_or(false, |seg| {
+                    if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
+                        ab.args.iter().any(|arg| matches!(arg,
+                            syn::GenericArgument::Type(syn::Type::Path(p)) if p.path.is_ident("str")))
+                    } else { false }
+                }),
+        Type::Reference(r) => match &*r.elem {
+            Type::Path(tp) => tp.path.is_ident("str") || tp.path.is_ident("String"),
+            _ => false,
+        },
         _ => false,
     }
 }
 
+#[inline]
 pub fn is_numeric(prim: &PrimitiveNum) -> bool {
     prim != &PrimitiveNum::NonNumeric
 }
 
+#[inline]
 pub fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
     use PrimitiveNum::*;
     let inner = crate::parsers::unwrap_option_type(ty).unwrap_or(ty);
@@ -76,6 +89,7 @@ pub fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
     }
 }
 
+#[inline]
 pub fn emit_int_lit(lit: &LitInt, neg: bool) -> TokenStream {
     if neg {
         quote! { - #lit }
@@ -84,6 +98,7 @@ pub fn emit_int_lit(lit: &LitInt, neg: bool) -> TokenStream {
     }
 }
 
+#[inline]
 pub fn emit_float_from_float(lit: &LitFloat, neg: bool) -> TokenStream {
     if neg {
         quote! { - #lit }
@@ -92,20 +107,16 @@ pub fn emit_float_from_float(lit: &LitFloat, neg: bool) -> TokenStream {
     }
 }
 
-pub fn emit_float_from_int(lit: &LitInt, neg: bool) -> TokenStream {
-    let s = {
-        let mut s = String::from(lit.base10_digits());
-        if !s.contains('.') {
-            s.push_str(".0");
-        }
-        s
-    };
-    let lf = LitFloat::new(&s, lit.span());
-    if neg {
-        quote! { - #lf }
+#[inline]
+fn emit_float_from_mag(span: Span, mag: u128, neg: bool) -> TokenStream {
+    // decimal string regardless of original literal radix; add ".0"
+    let s = if neg {
+        format!("-{mag}.0")
     } else {
-        quote! { #lf }
-    }
+        format!("{mag}.0")
+    };
+    let lf = LitFloat::new(&s, span);
+    quote! { #lf }
 }
 
 fn check_int_fits_primitive(
@@ -302,22 +313,23 @@ pub fn rhs_for_numeric_bound(
         }
 
         (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Int { ref lit, neg }) => {
+            let mag = match parse_u128_for_range(lit) {
+                Ok(v) => v,
+                Err(e) => {
+                    compile_errors.push(e.to_compile_error());
+                    return None;
+                }
+            };
+
             if matches!(prim, PrimitiveNum::F32) {
-                match parse_u128_for_range(lit) {
-                    Ok(v) => {
-                        let v = if neg { -(v as f64) } else { v as f64 };
-                        if let Some(err) = check_float_fits_primitive(lit.span(), v, prim) {
-                            compile_errors.push(err);
-                            return None;
-                        }
-                    }
-                    Err(e) => {
-                        compile_errors.push(e.to_compile_error());
-                        return None;
-                    }
+                let signed = if neg { -(mag as f64) } else { mag as f64 };
+                if let Some(err) = check_float_fits_primitive(lit.span(), signed, prim) {
+                    compile_errors.push(err);
+                    return None;
                 }
             }
-            Some(emit_float_from_int(lit, neg))
+
+            Some(emit_float_from_mag(lit.span(), mag, neg))
         }
 
         (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Float { ref lit, neg }) => {
