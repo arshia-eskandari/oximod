@@ -5,7 +5,7 @@ mod index;
 mod parsers;
 mod validate;
 
-use helpers::{collect_field_info, collect_model_attrs, setup_setters};
+use helpers::{collect_model_attrs, generate_field_tokens};
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
@@ -56,8 +56,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let index_once_async_ident = Ident::new(&format!("INDEX_INIT_{name}"), Span::call_site());
 
-    let mut all_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
-    let mut has_id_attr = false;
     let mut setters = Vec::new();
     let mut validations = Vec::new();
     let mut indexes = Vec::new();
@@ -69,22 +67,13 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             Err(err_tokens) => return err_tokens.into(),
         };
 
-    if let Err(e) = collect_field_info(
+    if let Err(e) = generate_field_tokens(
         &input,
-        &mut all_fields,
-        &mut has_id_attr,
         &mut indexes,
         &mut validations,
         &mut inits,
-    ) {
-        return e.into();
-    }
-
-    if let Err(e) = setup_setters(
-        has_id_attr,
-        &all_fields,
         &mut setters,
-        document_id_setter_ident.clone(),
+        &document_id_setter_ident,
     ) {
         return e.into();
     }

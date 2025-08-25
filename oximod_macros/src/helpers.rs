@@ -1,11 +1,11 @@
-use crate::default::{push_field_setters, push_id_setter};
+use crate::default::{push_field_setter, push_id_setter};
 use crate::index::generate_index_model_tokens;
 use crate::parsers::{parse_attr_value, parse_default_expr, parse_index_args, parse_validate_args};
 use crate::validate::generate_validate_model_tokens;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::{fmt::Display, str::FromStr};
-use syn::{spanned::Spanned, Attribute, DeriveInput, Ident, Type};
+use syn::{spanned::Spanned, Attribute, DeriveInput};
 
 /// Generates a compile error token stream for a missing required attribute,
 /// using the first attribute's span if available or the call site otherwise.
@@ -84,16 +84,29 @@ pub fn collect_model_attrs(
     ))
 }
 
-/// Extracts field identifiers and types, processes supported field-level
-/// attributes (e.g., `#[index]`, `#[validate]`, `#[default]`), and generates
-/// associated token streams for indexes, validations, and initializations.
-pub fn collect_field_info(
+/// Processes all fields of a struct annotated with `#[derive(Model)]`,
+/// expanding supported field-level attributes into token streams used
+/// for the generated implementation.
+///
+/// Specifically:
+/// - Inserts setter functions for each field (special-casing `_id`).
+/// - Expands `#[index(...)]` attributes into index model tokens.
+/// - Expands `#[validate(...)]` attributes into validation tokens.
+/// - Expands `#[default = "..."]` attributes into custom initialization
+///   expressions (falling back to `Default::default()` otherwise).
+/// - Collects all generated tokens into the provided vectors for
+///   setters, indexes, validations, and initializations.
+///
+/// # Errors
+/// Returns a `TokenStream` error if the macro target is not a struct
+/// or if any attribute arguments fail to parse.
+pub fn generate_field_tokens(
     input: &DeriveInput,
-    all_fields: &mut Vec<(Ident, Type)>,
-    has_id_attr: &mut bool,
     indexes: &mut Vec<TokenStream>,
     validations: &mut Vec<TokenStream>,
     inits: &mut Vec<TokenStream>,
+    setters: &mut Vec<TokenStream>,
+    document_id_setter_ident: &str,
 ) -> Result<(), TokenStream> {
     let data_struct = match &input.data {
         syn::Data::Struct(s) => s,
@@ -108,14 +121,15 @@ pub fn collect_field_info(
 
     for field in data_struct.fields.iter() {
         if let Some(ident) = &field.ident {
-            all_fields.push((ident.clone(), field.ty.clone()));
+            if ident == "_id" {
+                push_id_setter(setters, document_id_setter_ident)?;
+            } else {
+                push_field_setter(ident, &field.ty, setters);
+            }
+
             let mut init_expr: TokenStream = quote! { Default::default() };
 
             for attr in &field.attrs {
-                if ident == "_id" {
-                    *has_id_attr = true;
-                }
-
                 if attr.path().is_ident("index") {
                     let index_args = parse_index_args(attr).map_err(|err| {
                         syn::Error::new_spanned(attr, format!("Invalid #[index]: {err}"))
@@ -148,18 +162,5 @@ pub fn collect_field_info(
         }
     }
 
-    Ok(())
-}
-
-/// Generates setter method token streams for all fields, including a document
-/// ID setter if required.
-pub fn setup_setters(
-    has_id_attr: bool,
-    all_fields: &[(Ident, Type)],
-    setters: &mut Vec<TokenStream>,
-    document_id_setter_ident: String,
-) -> Result<(), TokenStream> {
-    push_id_setter(has_id_attr, setters, document_id_setter_ident)?;
-    push_field_setters(all_fields, setters);
     Ok(())
 }
