@@ -129,20 +129,14 @@ fn check_int_fits_primitive(
     let err = |msg: &str| Some(quote_spanned! { span => compile_error!(#msg); });
 
     let fits_signed = |min: i128, max: i128| -> bool {
-        if neg {
-            let m = match i128::try_from(mag) {
-                Ok(v) => v,
-                Err(_) => return false,
-            };
-            -m >= min && -m <= max
-        } else {
-            let m = match i128::try_from(mag) {
-                Ok(v) => v,
-                Err(_) => return false,
-            };
-            m >= min && m <= max
-        }
+        let m_i128 = match i128::try_from(mag) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let val = if neg { -m_i128 } else { m_i128 };
+        val >= min && val <= max
     };
+
     let fits_unsigned = |max: u128| -> bool {
         if neg {
             return false;
@@ -334,10 +328,16 @@ pub fn rhs_for_numeric_bound(
 
         (PrimitiveNum::F32 | PrimitiveNum::F64, &LitNum::Float { ref lit, neg }) => {
             if matches!(prim, PrimitiveNum::F32) {
-                if let Ok(v64) = parse_f64_for_range(lit) {
-                    let signed = if neg { -v64 } else { v64 };
-                    if let Some(err) = check_float_fits_primitive(lit.span(), signed, prim) {
-                        compile_errors.push(err);
+                match parse_f64_for_range(lit) {
+                    Ok(v64) => {
+                        let signed = if neg { -v64 } else { v64 };
+                        if let Some(err) = check_float_fits_primitive(lit.span(), signed, prim) {
+                            compile_errors.push(err);
+                            return None;
+                        }
+                    }
+                    Err(e) => {
+                        compile_errors.push(e.to_compile_error());
                         return None;
                     }
                 }
