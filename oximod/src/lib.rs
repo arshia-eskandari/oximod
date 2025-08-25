@@ -11,7 +11,6 @@ pub use oximod_core::helpers as _helpers;
 #[doc(hidden)]
 pub mod _error {
     pub use oximod_core::error::oximod_error;
-    pub use oximod_core::error::printable;
 }
 #[doc(hidden)]
 pub use async_trait as _async_trait;
