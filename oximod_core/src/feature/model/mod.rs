@@ -3,7 +3,7 @@ use async_trait;
 use mongodb::{
     bson::{self, oid::ObjectId, Document},
     results::{DeleteResult, UpdateResult},
-    Collection, Cursor,
+    Collection,
 };
 
 /// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro.
@@ -234,26 +234,4 @@ pub trait Model {
     /// println!("Cleared {} documents", result.deleted_count);
     /// ```
     async fn clear() -> Result<DeleteResult, OxiModError>;
-    /// Executes an aggregation pipeline on the model's MongoDB collection.
-    ///
-    /// # Parameters
-    /// - `pipeline`: A vector of BSON documents defining the aggregation stages.
-    ///
-    /// # Returns
-    /// - A [`Cursor`](https://docs.rs/mongodb/latest/mongodb/struct.Cursor.html) over the resulting documents.
-    ///
-    /// # Example
-    /// ```rust, no_run
-    /// let pipeline = vec![
-    ///     doc! { "$match": { "active": true } },
-    ///     doc! { "$group": { "_id": "$age", "count": { "$sum": 1 } } }
-    /// ];
-    /// let mut cursor = User::aggregate(pipeline).await?;
-    /// while let Some(doc) = cursor.try_next().await? {
-    ///     println!("{:?}", doc);
-    /// }
-    /// ```
-    async fn aggregate(
-        pipeline: impl Into<Vec<bson::Document>> + Send,
-    ) -> Result<Cursor<bson::Document>, OxiModError>;
 }

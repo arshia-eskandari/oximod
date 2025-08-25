@@ -67,14 +67,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     // Run the aggregation
-    let mut cursor = User::aggregate(pipeline).await?;
+    let user_collection = User::get_collection()?;
+    let mut cursor = user_collection.aggregate(pipeline).await?;
     println!("📊 Aggregation results by age:");
 
     while let Some(doc) = cursor.next().await {
         let doc = doc?;
         let age = doc.get("_id").unwrap_or(&Bson::Null);
         let count = doc.get("count").unwrap_or(&Bson::Null);
-        println!("🧓 Age: {}, 👥 Count: {}", age, count);
+        println!("🧓 Age: {age}, 👥 Count: {count}");
     }
 
     Ok(())

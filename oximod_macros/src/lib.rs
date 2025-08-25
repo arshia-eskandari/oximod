@@ -416,21 +416,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
                 Ok(result)
             }
-
-            async fn aggregate(
-                pipeline: impl Into<Vec<::oximod::_mongodb::bson::Document>> + Send
-            ) -> Result<::oximod::_mongodb::Cursor<::oximod::_mongodb::bson::Document>, ::oximod::_error::oximod_error::OxiModError> {
-                let collection = Self::get_collection()?;
-
-                let result = collection.aggregate(pipeline.into()).await.map_err(|e| {
-                    ::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::AggregationError(::std::format!("{e}")),
-                            @static "Failed to aggregate. Ensure your pipeline is valid and the collection is readable."
-                    )
-                })?;
-
-                Ok(result)
-            }
         }
     };
 

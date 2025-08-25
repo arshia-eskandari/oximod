@@ -45,7 +45,8 @@ async fn aggregates_documents_correctly() -> TestResult {
         doc! { "$count": "info_count" },
     ];
 
-    let mut cursor = LogEntry::aggregate(pipeline).await?;
+    let log_collection = LogEntry::get_collection()?;
+    let mut cursor = log_collection.aggregate(pipeline).await?;
     let result = cursor
         .next()
         .await
@@ -95,7 +96,8 @@ async fn aggregation_with_no_matches_returns_empty() -> TestResult {
         doc! { "$count": "debug_count" },
     ];
 
-    let mut cursor = LogEntry::aggregate(pipeline).await?;
+    let log_collection = LogEntry::get_collection()?;
+    let mut cursor = log_collection.aggregate(pipeline).await?;
     assert!(
         cursor.next().await.is_none(),
         "Expected no documents in aggregation result"
@@ -156,7 +158,8 @@ async fn aggregates_count_emails_ending_with_com_including_missing_emails() -> T
         doc! { "$count": "com_count" },
     ];
 
-    let mut cursor = LogEntry::aggregate(pipeline).await?;
+    let log_collection = LogEntry::get_collection()?;
+    let mut cursor = log_collection.aggregate(pipeline).await?;
     let result = cursor
         .next()
         .await
