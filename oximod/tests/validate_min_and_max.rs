@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
 // Run test: cargo nextest run test_book_min_violation

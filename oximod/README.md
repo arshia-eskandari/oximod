@@ -29,14 +29,26 @@ Use `user.save().await?` just like before!
 
 ---
 
-### 🆕 Improvements in `v0.1.11`
+### 🆕 Improvements in `v0.1.12`
 
-✅ Validations now support **non-optional fields** — for example, `#[validate(email)]` used to only work with `Option<String>`, but now `String` is supported as well.  
-✅ The `validate_usage.rs` example was updated to demonstrate this improvement.  
-✅ Many more **tests added** to ensure quality and correctness.  
-✅ Code refactored to reduce unnecessary resource allocation, with performance improvements.  
-✅ Error handling is now more robust, and several typos in error messages were fixed.  
-✅ General internal reliability improvements.
+✅ Removed the `aggregate` method.  
+   - Instead, OxiMod provides `get_collection()` for direct access to the underlying MongoDB collection.  
+   - This allows users to perform advanced operations such as `aggregate`, `bulk_write`, and `insert_many` directly with the MongoDB driver, reducing macro expansion complexity and improving maintainability.
+
+✅ Added index initialization controls:
+   - `#[index_max_retries(N)]` → Maximum retry attempts when creating indexes.
+   - `#[index_max_init_seconds(N)]` → Maximum time allowed for index initialization.
+   - These work with OxiMod’s internal `OnceAsync` system to ensure indexes are created once per process, with resilience against transient failures and protection against indefinite hangs.
+
+✅ Updated `alphanumeric` validator to strictly check against **ASCII alphanumeric characters**.
+
+✅ Improved validation safety by preventing impossible cases (e.g., defining a `min` greater than a `max`).
+
+✅ Performance optimizations verified using **flamegraph profiling**.
+   - Reduced unnecessary resource allocations.  
+   - Improved execution efficiency across common operations.
+
+✅ General reliability improvements and bug fixes.
 
 If you encounter any bugs or have suggestions, **please open an issue on GitHub to report them** — your feedback helps improve OxiMod for everyone.
 
@@ -53,6 +65,10 @@ If you encounter any bugs or have suggestions, **please open an issue on GitHub 
 - **Built-in CRUD Operations**  
   Use `save()`, `find()`, `update()`, `delete()`, and more directly on your types.
 
+- **Direct Collection Access**  
+  Use `get_collection()` to retrieve the underlying MongoDB collection.  
+  This enables direct access to advanced MongoDB features such as `aggregate`, `bulk_write`, and `insert_many`.
+
 - **Minimal Boilerplate**  
   Declare a model in seconds with `#[derive(Model)]`, `#[db]`, and `#[collection]` attributes.
 
@@ -60,7 +76,9 @@ If you encounter any bugs or have suggestions, **please open an issue on GitHub 
   Add indexes declaratively via field-level `#[index(...)]` attributes.
 
 - **Validation Support**  
-  Add field-level validation using `#[validate(...)]`. Supports length, email, pattern, positivity, and more.
+  Add field-level validation using `#[validate(...)]`. Supports length, email, pattern, positivity, and more.  
+  - Now includes **ASCII alphanumeric** validation.  
+  - Prevents invalid validator combinations (e.g., `min > max`).
 
 - **Default Values**  
   Use `#[default(...)]` to specify field defaults for strings, numbers, and enums.
@@ -82,6 +100,12 @@ OxiMod supports attributes at both the struct level and field level.
 - `#[db("name")]`: Specifies the MongoDB database the model belongs to.
 - `#[collection("name")]`: Specifies the collection name within the database.
 - `#[document_id_setter_ident("name")]`: Optional. Renames the `_id` builder function for fluent `.new()`/`.default()` APIs.
+- `#[index_max_retries(N)]` – (optional) Maximum number of times OxiMod will retry creating indexes when a model is first used.
+    - Powered by the internal `OnceAsync` primitive, which ensures indexes are created once per process.
+    - If index creation fails (e.g. transient network hiccups), OxiMod will retry up to `N` times before surfacing an error.
+- `#[index_max_init_seconds(N)]` – (optional) Maximum time allowed for index initialization during the first attempt.
+    - Prevents “stuck” initializations if MongoDB is unresponsive or index creation is unusually slow.
+    - After `N` seconds, the initializer aborts and future operations can retry, instead of leaving your app hanging indefinitely.
 
 ### Field-Level Index Attributes
 
@@ -91,7 +115,7 @@ You can add indexes to fields using the `#[index(...)]` attribute.
 
 - `unique`: Ensures values in this field are unique.
 - `sparse`: Indexes only documents that contain the field.
-- `name = "...""`: Custom name for the index.
+- `name = "..."`: Custom name for the index.
 - `background`: Builds index in the background without locking the database.
 - `order = 1 | -1`: Index sort order (1 = ascending, -1 = descending).
 - `expire_after_secs = ...`: Time-to-live for the index in seconds.
@@ -119,7 +143,7 @@ You can apply validations on fields using the `#[validate(...)]` attribute.
 - `starts_with = "..."`: Ensures a string starts with the given prefix.
 - `ends_with = "..."`: Ensures a string ends with the given suffix.
 - `includes = "..."`: Ensures a string includes the given substring.
-- `alphanumeric`: Ensures all characters are alphanumeric.
+- `alphanumeric`: Ensures all characters are alphanumeric (ASCII).
 - `multiple_of = N`: Ensures the numeric value is a multiple of `N`.
 
 > 💡 Use native Rust enums instead of `enum_values`.
@@ -130,7 +154,7 @@ You can apply validations on fields using the `#[validate(...)]` attribute.
 - `#[default(42)]`: Sets default for numbers.
 - `#[default(MyEnum::Variant)]`: Sets default for enums.
 
-Accessible via `Model::new()` or `Model::default()`.
+These defaults are applied when using `Model::new()` or `Model::default()`.
 
 ---
 
@@ -217,7 +241,6 @@ In this example:
 - The `active` field defaults to `false`.
 
 ---
-
 ## Running Examples
 
 OxiMod includes a growing set of usage examples:
@@ -264,4 +287,3 @@ Your input helps improve OxiMod for everyone — thank you for your support.
 We hope OxiMod helps bring joy and structure to your MongoDB experience in Rust.
 
 Contributions welcome!
-

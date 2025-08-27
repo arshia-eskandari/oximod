@@ -1,12 +1,12 @@
+use futures_util::TryStreamExt;
 use mongodb::{
-    bson::{ doc, oid::ObjectId, DateTime },
-    options::{ IndexVersion, TextIndexVersion },
+    bson::{doc, oid::ObjectId, DateTime},
+    options::{IndexVersion, TextIndexVersion},
 };
 use oximod::Model;
+use serde::{Deserialize, Serialize};
+use std::{thread::sleep, time::Duration};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
-use std::{ thread::sleep, time::Duration };
-use futures_util::TryStreamExt;
 
 mod common;
 use common::init;
@@ -67,16 +67,20 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
 
     Session::clear().await?;
 
-    let expired_session = Session::default().created_at(
-        DateTime::from_millis(DateTime::now().timestamp_millis() - 10_000)
-    );
+    let expired_session = Session::default().created_at(DateTime::from_millis(
+        DateTime::now().timestamp_millis() - 10_000,
+    ));
 
     expired_session.save().await?;
 
     sleep(Duration::from_secs(65));
 
     let remaining = Session::find(doc! {}).await?;
-    assert_eq!(remaining.len(), 0, "Expected document to be expired and deleted");
+    assert_eq!(
+        remaining.len(),
+        0,
+        "Expected document to be expired and deleted"
+    );
 
     Ok(())
 }
@@ -219,7 +223,37 @@ async fn creates_indexes_correctly_fails_on_duplicate() -> TestResult {
     user1.save().await?;
 
     let dup_result = user2.save().await;
-    assert!(dup_result.is_err(), "Expected duplicate unique index to fail");
+    assert!(
+        dup_result.is_err(),
+        "Expected duplicate unique index to fail"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run index_init_respects_overridden_retry_and_timeout
+#[tokio::test]
+async fn index_init_respects_overridden_retry_and_timeout() -> TestResult {
+    init().await;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("index_init_overrides")]
+    #[index_max_retries(7)]
+    #[index_max_init_seconds(45)]
+    pub struct UserOverride {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(name = "overrides_name_idx")]
+        name: String,
+    }
+
+    UserOverride::clear().await?;
+
+    let doc = UserOverride::default().name("User1".to_string());
+    let result = doc.save().await?;
+    assert_ne!(result, ObjectId::default());
 
     Ok(())
 }

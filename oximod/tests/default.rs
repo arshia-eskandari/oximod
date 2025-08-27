@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -101,7 +101,9 @@ async fn enum_default_and_override() -> TestResult {
     assert_eq!(got1.status, Status::Pending);
     assert_eq!(got1.description, "T1");
 
-    let t2 = Task::default().status(Status::Complete).description("T2".into());
+    let t2 = Task::default()
+        .status(Status::Complete)
+        .description("T2".into());
     let id2 = t2.save().await?;
     let got2 = Task::find_by_id(id2).await?.unwrap();
     assert_eq!(got2.status, Status::Complete);

@@ -8,17 +8,16 @@
 //! - Insert multiple documents using the fluent builder API
 //! - Perform an aggregation query on a collection
 
-use oximod::{ set_global_client, Model };
-use mongodb::bson::{ doc, oid::ObjectId, Bson };
-use serde::{ Deserialize, Serialize };
 use futures_util::stream::StreamExt;
+use mongodb::bson::{doc, oid::ObjectId, Bson};
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load MongoDB URI from .env or environment
     dotenv::dotenv().ok();
-    let mongodb_uri = std::env
-        ::var("MONGODB_URI")
+    let mongodb_uri = std::env::var("MONGODB_URI")
         .expect("MONGODB_URI must be set in your .env file or environment");
 
     // Set up the global MongoDB client
@@ -47,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         User::new().name("User1".to_string()).age(30).active(true),
         User::new().name("User2".to_string()).age(25).active(true),
         User::new().name("User3".to_string()).age(30).active(false),
-        User::new().name("User4".to_string()).age(40) // uses default active = true
+        User::new().name("User4".to_string()).age(40), // uses default active = true
     ];
 
     for user in users {
@@ -64,18 +63,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         doc! {
             "$sort": { "count": -1 }
-        }
+        },
     ];
 
     // Run the aggregation
-    let mut cursor = User::aggregate(pipeline).await?;
+    let user_collection = User::get_collection()?;
+    let mut cursor = user_collection.aggregate(pipeline).await?;
     println!("📊 Aggregation results by age:");
 
     while let Some(doc) = cursor.next().await {
         let doc = doc?;
         let age = doc.get("_id").unwrap_or(&Bson::Null);
         let count = doc.get("count").unwrap_or(&Bson::Null);
-        println!("🧓 Age: {}, 👥 Count: {}", age, count);
+        println!("🧓 Age: {age}, 👥 Count: {count}");
     }
 
     Ok(())

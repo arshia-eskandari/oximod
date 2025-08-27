@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,8 +25,14 @@ async fn deletes_first_matching_document_only() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(50).active(false),
-        User::default().name("User2".to_string()).age(50).active(false)
+        User::default()
+            .name("User1".to_string())
+            .age(50)
+            .active(false),
+        User::default()
+            .name("User2".to_string())
+            .age(50)
+            .active(false),
     ];
 
     for user in users {
@@ -58,8 +64,14 @@ async fn delete_one_no_matching_document() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(50).active(true),
-        User::default().name("User2".to_string()).age(50).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(50)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(50)
+            .active(true),
     ];
 
     for user in users {
@@ -67,7 +79,10 @@ async fn delete_one_no_matching_document() -> TestResult {
     }
 
     let deleted = User::delete_one(doc! { "age": 50, "active": false }).await?;
-    assert_eq!(deleted.deleted_count, 0, "No documents should have been deleted");
+    assert_eq!(
+        deleted.deleted_count, 0,
+        "No documents should have been deleted"
+    );
 
     Ok(())
 }
@@ -104,7 +119,7 @@ async fn deletes_first_matching_document_by_email_only() -> TestResult {
             .name("User2".to_string())
             .age(50)
             .active(false)
-            .email("shared@example.com".to_string())
+            .email("shared@example.com".to_string()),
     ];
 
     for user in users {
@@ -149,7 +164,7 @@ async fn delete_one_no_matching_document_by_email() -> TestResult {
             .name("User2".to_string())
             .age(50)
             .active(true)
-            .email("user2@example.com".to_string())
+            .email("user2@example.com".to_string()),
     ];
 
     for user in users {
@@ -157,7 +172,10 @@ async fn delete_one_no_matching_document_by_email() -> TestResult {
     }
 
     let deleted = User::delete_one(doc! { "email": "notfound@example.com" }).await?;
-    assert_eq!(deleted.deleted_count, 0, "No documents should have been deleted");
+    assert_eq!(
+        deleted.deleted_count, 0,
+        "No documents should have been deleted"
+    );
 
     Ok(())
 }

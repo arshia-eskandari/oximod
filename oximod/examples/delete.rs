@@ -8,9 +8,9 @@
 //! - Delete a document by ID
 //! - Delete one document with a filter
 
-use oximod::{ set_global_client, Model };
-use mongodb::bson::{ doc, oid::ObjectId };
-use serde::{ Deserialize, Serialize };
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         User::new().name("User1".to_string()).age(20).active(false),
         User::new().name("User2".to_string()).age(25).active(false),
         User::new().name("User3".to_string()).age(30), // active: true by default
-        User::new().name("User4".to_string()).age(30) // active: true by default
+        User::new().name("User4".to_string()).age(30), // active: true by default
     ];
 
     let mut inserted_ids = vec![];

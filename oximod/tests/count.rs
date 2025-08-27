@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,9 +25,18 @@ async fn counts_matching_documents_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(30).active(true),
-        User::default().name("User3".to_string()).age(30).active(false),
-        User::default().name("User3".to_string()).age(25).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(30)
+            .active(true),
+        User::default()
+            .name("User3".to_string())
+            .age(30)
+            .active(false),
+        User::default()
+            .name("User3".to_string())
+            .age(25)
+            .active(true),
     ];
 
     for user in users {
@@ -101,7 +110,7 @@ async fn counts_matching_documents_by_email_correctly() -> TestResult {
             .name("User3".to_string())
             .age(25)
             .active(true)
-            .email("unique@example.com".to_string())
+            .email("unique@example.com".to_string()),
     ];
 
     for user in users {

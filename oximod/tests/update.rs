@@ -1,7 +1,7 @@
-use mongodb::bson::{ doc, oid::ObjectId };
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -25,9 +25,18 @@ async fn updates_multiple_documents_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(70).active(true),
-        User::default().name("User2".to_string()).age(65).active(true),
-        User::default().name("User3".to_string()).age(40).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(70)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(65)
+            .active(true),
+        User::default()
+            .name("User3".to_string())
+            .age(40)
+            .active(true),
     ];
 
     for user in users {
@@ -37,8 +46,9 @@ async fn updates_multiple_documents_correctly() -> TestResult {
     // Deactivate users aged 65+
     let result = User::update(
         doc! { "age": { "$gte": 65 } },
-        doc! { "$set": { "active": false } }
-    ).await?;
+        doc! { "$set": { "active": false } },
+    )
+    .await?;
 
     assert_eq!(result.matched_count, 2);
     assert_eq!(result.modified_count, 2);
@@ -65,9 +75,18 @@ async fn updates_multiple_documents_invalid_update_fails() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default().name("User1".to_string()).age(70).active(true),
-        User::default().name("User2".to_string()).age(65).active(true),
-        User::default().name("User3".to_string()).age(40).active(true)
+        User::default()
+            .name("User1".to_string())
+            .age(70)
+            .active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(65)
+            .active(true),
+        User::default()
+            .name("User3".to_string())
+            .age(40)
+            .active(true),
     ];
 
     for user in users {
@@ -110,12 +129,15 @@ async fn updates_optional_email_to_valid() -> TestResult {
             .age(70)
             .active(true)
             .email("u1@example.com".to_string()),
-        User::default().name("User2".to_string()).age(65).active(true),
+        User::default()
+            .name("User2".to_string())
+            .age(65)
+            .active(true),
         User::default()
             .name("User3".to_string())
             .age(40)
             .active(true)
-            .email("u3@example.com".to_string())
+            .email("u3@example.com".to_string()),
     ];
 
     for user in users {
@@ -125,8 +147,9 @@ async fn updates_optional_email_to_valid() -> TestResult {
     // Set email of users aged 65+ to a valid email
     let result = User::update(
         doc! { "age": { "$gte": 65 } },
-        doc! { "$set": { "email": "user@example.com" } }
-    ).await?;
+        doc! { "$set": { "email": "user@example.com" } },
+    )
+    .await?;
 
     assert_eq!(result.matched_count, 2);
     assert_eq!(result.modified_count, 2);

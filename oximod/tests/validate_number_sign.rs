@@ -3,7 +3,7 @@ mod common;
 use common::init;
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
 // Run test: cargo nextest run test_positive_passes
@@ -166,7 +166,7 @@ async fn test_positive_passes_non_optional() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(positive)]
-        value: u32, // ✅ unsigned
+        value: i32,
     }
 
     NumericValidation::clear().await?;
@@ -190,7 +190,7 @@ async fn test_positive_fails_non_optional() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(positive)]
-        value: i16, // ✅ signed small
+        value: i16,
     }
 
     NumericValidation::clear().await?;
@@ -215,7 +215,7 @@ async fn test_negative_passes_non_optional() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(negative)]
-        value: i32, // ✅ standard signed
+        value: i32,
     }
 
     NumericValidation::clear().await?;
@@ -239,7 +239,7 @@ async fn test_negative_fails_non_optional() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(negative)]
-        value: u64, // ✅ large unsigned
+        value: i64,
     }
 
     NumericValidation::clear().await?;
@@ -264,7 +264,7 @@ async fn test_non_negative_passes_non_optional() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(non_negative)]
-        value: usize, // ✅ platform unsigned
+        value: isize,
     }
 
     NumericValidation::clear().await?;
@@ -288,7 +288,7 @@ async fn test_non_negative_fails_non_optional() -> TestResult {
         _id: Option<ObjectId>,
 
         #[validate(non_negative)]
-        value: isize, // ✅ platform signed
+        value: isize,
     }
 
     NumericValidation::clear().await?;

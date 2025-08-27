@@ -6,9 +6,9 @@
 //! - Insert a document
 //! - Update fields using `update` and `update_by_id`
 
-use oximod::{ set_global_client, Model };
-use mongodb::bson::{ doc, oid::ObjectId };
-use serde::{ Deserialize, Serialize };
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{set_global_client, Model};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,8 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generic update: Set active = true for all users over 40
     let result = User::update(
         doc! { "age": { "$gt": 40 } },
-        doc! { "$set": { "active": true } }
-    ).await?;
+        doc! { "$set": { "active": true } },
+    )
+    .await?;
     println!("🔁 Updated {} document(s)", result.modified_count);
 
     // Update by ID

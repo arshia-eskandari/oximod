@@ -1,7 +1,11 @@
-use mongodb::{ bson::{ doc, oid::ObjectId }, options::IndexOptions, IndexModel };
+use mongodb::{
+    bson::{doc, oid::ObjectId},
+    options::IndexOptions,
+    IndexModel,
+};
 use oximod::Model;
+use serde::{Deserialize, Serialize};
 use testresult::TestResult;
-use serde::{ Deserialize, Serialize };
 
 mod common;
 use common::init;
@@ -31,13 +35,15 @@ async fn uses_get_collection_and_manual_indexing() -> TestResult {
             IndexOptions::builder()
                 .unique(Some(true))
                 .name(Some("email_unique_index".to_string()))
-                .build()
+                .build(),
         )
         .build();
 
     collection.create_index(index_model).await?;
 
-    let user = User::default().username("User1".to_string()).email("user1@example.com".to_string());
+    let user = User::default()
+        .username("User1".to_string())
+        .email("user1@example.com".to_string());
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
