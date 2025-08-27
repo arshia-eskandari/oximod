@@ -34,15 +34,20 @@ Use `user.save().await?` just like before!
 ✅ Removed the `aggregate` method.  
    - Instead, OxiMod provides `get_collection()` for direct access to the underlying MongoDB collection.  
    - This allows users to perform advanced operations such as `aggregate`, `bulk_write`, and `insert_many` directly with the MongoDB driver, reducing macro expansion complexity and improving maintainability.
+
 ✅ Added index initialization controls:
    - `#[index_max_retries(N)]` → Maximum retry attempts when creating indexes.
    - `#[index_max_init_seconds(N)]` → Maximum time allowed for index initialization.
    - These work with OxiMod’s internal `OnceAsync` system to ensure indexes are created once per process, with resilience against transient failures and protection against indefinite hangs.
-✅ Updated `alphanumeric` validator to strictly check against **ASCII alphanumeric characters**.  
-✅ Improved validation safety by preventing impossible cases (e.g., defining a `min` greater than a `max`).  
-✅ Performance optimizations verified using **flamegraph profiling**.  
+
+✅ Updated `alphanumeric` validator to strictly check against **ASCII alphanumeric characters**.
+
+✅ Improved validation safety by preventing impossible cases (e.g., defining a `min` greater than a `max`).
+
+✅ Performance optimizations verified using **flamegraph profiling**.
    - Reduced unnecessary resource allocations.  
-   - Improved execution efficiency across common operations.  
+   - Improved execution efficiency across common operations.
+
 ✅ General reliability improvements and bug fixes.
 
 If you encounter any bugs or have suggestions, **please open an issue on GitHub to report them** — your feedback helps improve OxiMod for everyone.
