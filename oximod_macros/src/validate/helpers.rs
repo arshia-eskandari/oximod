@@ -347,15 +347,16 @@ pub fn rhs_for_numeric_bound(
     }
 }
 
-/// Produce a RHS integer token for `multiple_of` (integers only).
-/// - Emits compile_error! if field is float or non-numeric, or literal doesn't fit.
-/// - Returns Some(rhs) if OK, None if error.
+/// Produces the RHS token for `#[validate(multiple_of)]` on integer fields,
+/// emitting `compile_error!` for invalid use (non-numeric, float, zero, or out-of-range).
+/// Returns `(rhs, Some(mask))` for unsigned powers of two (bitmask optimization),
+/// `(rhs, None)` otherwise, or `None` if a compile-time error was emitted.
 pub fn rhs_for_integer_multiple_of(
     prim: PrimitiveNum,
     lit: &LitInt,
     field_ident: &Ident,
     compile_errors: &mut Vec<TokenStream>,
-) -> Option<TokenStream> {
+) -> Option<(TokenStream, Option<syn::LitInt>)> {
     match prim {
         PrimitiveNum::F32 | PrimitiveNum::F64 => {
             compile_errors.push(quote_spanned! { field_ident.span() =>
@@ -370,19 +371,34 @@ pub fn rhs_for_integer_multiple_of(
             None
         }
         _ => {
-            if let Ok(mag) = parse_u128_for_range(lit) {
-                if mag == 0 {
-                    compile_errors.push(quote_spanned! { lit.span() =>
-                        compile_error!("`multiple_of` must be non-zero");
-                    });
+            let mag = match parse_u128_for_range(lit) {
+                Ok(v) => v,
+                Err(e) => {
+                    compile_errors.push(e.to_compile_error());
                     return None;
                 }
-                if let Some(err) = check_int_fits_primitive(lit.span(), false, mag, prim) {
-                    compile_errors.push(err);
-                    return None;
-                }
+            };
+
+            if mag == 0 {
+                compile_errors.push(quote_spanned! { lit.span() =>
+                    compile_error!("`multiple_of` must be non-zero");
+                });
+                return None;
             }
-            Some(quote! { #lit })
+
+            if let Some(err) = check_int_fits_primitive(lit.span(), false, mag, prim) {
+                compile_errors.push(err);
+                return None;
+            }
+
+            let pow2_mask = if !super::is_signed(prim) && (mag & (mag - 1)) == 0 {
+                let mask = mag - 1;
+                Some(syn::LitInt::new(&mask.to_string(), lit.span()))
+            } else {
+                None
+            };
+
+            Some((quote! { #lit }, pow2_mask))
         }
     }
 }

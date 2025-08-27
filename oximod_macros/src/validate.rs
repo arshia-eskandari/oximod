@@ -430,33 +430,21 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(multiple_of)]` can only be applied to integer fields"
         ) {
-            if let Some(rhs) =
+            if let Some((rhs, pow2_mask)) =
                 rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
             {
-                let mut used_mask = false;
-
-                if !is_signed(prim) {
-                    if let Ok(mag) = crate::parsers::parse_u128_for_range(multiple) {
-                        if mag != 0 && (mag & (mag - 1)) == 0 {
-                            let mask = mag - 1;
-                            let mask_lit = syn::LitInt::new(&mask.to_string(), multiple.span());
-
-                            numeric_checks.push(quote! {
-                            if (v & #mask_lit) != 0 {
-                                return Err(::oximod::_attach_printables!(
-                                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                        format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
-                                    ),
-                                    @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
-                                ));
-                            }
-                        });
-                            used_mask = true;
-                        }
+                if let Some(mask_lit) = pow2_mask {
+                    numeric_checks.push(quote! {
+                    if (v & #mask_lit) != 0 {
+                        return Err(::oximod::_attach_printables!(
+                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                                format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                            ),
+                            @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
+                        ));
                     }
-                }
-
-                if !used_mask {
+                });
+                } else {
                     numeric_checks.push(quote! {
                     if (v % #rhs) != 0 {
                         return Err(::oximod::_attach_printables!(
@@ -471,6 +459,7 @@ pub fn generate_validate_model_tokens(
             }
         }
     }
+
     if !numeric_checks.is_empty() {
         field_rules_val.push(quote! {
             let v = *val;
