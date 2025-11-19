@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run clears_collection_successfully
 #[tokio::test]
 async fn clears_collection_successfully() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

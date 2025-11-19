@@ -9,14 +9,14 @@
 //! - Delete one document with a filter
 
 use mongodb::bson::{doc, oid::ObjectId};
-use oximod::{set_global_client, Model};
+use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI")?;
-    set_global_client(mongodb_uri).await?;
+    OxiClient::init_global(mongodb_uri).await?;
 
     #[derive(Debug, Serialize, Deserialize, Model)]
     #[db("delete_example_db")]

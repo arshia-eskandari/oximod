@@ -13,7 +13,7 @@ use common::init;
 // Run test: cargo nextest run uses_get_collection_and_manual_indexing
 #[tokio::test]
 async fn uses_get_collection_and_manual_indexing() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

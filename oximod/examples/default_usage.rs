@@ -9,7 +9,7 @@
 //! - Build a model using the fluent API
 
 use mongodb::bson::oid::ObjectId;
-use oximod::{set_global_client, Model};
+use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,7 +44,7 @@ struct User {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI")?;
-    set_global_client(mongodb_uri).await?;
+    OxiClient::init_global(mongodb_uri).await?;
 
     // Clear any previous entries
     User::clear().await?;

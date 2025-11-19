@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run saves_with_default_string_and_number
 #[tokio::test]
 async fn saves_with_default_string_and_number() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -41,7 +41,7 @@ async fn saves_with_default_string_and_number() -> TestResult {
 // Run test: cargo nextest run override_default_values
 #[tokio::test]
 async fn override_default_values() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -72,7 +72,7 @@ async fn override_default_values() -> TestResult {
 // Run test: cargo nextest run enum_default_and_override
 #[tokio::test]
 async fn enum_default_and_override() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
     pub enum Status {

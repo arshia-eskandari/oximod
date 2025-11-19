@@ -22,7 +22,7 @@ impl Default for Role {
 // Run test: cargo nextest run test_missing_required_email
 #[tokio::test]
 async fn test_missing_required_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -54,7 +54,7 @@ async fn test_missing_required_email() -> TestResult {
 // Run test: cargo nextest run test_missing_required_role
 #[tokio::test]
 async fn test_missing_required_role() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -88,7 +88,7 @@ async fn test_missing_required_role() -> TestResult {
 // Run test: cargo nextest run test_valid_required_enum
 #[tokio::test]
 async fn test_valid_required_enum() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

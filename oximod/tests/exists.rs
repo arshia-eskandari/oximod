@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run checks_existence_of_matching_document
 #[tokio::test]
 async fn checks_existence_of_matching_document() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -42,7 +42,7 @@ async fn checks_existence_of_matching_document() -> TestResult {
 // Run test: cargo nextest run checks_existence_of_matching_document_by_email
 #[tokio::test]
 async fn checks_existence_of_matching_document_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

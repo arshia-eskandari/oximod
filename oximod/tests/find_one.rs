@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run finds_first_matching_document_correctly
 #[tokio::test]
 async fn finds_first_matching_document_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -53,7 +53,7 @@ async fn finds_first_matching_document_correctly() -> TestResult {
 // Run test: cargo nextest run finds_first_matching_document_none_when_no_match
 #[tokio::test]
 async fn finds_first_matching_document_none_when_no_match() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -92,7 +92,7 @@ async fn finds_first_matching_document_none_when_no_match() -> TestResult {
 // Run test: cargo nextest run finds_first_matching_document_by_email
 #[tokio::test]
 async fn finds_first_matching_document_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -142,7 +142,7 @@ async fn finds_first_matching_document_by_email() -> TestResult {
 // Run test: cargo nextest run finds_first_matching_document_by_email_none_when_no_match
 #[tokio::test]
 async fn finds_first_matching_document_by_email_none_when_no_match() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

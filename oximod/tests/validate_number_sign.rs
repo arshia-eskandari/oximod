@@ -9,7 +9,7 @@ use testresult::TestResult;
 // Run test: cargo nextest run test_positive_passes
 #[tokio::test]
 async fn test_positive_passes() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -33,7 +33,7 @@ async fn test_positive_passes() -> TestResult {
 // Run test: cargo nextest run test_positive_fails
 #[tokio::test]
 async fn test_positive_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -58,7 +58,7 @@ async fn test_positive_fails() -> TestResult {
 // Run test: cargo nextest run test_negative_passes
 #[tokio::test]
 async fn test_negative_passes() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -82,7 +82,7 @@ async fn test_negative_passes() -> TestResult {
 // Run test: cargo nextest run test_negative_fails
 #[tokio::test]
 async fn test_negative_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -107,7 +107,7 @@ async fn test_negative_fails() -> TestResult {
 // Run test: cargo nextest run test_non_negative_passes
 #[tokio::test]
 async fn test_non_negative_passes() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -131,7 +131,7 @@ async fn test_non_negative_passes() -> TestResult {
 // Run test: cargo nextest run test_non_negative_fails
 #[tokio::test]
 async fn test_non_negative_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -156,7 +156,7 @@ async fn test_non_negative_fails() -> TestResult {
 // Run test: cargo nextest run test_positive_passes_non_optional
 #[tokio::test]
 async fn test_positive_passes_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -180,7 +180,7 @@ async fn test_positive_passes_non_optional() -> TestResult {
 // Run test: cargo nextest run test_positive_fails_non_optional
 #[tokio::test]
 async fn test_positive_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -205,7 +205,7 @@ async fn test_positive_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_negative_passes_non_optional
 #[tokio::test]
 async fn test_negative_passes_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -229,7 +229,7 @@ async fn test_negative_passes_non_optional() -> TestResult {
 // Run test: cargo nextest run test_negative_fails_non_optional
 #[tokio::test]
 async fn test_negative_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -254,7 +254,7 @@ async fn test_negative_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_non_negative_passes_non_optional
 #[tokio::test]
 async fn test_non_negative_passes_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -278,7 +278,7 @@ async fn test_non_negative_passes_non_optional() -> TestResult {
 // Run test: cargo nextest run test_non_negative_fails_non_optional
 #[tokio::test]
 async fn test_non_negative_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run finds_multiple_matching_documents
 #[tokio::test]
 async fn finds_multiple_matching_documents() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -56,7 +56,7 @@ async fn finds_multiple_matching_documents() -> TestResult {
 // Run test: cargo nextest run finds_no_matching_documents
 #[tokio::test]
 async fn finds_no_matching_documents() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -97,7 +97,7 @@ async fn finds_no_matching_documents() -> TestResult {
 // Run test: cargo nextest run finds_multiple_matching_documents_by_email
 #[tokio::test]
 async fn finds_multiple_matching_documents_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -151,7 +151,7 @@ async fn finds_multiple_matching_documents_by_email() -> TestResult {
 // Run test: cargo nextest run finds_no_matching_documents_by_email
 #[tokio::test]
 async fn finds_no_matching_documents_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

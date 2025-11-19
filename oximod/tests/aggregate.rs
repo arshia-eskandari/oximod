@@ -10,7 +10,7 @@ use common::init;
 // Run test: cargo nextest run aggregates_documents_correctly
 #[tokio::test]
 async fn aggregates_documents_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -63,7 +63,7 @@ async fn aggregates_documents_correctly() -> TestResult {
 // Run test: cargo nextest run aggregation_with_no_matches_returns_empty
 #[tokio::test]
 async fn aggregation_with_no_matches_returns_empty() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -109,7 +109,7 @@ async fn aggregation_with_no_matches_returns_empty() -> TestResult {
 // Run test: cargo nextest run aggregates_count_emails_ending_with_com_including_missing_emails
 #[tokio::test]
 async fn aggregates_count_emails_ending_with_com_including_missing_emails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

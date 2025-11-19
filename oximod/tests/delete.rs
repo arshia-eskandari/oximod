@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run deletes_multiple_matching_documents
 #[tokio::test]
 async fn deletes_multiple_matching_documents() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -52,7 +52,7 @@ async fn deletes_multiple_matching_documents() -> TestResult {
 // Run test: cargo nextest run delete_no_matching_documents
 #[tokio::test]
 async fn delete_no_matching_documents() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -94,7 +94,7 @@ async fn delete_no_matching_documents() -> TestResult {
 // Run test: cargo nextest run deletes_multiple_matching_documents_by_email
 #[tokio::test]
 async fn deletes_multiple_matching_documents_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -144,7 +144,7 @@ async fn deletes_multiple_matching_documents_by_email() -> TestResult {
 // Run test: cargo nextest run delete_no_matching_documents_by_email
 #[tokio::test]
 async fn delete_no_matching_documents_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

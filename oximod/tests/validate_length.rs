@@ -16,7 +16,7 @@ pub enum Role {
 // Run test: cargo nextest run test_min_length_violation
 #[tokio::test]
 async fn test_min_length_violation() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -52,7 +52,7 @@ async fn test_min_length_violation() -> TestResult {
 // Run test: cargo nextest run test_max_length_violation
 #[tokio::test]
 async fn test_max_length_violation() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -88,7 +88,7 @@ async fn test_max_length_violation() -> TestResult {
 // Run test: cargo nextest run test_length_valid
 #[tokio::test]
 async fn test_length_valid() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -123,7 +123,7 @@ async fn test_length_valid() -> TestResult {
 // Run test: cargo nextest run test_min_length_violation_non_optional
 #[tokio::test]
 async fn test_min_length_violation_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -159,7 +159,7 @@ async fn test_min_length_violation_non_optional() -> TestResult {
 // Run test: cargo nextest run test_max_length_violation_non_optional
 #[tokio::test]
 async fn test_max_length_violation_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -195,7 +195,7 @@ async fn test_max_length_violation_non_optional() -> TestResult {
 // Run test: cargo nextest run test_length_valid_non_optional
 #[tokio::test]
 async fn test_length_valid_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

@@ -9,7 +9,7 @@
 //! - Use Rust enums instead of enum_values
 
 use mongodb::bson::oid::ObjectId;
-use oximod::{set_global_client, Model};
+use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mongodb_uri = std::env::var("MONGODB_URI")
         .expect("MONGODB_URI must be set in your .env file or environment");
 
-    set_global_client(mongodb_uri).await?;
+    OxiClient::init_global(mongodb_uri).await?;
 
     // Clean up from previous runs
     User::clear().await?;

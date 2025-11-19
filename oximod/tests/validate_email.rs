@@ -16,7 +16,7 @@ pub enum Role {
 // Run test: cargo nextest run test_missing_at_symbol
 #[tokio::test]
 async fn test_missing_at_symbol() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -51,7 +51,7 @@ async fn test_missing_at_symbol() -> TestResult {
 // Run test: cargo nextest run test_missing_domain_dot
 #[tokio::test]
 async fn test_missing_domain_dot() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -86,7 +86,7 @@ async fn test_missing_domain_dot() -> TestResult {
 // Run test: cargo nextest run test_valid_email
 #[tokio::test]
 async fn test_valid_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -120,7 +120,7 @@ async fn test_valid_email() -> TestResult {
 // Run test: cargo nextest run test_missing_at_symbol_non_optional
 #[tokio::test]
 async fn test_missing_at_symbol_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -155,7 +155,7 @@ async fn test_missing_at_symbol_non_optional() -> TestResult {
 // Run test: cargo nextest run test_missing_domain_dot_non_optional
 #[tokio::test]
 async fn test_missing_domain_dot_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -190,7 +190,7 @@ async fn test_missing_domain_dot_non_optional() -> TestResult {
 // Run test: cargo nextest run test_valid_email_non_optional
 #[tokio::test]
 async fn test_valid_email_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

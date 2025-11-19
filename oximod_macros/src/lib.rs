@@ -143,8 +143,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 ::oximod::_mongodb::Collection<::oximod::_mongodb::bson::Document>,
                 ::oximod::_error::oximod_error::OxiModError
             > {
-                let client = ::oximod::_feature::conn::client::get_global_client()?;
-                let db = client.database(#db);
+                let oxi_client = ::oximod::_feature::conn::client::OxiClient::global()?;
+                let db = oxi_client.database(#db);
                 Ok(db.collection::<::oximod::_mongodb::bson::Document>(#collection))
             }
 

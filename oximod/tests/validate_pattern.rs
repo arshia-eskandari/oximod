@@ -9,7 +9,7 @@ use testresult::TestResult;
 // Run test: cargo nextest run test_invalid_pattern_format
 #[tokio::test]
 async fn test_invalid_pattern_format() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -52,7 +52,7 @@ async fn test_invalid_pattern_format() -> TestResult {
 // Run test: cargo nextest run test_valid_pattern_format
 #[tokio::test]
 async fn test_valid_pattern_format() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -94,7 +94,7 @@ async fn test_valid_pattern_format() -> TestResult {
 // Run test: cargo nextest run test_invalid_pattern_format_non_optional
 #[tokio::test]
 async fn test_invalid_pattern_format_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -137,7 +137,7 @@ async fn test_invalid_pattern_format_non_optional() -> TestResult {
 // Run test: cargo nextest run test_valid_pattern_format_non_optional
 #[tokio::test]
 async fn test_valid_pattern_format_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

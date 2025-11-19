@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run saves_document_without_id_correctly
 #[tokio::test]
 async fn saves_document_without_id_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -37,7 +37,7 @@ async fn saves_document_without_id_correctly() -> TestResult {
 // Run test: cargo nextest run saves_document_with_id_correctly
 #[tokio::test]
 async fn saves_document_with_id_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
