@@ -87,8 +87,8 @@ impl OxiClient {
     ///
     /// # Panics
     /// This method does not panic, but callers should handle the `None` case.
-    pub fn client_mut(&mut self) -> &Option<Client> {
-        &self.inner
+    pub fn client_mut(&mut self) -> Option<&Client> {
+        self.inner.as_ref()
     }
 
     /// Returns an immutable reference to the inner MongoDB client, if initialized.
@@ -104,8 +104,8 @@ impl OxiClient {
     ///
     /// # Panics
     /// This method does not panic, but callers should handle the `None` case.
-    pub fn client(&self) -> &Option<Client> {
-        &self.inner
+    pub fn client(&self) -> Option<&Client> {
+        self.inner.as_ref()
     }
 
     /// Sets the global MongoDB client used internally across the crate.
