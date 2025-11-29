@@ -9,7 +9,7 @@ use testresult::TestResult;
 // Run test: cargo nextest run test_valid_string_passes
 #[tokio::test]
 async fn test_valid_string_passes() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -39,7 +39,7 @@ async fn test_valid_string_passes() -> TestResult {
 // Run test: cargo nextest run test_starts_with_fails
 #[tokio::test]
 async fn test_starts_with_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -64,7 +64,7 @@ async fn test_starts_with_fails() -> TestResult {
 // Run test: cargo nextest run test_ends_with_fails
 #[tokio::test]
 async fn test_ends_with_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -89,7 +89,7 @@ async fn test_ends_with_fails() -> TestResult {
 // Run test: cargo nextest run test_includes_fails
 #[tokio::test]
 async fn test_includes_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -114,7 +114,7 @@ async fn test_includes_fails() -> TestResult {
 // Run test: cargo nextest run test_alphanumeric_fails
 #[tokio::test]
 async fn test_alphanumeric_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -139,7 +139,7 @@ async fn test_alphanumeric_fails() -> TestResult {
 // Run test: cargo nextest run test_empty_string_fails
 #[tokio::test]
 async fn test_empty_string_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -164,7 +164,7 @@ async fn test_empty_string_fails() -> TestResult {
 // Run test: cargo nextest run test_min_length_fails
 #[tokio::test]
 async fn test_min_length_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -189,7 +189,7 @@ async fn test_min_length_fails() -> TestResult {
 // Run test: cargo nextest run test_max_length_fails
 #[tokio::test]
 async fn test_max_length_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -214,7 +214,7 @@ async fn test_max_length_fails() -> TestResult {
 // Run test: cargo nextest run test_pattern_fails
 #[tokio::test]
 async fn test_pattern_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -239,7 +239,7 @@ async fn test_pattern_fails() -> TestResult {
 // Run test: cargo nextest run test_valid_string_passes_non_optional
 #[tokio::test]
 async fn test_valid_string_passes_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -269,7 +269,7 @@ async fn test_valid_string_passes_non_optional() -> TestResult {
 // Run test: cargo nextest run test_starts_with_fails_non_optional
 #[tokio::test]
 async fn test_starts_with_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -294,7 +294,7 @@ async fn test_starts_with_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_ends_with_fails_non_optional
 #[tokio::test]
 async fn test_ends_with_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -319,7 +319,7 @@ async fn test_ends_with_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_includes_fails_non_optional
 #[tokio::test]
 async fn test_includes_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -344,7 +344,7 @@ async fn test_includes_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_alphanumeric_fails_non_optional
 #[tokio::test]
 async fn test_alphanumeric_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -369,7 +369,7 @@ async fn test_alphanumeric_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_empty_string_fails_non_optional
 #[tokio::test]
 async fn test_empty_string_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -394,7 +394,7 @@ async fn test_empty_string_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_min_length_fails_non_optional
 #[tokio::test]
 async fn test_min_length_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -419,7 +419,7 @@ async fn test_min_length_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_max_length_fails_non_optional
 #[tokio::test]
 async fn test_max_length_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -444,7 +444,7 @@ async fn test_max_length_fails_non_optional() -> TestResult {
 // Run test: cargo nextest run test_pattern_fails_non_optional
 #[tokio::test]
 async fn test_pattern_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

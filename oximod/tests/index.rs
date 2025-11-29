@@ -14,7 +14,7 @@ use common::init;
 // Run test: cargo nextest run creates_indexes_correctly
 #[tokio::test]
 async fn creates_indexes_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -52,7 +52,7 @@ async fn creates_indexes_correctly() -> TestResult {
 // Run test: cargo nextest run ttl_index_removes_expired_documents
 #[tokio::test]
 async fn ttl_index_removes_expired_documents() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -88,7 +88,7 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
 // Run test: cargo nextest run index_version_is_applied_correctly
 #[tokio::test]
 async fn index_version_is_applied_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -127,7 +127,7 @@ async fn index_version_is_applied_correctly() -> TestResult {
 // Run test: cargo nextest run text_index_version_is_applied_correctly
 #[tokio::test]
 async fn text_index_version_is_applied_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -166,7 +166,7 @@ async fn text_index_version_is_applied_correctly() -> TestResult {
 // Run test: cargo nextest run hidden_index_is_applied_correctly
 #[tokio::test]
 async fn hidden_index_is_applied_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -202,7 +202,7 @@ async fn hidden_index_is_applied_correctly() -> TestResult {
 // Run test: cargo nextest run creates_indexes_correctly_fails_on_duplicate
 #[tokio::test]
 async fn creates_indexes_correctly_fails_on_duplicate() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]
@@ -234,7 +234,7 @@ async fn creates_indexes_correctly_fails_on_duplicate() -> TestResult {
 // Run test: cargo nextest run index_init_respects_overridden_retry_and_timeout
 #[tokio::test]
 async fn index_init_respects_overridden_retry_and_timeout() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]

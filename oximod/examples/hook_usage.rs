@@ -7,7 +7,7 @@
 //! - Log or modify state before a document is saved
 
 use mongodb::bson::{oid::ObjectId, DateTime};
-use oximod::{set_global_client, Model};
+use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Model)]
@@ -33,7 +33,7 @@ impl Log {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI")?;
-    set_global_client(mongodb_uri).await?;
+    OxiClient::init_global(mongodb_uri).await?;
 
     // Clear any previous entries
     Log::clear().await?;

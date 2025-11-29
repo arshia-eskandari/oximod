@@ -1,7 +1,9 @@
-use oximod::set_global_client;
+use oximod::OxiClient;
+use oximod_core::error::oximod_error::OxiModError;
 
-pub async fn init() {
+pub async fn init() -> Result<(), OxiModError> {
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI").expect("Missing MONGODB_URI");
-    set_global_client(mongodb_uri).await.unwrap();
+    OxiClient::init_global(mongodb_uri).await?;
+    Ok(())
 }

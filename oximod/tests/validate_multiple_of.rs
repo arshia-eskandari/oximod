@@ -9,7 +9,7 @@ use testresult::TestResult;
 // Run test: cargo nextest run test_multiple_of_passes
 #[tokio::test]
 async fn test_multiple_of_passes() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -33,7 +33,7 @@ async fn test_multiple_of_passes() -> TestResult {
 // Run test: cargo nextest run test_multiple_of_fails
 #[tokio::test]
 async fn test_multiple_of_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -59,7 +59,7 @@ async fn test_multiple_of_fails() -> TestResult {
 // Run test: cargo nextest run test_multiple_of_passes_non_optional
 #[tokio::test]
 async fn test_multiple_of_passes_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -83,7 +83,7 @@ async fn test_multiple_of_passes_non_optional() -> TestResult {
 // Run test: cargo nextest run test_multiple_of_fails_non_optional
 #[tokio::test]
 async fn test_multiple_of_fails_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

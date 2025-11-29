@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run updates_document_by_id_correctly
 #[tokio::test]
 async fn updates_document_by_id_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -50,7 +50,7 @@ async fn updates_document_by_id_correctly() -> TestResult {
 // Run test: cargo nextest run updates_document_by_id_invalid_update_fails
 #[tokio::test]
 async fn updates_document_by_id_invalid_update_fails() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -85,7 +85,7 @@ async fn updates_document_by_id_invalid_update_fails() -> TestResult {
 // Run test: cargo nextest run updates_by_id_optional_email_to_valid
 #[tokio::test]
 async fn updates_by_id_optional_email_to_valid() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

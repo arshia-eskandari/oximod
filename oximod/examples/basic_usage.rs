@@ -9,7 +9,7 @@
 //! - Count documents in a collection
 
 use mongodb::bson::{doc, oid::ObjectId};
-use oximod::{set_global_client, Model};
+use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
 
 #[tokio::main]
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("MONGODB_URI must be set in your .env file or environment");
 
     // Set up the global MongoDB client
-    set_global_client(mongodb_uri).await?;
+    OxiClient::init_global(mongodb_uri).await?;
 
     // Define your model
     #[derive(Debug, Serialize, Deserialize, Model)]

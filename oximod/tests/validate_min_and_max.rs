@@ -9,7 +9,7 @@ use testresult::TestResult;
 // Run test: cargo nextest run test_book_min_violation
 #[tokio::test]
 async fn test_book_min_violation() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -44,7 +44,7 @@ async fn test_book_min_violation() -> TestResult {
 // Run test: cargo nextest run test_book_max_violation
 #[tokio::test]
 async fn test_book_max_violation() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -79,7 +79,7 @@ async fn test_book_max_violation() -> TestResult {
 // Run test: cargo nextest run test_book_valid
 #[tokio::test]
 async fn test_book_valid() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -110,7 +110,7 @@ async fn test_book_valid() -> TestResult {
 // Run test: cargo nextest run test_book_min_violation_non_optional
 #[tokio::test]
 async fn test_book_min_violation_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -145,7 +145,7 @@ async fn test_book_min_violation_non_optional() -> TestResult {
 // Run test: cargo nextest run test_book_max_violation_non_optional
 #[tokio::test]
 async fn test_book_max_violation_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -180,7 +180,7 @@ async fn test_book_max_violation_non_optional() -> TestResult {
 // Run test: cargo nextest run test_book_valid_non_optional
 #[tokio::test]
 async fn test_book_valid_non_optional() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

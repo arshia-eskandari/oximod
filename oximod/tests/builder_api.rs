@@ -83,7 +83,7 @@ async fn builder_partial_fields_default_rest() -> TestResult {
 // Run test: cargo nextest run builder_and_save_works_end_to_end
 #[tokio::test]
 async fn builder_and_save_works_end_to_end() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
     #[db("test")]
@@ -121,7 +121,7 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
 // Run test: cargo nextest run builder_using_custom_document_id_setter
 #[tokio::test]
 async fn builder_using_custom_document_id_setter() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
     #[db("test")]

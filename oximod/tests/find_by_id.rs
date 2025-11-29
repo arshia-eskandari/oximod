@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run finds_document_by_id_correctly
 #[tokio::test]
 async fn finds_document_by_id_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -49,7 +49,7 @@ async fn finds_document_by_id_correctly() -> TestResult {
 // Run test: cargo nextest run finds_document_by_id_returns_none_when_not_found
 #[tokio::test]
 async fn finds_document_by_id_returns_none_when_not_found() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -78,7 +78,7 @@ async fn finds_document_by_id_returns_none_when_not_found() -> TestResult {
 // Run test: cargo nextest run finds_document_by_id_with_email_correctly
 #[tokio::test]
 async fn finds_document_by_id_with_email_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -124,7 +124,7 @@ async fn finds_document_by_id_with_email_correctly() -> TestResult {
 // Run test: cargo nextest run finds_document_by_id_returns_none_when_not_found_with_email
 #[tokio::test]
 async fn finds_document_by_id_returns_none_when_not_found_with_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]

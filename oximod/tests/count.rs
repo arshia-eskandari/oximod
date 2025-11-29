@@ -9,7 +9,7 @@ use common::init;
 // Run test: cargo nextest run counts_matching_documents_correctly
 #[tokio::test]
 async fn counts_matching_documents_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -52,7 +52,7 @@ async fn counts_matching_documents_correctly() -> TestResult {
 // Run test: cargo nextest run counts_no_matching_documents
 #[tokio::test]
 async fn counts_no_matching_documents() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -76,7 +76,7 @@ async fn counts_no_matching_documents() -> TestResult {
 // Run test: cargo nextest run counts_matching_documents_by_email_correctly
 #[tokio::test]
 async fn counts_matching_documents_by_email_correctly() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
@@ -126,7 +126,7 @@ async fn counts_matching_documents_by_email_correctly() -> TestResult {
 // Run test: cargo nextest run counts_no_matching_documents_by_email
 #[tokio::test]
 async fn counts_no_matching_documents_by_email() -> TestResult {
-    init().await;
+    init().await?;
 
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
