@@ -21,7 +21,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let collection = User::get_collection_with_client(client)?;
     /// let count = collection.count_documents(doc! {}).await?;
@@ -38,7 +38,7 @@ pub trait Model {
     /// # Example
     /// ```rust,ignore
     ///
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let id = user.save_with_client(client).await?;
     /// println!("Inserted user ID: {}", id);
@@ -56,7 +56,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let result = User::update_with_client(doc! { "active": false }, doc! { "$set": { "active": true } }, client).await?;
     /// assert_eq!(result.modified_count, 3);
@@ -78,7 +78,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let result = User::update_one_with_client(doc! { "age": 25 }, doc! { "$set": { "active": false } }, client).await?;
     /// assert_eq!(result.matched_count, 1);
@@ -99,7 +99,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let result = User::delete_with_client(doc! { "active": false }, client).await?;
     /// println!("Deleted {} users", result.deleted_count);
@@ -119,7 +119,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let result = User::delete_one_with_client(doc! { "name": "user_a" }, client).await?;
     /// assert_eq!(result.deleted_count, 1);
@@ -139,7 +139,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let users = User::find_with_client(doc! { "active": true }, client).await?;
     /// assert!(!users.is_empty());
@@ -161,7 +161,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// if let Some(user) = User::find_one_with_client(doc! { "name": "user_a" }, client).await? {
     ///     println!("Found user: {}", user.name);
@@ -183,7 +183,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
     /// let user = User::find_by_id_with_client(id, client).await?;
@@ -208,7 +208,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
     /// let result = User::update_by_id_with_client(id, doc! { "$set": { "active": false } }, client).await?;
@@ -230,7 +230,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
     /// let result = User::delete_by_id_with_client(id, client).await?;
@@ -251,7 +251,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let count = User::count_with_client(doc! { "active": true }, client).await?;
     /// println!("Active users: {}", count);
@@ -271,7 +271,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let exists = User::exists_with_client(doc! { "name": "user_a" }, client).await?;
     /// if exists {
@@ -291,7 +291,7 @@ pub trait Model {
     ///
     /// # Example
     /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
     /// let client = oxiclient.client().unwrap();
     /// let result = User::clear_with_client(client).await?;
     /// println!("Cleared {} documents", result.deleted_count);
