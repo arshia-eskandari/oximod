@@ -20,9 +20,10 @@ pub trait Model {
     /// - [`OxiModError`](crate::error::oximod_error::OximodError): If the global client is not initialized or the collection name is missing.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let collection = User::get_collection_with_client(&oxi_client)?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let collection = User::get_collection_with_client(client)?;
     /// let count = collection.count_documents(doc! {}).await?;
     /// println!("Total documents: {}", count);
     /// ```
@@ -35,10 +36,11 @@ pub trait Model {
     /// - `ObjectId` of the inserted document.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     ///
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let id = user.save_with_client(&oxi_client).await?;
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let id = user.save_with_client(client).await?;
     /// println!("Inserted user ID: {}", id);
     /// ```
     async fn save_with_client(&self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
@@ -53,9 +55,10 @@ pub trait Model {
     /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) containing matched and modified counts.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let result = User::update_with_client(doc! { "active": false }, doc! { "$set": { "active": true } }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let result = User::update_with_client(doc! { "active": false }, doc! { "$set": { "active": true } }, client).await?;
     /// assert_eq!(result.modified_count, 3);
     /// ```
     async fn update_with_client(
@@ -74,9 +77,10 @@ pub trait Model {
     /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with `matched_count` and `modified_count`.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let result = User::update_one_with_client(doc! { "age": 25 }, doc! { "$set": { "active": false } }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let result = User::update_one_with_client(doc! { "age": 25 }, doc! { "$set": { "active": false } }, client).await?;
     /// assert_eq!(result.matched_count, 1);
     /// ```
     async fn update_one_with_client(
@@ -94,9 +98,10 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of documents deleted.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let result = User::delete_with_client(doc! { "active": false }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let result = User::delete_with_client(doc! { "active": false }, client).await?;
     /// println!("Deleted {} users", result.deleted_count);
     /// ```
     async fn delete_with_client(
@@ -113,9 +118,10 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with details about the deletion.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let result = User::delete_one_with_client(doc! { "name": "user_a" }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let result = User::delete_one_with_client(doc! { "name": "user_a" }, client).await?;
     /// assert_eq!(result.deleted_count, 1);
     /// ```
     async fn delete_one_with_client(
@@ -132,9 +138,10 @@ pub trait Model {
     /// - A `Vec<Self>` containing all matched documents.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let users = User::find_with_client(doc! { "active": true }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let users = User::find_with_client(doc! { "active": true }, client).await?;
     /// assert!(!users.is_empty());
     /// ```
     async fn find_with_client(
@@ -153,9 +160,10 @@ pub trait Model {
     /// - `Some(Self)` if a document is found, or `None` otherwise.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// if let Some(user) = User::find_one_with_client(doc! { "name": "user_a" }, &oxi_client).await? {
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// if let Some(user) = User::find_one_with_client(doc! { "name": "user_a" }, client).await? {
     ///     println!("Found user: {}", user.name);
     /// }
     /// ```
@@ -174,10 +182,11 @@ pub trait Model {
     /// - `Some(Self)` if found, or `None` if no document matches the ID.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let user = User::find_by_id_with_client(id, &oxi_client).await?;
+    /// let user = User::find_by_id_with_client(id, client).await?;
     /// if let Some(u) = user {
     ///     println!("Found: {}", u.name);
     /// }
@@ -198,10 +207,11 @@ pub trait Model {
     /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with details on the matched and modified document.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let result = User::update_by_id_with_client(id, doc! { "$set": { "active": false } }, &oxi_client).await?;
+    /// let result = User::update_by_id_with_client(id, doc! { "$set": { "active": false } }, client).await?;
     /// assert_eq!(result.matched_count, 1);
     /// ```
     async fn update_by_id_with_client(
@@ -219,10 +229,11 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the deletion outcome.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let result = User::delete_by_id_with_client(id, &oxi_client).await?;
+    /// let result = User::delete_by_id_with_client(id, client).await?;
     /// assert_eq!(result.deleted_count, 1);
     /// ```
     async fn delete_by_id_with_client(
@@ -239,9 +250,10 @@ pub trait Model {
     /// - The number of matching documents as `u64`.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let count = User::count_with_client(doc! { "active": true }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let count = User::count_with_client(doc! { "active": true }, client).await?;
     /// println!("Active users: {}", count);
     /// ```
     async fn count_with_client(
@@ -258,9 +270,10 @@ pub trait Model {
     /// - `true` if at least one document matches, `false` otherwise.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let exists = User::exists_with_client(doc! { "name": "user_a" }, &oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let exists = User::exists_with_client(doc! { "name": "user_a" }, client).await?;
     /// if exists {
     ///     println!("User exists!");
     /// }
@@ -277,9 +290,10 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of deleted documents.
     ///
     /// # Example
-    /// ```rust, no_run
-    /// let oxi_client = OxiClient::new("mongodb://localhost:27017".to_string).await?.client();
-    /// let result = User::clear_with_client(&oxi_client).await?;
+    /// ```rust,ignore
+    /// let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    /// let client = oxiclient.client().unwrap();
+    /// let result = User::clear_with_client(client).await?;
     /// println!("Cleared {} documents", result.deleted_count);
     /// ```
     async fn clear_with_client(client: &mongodb::Client) -> Result<DeleteResult, OxiModError>;
@@ -294,7 +308,7 @@ pub trait Model {
     /// - [`OxiModError`](crate::error::oximod_error::OximodError): If the global client is not initialized or the collection name is missing.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let collection = User::get_collection()?;
     /// let count = collection.count_documents(doc! {}).await?;
     /// println!("Total documents: {}", count);
@@ -306,7 +320,7 @@ pub trait Model {
     /// - `ObjectId` of the inserted document.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let id = user.save().await?;
     /// println!("Inserted user ID: {}", id);
     /// ```
@@ -321,7 +335,7 @@ pub trait Model {
     /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) containing matched and modified counts.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let result = User::update(doc! { "active": false }, doc! { "$set": { "active": true } }).await?;
     /// assert_eq!(result.modified_count, 3);
     /// ```
@@ -339,7 +353,7 @@ pub trait Model {
     /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with `matched_count` and `modified_count`.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let result = User::update_one(doc! { "age": 25 }, doc! { "$set": { "active": false } }).await?;
     /// assert_eq!(result.matched_count, 1);
     /// ```
@@ -356,7 +370,7 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of documents deleted.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let result = User::delete(doc! { "active": false }).await?;
     /// println!("Deleted {} users", result.deleted_count);
     /// ```
@@ -370,7 +384,7 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with details about the deletion.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let result = User::delete_one(doc! { "name": "user_a" }).await?;
     /// assert_eq!(result.deleted_count, 1);
     /// ```
@@ -386,7 +400,7 @@ pub trait Model {
     /// - A `Vec<Self>` containing all matched documents.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let users = User::find(doc! { "active": true }).await?;
     /// assert!(!users.is_empty());
     /// ```
@@ -402,7 +416,7 @@ pub trait Model {
     /// - `Some(Self)` if a document is found, or `None` otherwise.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// if let Some(user) = User::find_one(doc! { "name": "user_a" }).await? {
     ///     println!("Found user: {}", user.name);
     /// }
@@ -421,7 +435,7 @@ pub trait Model {
     /// - `Some(Self)` if found, or `None` if no document matches the ID.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
     /// let user = User::find_by_id(id).await?;
     /// if let Some(u) = user {
@@ -441,7 +455,7 @@ pub trait Model {
     /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with details on the matched and modified document.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
     /// let result = User::update_by_id(id, doc! { "$set": { "active": false } }).await?;
     /// assert_eq!(result.matched_count, 1);
@@ -459,7 +473,7 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the deletion outcome.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
     /// let result = User::delete_by_id(id).await?;
     /// assert_eq!(result.deleted_count, 1);
@@ -474,7 +488,7 @@ pub trait Model {
     /// - The number of matching documents as `u64`.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let count = User::count(doc! { "active": true }).await?;
     /// println!("Active users: {}", count);
     /// ```
@@ -488,7 +502,7 @@ pub trait Model {
     /// - `true` if at least one document matches, `false` otherwise.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let exists = User::exists(doc! { "name": "user_a" }).await?;
     /// if exists {
     ///     println!("User exists!");
@@ -503,7 +517,7 @@ pub trait Model {
     /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of deleted documents.
     ///
     /// # Example
-    /// ```rust, no_run
+    /// ```rust,ignore
     /// let result = User::clear().await?;
     /// println!("Cleared {} documents", result.deleted_count);
     /// ```
