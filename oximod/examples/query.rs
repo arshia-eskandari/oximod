@@ -35,9 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert multiple users using builder API
     let users = vec![
-        User::new().name("Alice".to_string()).age(30).active(true),
-        User::new().name("Bob".to_string()).age(40).active(false),
-        User::new().name("Charlie".to_string()).age(25).active(true),
+        User::new().name("Alice").age(30).active(true),
+        User::new().name("Bob").age(40).active(false),
+        User::new().name("Charlie").age(25).active(true),
     ];
 
     for user in &users {

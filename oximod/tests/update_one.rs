@@ -25,14 +25,8 @@ async fn updates_first_matching_document_only() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(65)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(65)
-            .active(true),
+        User::default().name("User1").age(65).active(true),
+        User::default().name("User2").age(65).active(true),
     ];
 
     for user in users {
@@ -67,14 +61,8 @@ async fn updates_first_matching_document_invalid_update_fails() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(65)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(65)
-            .active(true),
+        User::default().name("User1").age(65).active(true),
+        User::default().name("User2").age(65).active(true),
     ];
 
     for user in users {
@@ -111,14 +99,8 @@ async fn updates_one_optional_email_to_valid() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(65)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(65)
-            .active(true),
+        User::default().name("User1").age(65).active(true),
+        User::default().name("User2").age(65).active(true),
     ];
 
     for user in users {

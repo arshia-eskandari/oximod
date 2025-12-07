@@ -43,10 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert some users using fluent builder API
     let users = vec![
-        User::new().name("User1".to_string()).age(30).active(true),
-        User::new().name("User2".to_string()).age(25).active(true),
-        User::new().name("User3".to_string()).age(30).active(false),
-        User::new().name("User4".to_string()).age(40), // uses default active = true
+        User::new().name("User1").age(30).active(true),
+        User::new().name("User2").age(25).active(true),
+        User::new().name("User3").age(30).active(false),
+        User::new().name("User4").age(40), // uses default active = true
     ];
 
     for user in users {

@@ -23,14 +23,8 @@ async fn clears_collection_successfully() -> TestResult {
     }
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(22)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(28)
-            .active(false),
+        User::default().name("User1").age(22).active(true),
+        User::default().name("User2").age(28).active(false),
     ];
 
     for user in users {

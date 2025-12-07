@@ -24,7 +24,7 @@ async fn test_multiple_of_passes() -> TestResult {
 
     Product::clear().await?;
 
-    let product = Product::default().quantity(10); // ✅ divisible by 5
+    let product = Product::default().quantity(10u64); // ✅ divisible by 5
     let result = product.save().await?;
     assert_ne!(result, ObjectId::default());
     Ok(())
@@ -74,7 +74,7 @@ async fn test_multiple_of_passes_non_optional() -> TestResult {
 
     Product::clear().await?;
 
-    let product = Product::default().quantity(10); // ✅ divisible by 5
+    let product = Product::default().quantity(10u64); // ✅ divisible by 5
     let result = product.save().await?;
     assert_ne!(result, ObjectId::default());
     Ok(())

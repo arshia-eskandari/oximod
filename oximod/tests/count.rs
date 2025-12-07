@@ -25,18 +25,9 @@ async fn counts_matching_documents_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(30)
-            .active(true),
-        User::default()
-            .name("User3".to_string())
-            .age(30)
-            .active(false),
-        User::default()
-            .name("User3".to_string())
-            .age(25)
-            .active(true),
+        User::default().name("User1").age(30).active(true),
+        User::default().name("User3").age(30).active(false),
+        User::default().name("User3").age(25).active(true),
     ];
 
     for user in users {
@@ -97,20 +88,20 @@ async fn counts_matching_documents_by_email_correctly() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(30)
             .active(true)
-            .email("shared@example.com".to_string()),
+            .email("shared@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(30)
             .active(false)
-            .email("shared@example.com".to_string()),
+            .email("shared@example.com"),
         User::default()
-            .name("User3".to_string())
+            .name("User3")
             .age(25)
             .active(true)
-            .email("unique@example.com".to_string()),
+            .email("unique@example.com"),
     ];
 
     for user in users {

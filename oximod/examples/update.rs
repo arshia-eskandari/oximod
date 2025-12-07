@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     User::clear().await?;
 
     // Insert a user
-    let user = User::new().name("User1".to_string()).age(45).active(false);
+    let user = User::new().name("User1").age(45).active(false);
 
     let id = user.save().await?;
     println!("📝 Inserted user with _id: {}", id);

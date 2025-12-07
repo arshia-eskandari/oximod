@@ -38,7 +38,7 @@ async fn creates_indexes_correctly() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("IndexUser".to_string())
+        .name("IndexUser")
         .age(25)
         .created_at(DateTime::now())
         .active(true);
@@ -103,7 +103,7 @@ async fn index_version_is_applied_correctly() -> TestResult {
 
     VersionedIndex::clear().await?;
 
-    let item = VersionedIndex::default().data("hello".to_string());
+    let item = VersionedIndex::default().data("hello");
     item.save().await?;
 
     let mut cursor = VersionedIndex::get_collection()?.list_indexes().await?;
@@ -142,7 +142,7 @@ async fn text_index_version_is_applied_correctly() -> TestResult {
 
     TestModel::clear().await?;
 
-    let item = TestModel::default().data("hello".to_string());
+    let item = TestModel::default().data("hello");
     item.save().await?;
 
     let mut cursor = TestModel::get_collection()?.list_indexes().await?;
@@ -178,7 +178,7 @@ async fn hidden_index_is_applied_correctly() -> TestResult {
 
     HiddenTest::clear().await?;
 
-    let doc = HiddenTest::default().secret("classified".to_string());
+    let doc = HiddenTest::default().secret("classified");
     doc.save().await?;
 
     let mut cursor = HiddenTest::get_collection()?.list_indexes().await?;
@@ -217,8 +217,8 @@ async fn creates_indexes_correctly_fails_on_duplicate() -> TestResult {
 
     User::clear().await?;
 
-    let user1 = User::default().name("IndexUser".to_string());
-    let user2 = User::default().name("IndexUser".to_string());
+    let user1 = User::default().name("IndexUser");
+    let user2 = User::default().name("IndexUser");
 
     user1.save().await?;
 
@@ -251,7 +251,7 @@ async fn index_init_respects_overridden_retry_and_timeout() -> TestResult {
 
     UserOverride::clear().await?;
 
-    let doc = UserOverride::default().name("User1".to_string());
+    let doc = UserOverride::default().name("User1");
     let result = doc.save().await?;
     assert_ne!(result, ObjectId::default());
 

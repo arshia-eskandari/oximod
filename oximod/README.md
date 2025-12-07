@@ -12,13 +12,38 @@ Inspired by Mongoose, OxiMod brings a structured modeling experience while embra
 
 ---
 
+## Latest Update
+
+The builder API is now more flexible: 
+**any type that implements `Into<T>` for a field’s type can be passed directly**, and the conversion happens automatically inside the setter.
+
+### Before:
+
+```rust
+let user = User::new()
+    .name("Alice".to_string()) // manual conversion
+    .age(30)
+    .active(true);
+```
+
+### Now:
+
+```rust
+let user = User::new()
+    .name("Alice") // &str → String via Into
+    .age(30)
+    .active(true);
+```
+
+---
+
 ## 🚀 Fluent API Builders (since `v0.1.7`)
 
 OxiMod supports `new()` and fluent builder-style setters:
 
 ```rust
 let user = User::new()
-    .name("Alice".to_string())
+    .name("Alice")
     .age(30)
     .active(true);
 ```
@@ -202,8 +227,8 @@ async fn main() -> Result<()> {
     OxiClient::init_global(mongodb_uri).await?;
 
     let user = User::new()
-        .email("alice@example.com".to_string())
-        .name("Alice".to_string())
+        .email("alice@example.com")
+        .name("Alice")
         .age(30)
         .active(true);
 

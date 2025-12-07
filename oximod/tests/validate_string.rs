@@ -30,7 +30,7 @@ async fn test_valid_string_passes() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcmiddlexyz".to_string());
+    let doc = StringValidation::default().value("abcmiddlexyz");
     let result = doc.save().await?;
     assert_ne!(result, ObjectId::default());
     Ok(())
@@ -54,7 +54,7 @@ async fn test_starts_with_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("wrongmiddlexyz".to_string());
+    let doc = StringValidation::default().value("wrongmiddlexyz");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must start with"));
@@ -79,7 +79,7 @@ async fn test_ends_with_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcmiddlewrong".to_string());
+    let doc = StringValidation::default().value("abcmiddlewrong");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must end with"));
@@ -104,7 +104,7 @@ async fn test_includes_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcnomatchxyz".to_string());
+    let doc = StringValidation::default().value("abcnomatchxyz");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must include"));
@@ -129,7 +129,7 @@ async fn test_alphanumeric_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcmiddle!xyz".to_string());
+    let doc = StringValidation::default().value("abcmiddle!xyz");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must contain only alphanumeric"));
@@ -154,7 +154,7 @@ async fn test_empty_string_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("   ".to_string());
+    let doc = StringValidation::default().value("   ");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must be non-empty"));
@@ -179,7 +179,7 @@ async fn test_min_length_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abc".to_string());
+    let doc = StringValidation::default().value("abc");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("at least"));
@@ -204,7 +204,7 @@ async fn test_max_length_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcdef".to_string());
+    let doc = StringValidation::default().value("abcdef");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("at most"));
@@ -229,7 +229,7 @@ async fn test_pattern_fails() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcd".to_string());
+    let doc = StringValidation::default().value("abcd");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("pattern"));
@@ -260,7 +260,7 @@ async fn test_valid_string_passes_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcmiddlexyz".to_string());
+    let doc = StringValidation::default().value("abcmiddlexyz");
     let result = doc.save().await?;
     assert_ne!(result, ObjectId::default());
     Ok(())
@@ -284,7 +284,7 @@ async fn test_starts_with_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("wrongmiddlexyz".to_string());
+    let doc = StringValidation::default().value("wrongmiddlexyz");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must start with"));
@@ -309,7 +309,7 @@ async fn test_ends_with_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcmiddlewrong".to_string());
+    let doc = StringValidation::default().value("abcmiddlewrong");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must end with"));
@@ -334,7 +334,7 @@ async fn test_includes_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcnomatchxyz".to_string());
+    let doc = StringValidation::default().value("abcnomatchxyz");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must include"));
@@ -359,7 +359,7 @@ async fn test_alphanumeric_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcmiddle!xyz".to_string());
+    let doc = StringValidation::default().value("abcmiddle!xyz");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must contain only alphanumeric"));
@@ -384,7 +384,7 @@ async fn test_empty_string_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("   ".to_string());
+    let doc = StringValidation::default().value("   ");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("must be non-empty"));
@@ -409,7 +409,7 @@ async fn test_min_length_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abc".to_string());
+    let doc = StringValidation::default().value("abc");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("at least"));
@@ -434,7 +434,7 @@ async fn test_max_length_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcdef".to_string());
+    let doc = StringValidation::default().value("abcdef");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("at most"));
@@ -459,7 +459,7 @@ async fn test_pattern_fails_non_optional() -> TestResult {
 
     StringValidation::clear().await?;
 
-    let doc = StringValidation::default().value("abcd".to_string());
+    let doc = StringValidation::default().value("abcd");
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("pattern"));

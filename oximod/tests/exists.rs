@@ -24,10 +24,7 @@ async fn checks_existence_of_matching_document() -> TestResult {
 
     User::clear().await?;
 
-    let user = User::default()
-        .name("User1".to_string())
-        .age(27)
-        .active(true);
+    let user = User::default().name("User1").age(27).active(true);
     user.save().await?;
 
     let exists = User::exists(doc! { "name": "User1" }).await?;
@@ -62,10 +59,10 @@ async fn checks_existence_of_matching_document_by_email() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("User1".to_string())
+        .name("User1")
         .age(27)
         .active(true)
-        .email("user1@example.com".to_string());
+        .email("user1@example.com");
     user.save().await?;
 
     let exists = User::exists(doc! { "email": "user1@example.com" }).await?;

@@ -39,7 +39,7 @@ struct User {
     #[validate(non_empty)]
     bio: Option<String>,
 
-    #[validate(pattern = r"^SKU-\d{4}$")]
+    #[validate(pattern = r"^SKU-[0-9]{4}$")]
     sku: Option<String>,
 
     #[validate(non_negative)]
@@ -65,11 +65,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📥 Inserting a valid user...");
     let valid_user = User::new()
-        .username("arshia".to_string())
-        .email("arshia@example.com".to_string())
+        .username("arshia")
+        .email("arshia@example.com")
         .age(25)
-        .bio("Rustacean and full-stack dev".to_string())
-        .sku("SKU-1234".to_string())
+        .bio("Rustacean and full-stack dev")
+        .sku("SKU-1234")
         .points(0)
         .role(Role::User)
         .active(true);
@@ -79,11 +79,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("⚠️ Inserting an invalid user...");
     let invalid_user = User::new()
-        .username("ab".to_string()) // too short
-        .email("not-an-email".to_string())
+        .username("ab") // too short
+        .email("not-an-email")
         .age(-1) // not positive
-        .bio("   ".to_string()) // empty
-        .sku("WRONGSKU".to_string()) // invalid pattern
+        .bio("   ") // empty
+        .sku("WRONGSKU") // invalid pattern
         .points(-3); // not non-negative
 
     match invalid_user.save().await {

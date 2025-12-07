@@ -25,14 +25,8 @@ async fn finds_first_matching_document_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(22)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(22)
-            .active(false),
+        User::default().name("User1").age(22).active(true),
+        User::default().name("User2").age(22).active(false),
     ];
 
     for user in users {
@@ -69,14 +63,8 @@ async fn finds_first_matching_document_none_when_no_match() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(22)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(22)
-            .active(false),
+        User::default().name("User1").age(22).active(true),
+        User::default().name("User2").age(22).active(false),
     ];
 
     for user in users {
@@ -113,15 +101,15 @@ async fn finds_first_matching_document_by_email() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(22)
             .active(true)
-            .email("user1@example.com".to_string()),
+            .email("user1@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(25)
             .active(false)
-            .email("user2@example.com".to_string()),
+            .email("user2@example.com"),
     ];
 
     for user in users {
@@ -163,15 +151,15 @@ async fn finds_first_matching_document_by_email_none_when_no_match() -> TestResu
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(22)
             .active(true)
-            .email("user1@example.com".to_string()),
+            .email("user1@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(25)
             .active(false)
-            .email("user2@example.com".to_string()),
+            .email("user2@example.com"),
     ];
 
     for user in users {

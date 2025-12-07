@@ -35,10 +35,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert users using builder API
     let users = vec![
-        User::new().name("User1".to_string()).age(20).active(false),
-        User::new().name("User2".to_string()).age(25).active(false),
-        User::new().name("User3".to_string()).age(30), // active: true by default
-        User::new().name("User4".to_string()).age(30), // active: true by default
+        User::new().name("User1").age(20).active(false),
+        User::new().name("User2").age(25).active(false),
+        User::new().name("User3").age(30), // active: true by default
+        User::new().name("User4").age(30), // active: true by default
     ];
 
     let mut inserted_ids = vec![];

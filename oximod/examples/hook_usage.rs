@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📥 Inserting log entry...");
     let log = Log::default()
-        .message("System started".to_string())
+        .message("System started")
         .timestamp(DateTime::now().timestamp_millis())
         .print_message()
         .save()

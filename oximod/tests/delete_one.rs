@@ -25,14 +25,8 @@ async fn deletes_first_matching_document_only() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(50)
-            .active(false),
-        User::default()
-            .name("User2".to_string())
-            .age(50)
-            .active(false),
+        User::default().name("User1").age(50).active(false),
+        User::default().name("User2").age(50).active(false),
     ];
 
     for user in users {
@@ -64,14 +58,8 @@ async fn delete_one_no_matching_document() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(50)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(50)
-            .active(true),
+        User::default().name("User1").age(50).active(true),
+        User::default().name("User2").age(50).active(true),
     ];
 
     for user in users {
@@ -111,15 +99,15 @@ async fn deletes_first_matching_document_by_email_only() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(50)
             .active(false)
-            .email("shared@example.com".to_string()),
+            .email("shared@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(50)
             .active(false)
-            .email("shared@example.com".to_string()),
+            .email("shared@example.com"),
     ];
 
     for user in users {
@@ -156,15 +144,15 @@ async fn delete_one_no_matching_document_by_email() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(50)
             .active(true)
-            .email("user1@example.com".to_string()),
+            .email("user1@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(50)
             .active(true)
-            .email("user2@example.com".to_string()),
+            .email("user2@example.com"),
     ];
 
     for user in users {

@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     User::clear_with_client(client).await?;
 
     // Insert a user using the fluent builder + save_with_client
-    let user = User::new().name("User1".to_string()).age(45).active(false);
+    let user = User::new().name("User1").age(45).active(false);
 
     let id = user.save_with_client(client).await?;
     println!("📝 Inserted user with _id: {}", id);

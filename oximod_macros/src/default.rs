@@ -27,18 +27,25 @@ pub fn push_id_setter(
 pub fn push_field_setter(ident: &Ident, ty: &Type, setters: &mut Vec<TokenStream>) {
     let setter = if let Some(inner) = option_inner_type(ty) {
         quote! {
-            pub fn #ident<T: Into<#inner>>(mut self, val: T) -> Self {
+            pub fn #ident<T>(mut self, val: T) -> Self
+            where
+                T: Into<#inner>,
+            {
                 self.#ident = Some(val.into());
                 self
             }
         }
     } else {
         quote! {
-            pub fn #ident(mut self, val: #ty) -> Self {
-                self.#ident = val;
+            pub fn #ident<T>(mut self, val: T) -> Self
+            where
+                T: Into<#ty>,
+            {
+                self.#ident = val.into();
                 self
             }
         }
     };
+
     setters.push(setter);
 }
