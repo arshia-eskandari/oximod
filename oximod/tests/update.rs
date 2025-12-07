@@ -25,18 +25,9 @@ async fn updates_multiple_documents_correctly() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(70)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(65)
-            .active(true),
-        User::default()
-            .name("User3".to_string())
-            .age(40)
-            .active(true),
+        User::default().name("User1").age(70).active(true),
+        User::default().name("User2").age(65).active(true),
+        User::default().name("User3").age(40).active(true),
     ];
 
     for user in users {
@@ -75,18 +66,9 @@ async fn updates_multiple_documents_invalid_update_fails() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(70)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(65)
-            .active(true),
-        User::default()
-            .name("User3".to_string())
-            .age(40)
-            .active(true),
+        User::default().name("User1").age(70).active(true),
+        User::default().name("User2").age(65).active(true),
+        User::default().name("User3").age(40).active(true),
     ];
 
     for user in users {
@@ -125,19 +107,16 @@ async fn updates_optional_email_to_valid() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(70)
             .active(true)
-            .email("u1@example.com".to_string()),
+            .email("u1@example.com"),
+        User::default().name("User2").age(65).active(true),
         User::default()
-            .name("User2".to_string())
-            .age(65)
-            .active(true),
-        User::default()
-            .name("User3".to_string())
+            .name("User3")
             .age(40)
             .active(true)
-            .email("u3@example.com".to_string()),
+            .email("u3@example.com"),
     ];
 
     for user in users {

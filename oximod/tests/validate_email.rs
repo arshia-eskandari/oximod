@@ -38,8 +38,8 @@ async fn test_missing_at_symbol() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("Valid".to_string())
-        .email("invalidemail.com".to_string())
+        .name("Valid")
+        .email("invalidemail.com")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -73,8 +73,8 @@ async fn test_missing_domain_dot() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("Valid".to_string())
-        .email("user@domain".to_string())
+        .name("Valid")
+        .email("user@domain")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -108,8 +108,8 @@ async fn test_valid_email() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("Valid".to_string())
-        .email("user@example.com".to_string())
+        .name("Valid")
+        .email("user@example.com")
         .role(Role::Guess);
 
     let result = user.save().await?;
@@ -142,8 +142,8 @@ async fn test_missing_at_symbol_non_optional() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("Valid".to_string())
-        .email("invalidemail.com".to_string())
+        .name("Valid")
+        .email("invalidemail.com")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -177,8 +177,8 @@ async fn test_missing_domain_dot_non_optional() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("Valid".to_string())
-        .email("user@domain".to_string())
+        .name("Valid")
+        .email("user@domain")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -212,8 +212,8 @@ async fn test_valid_email_non_optional() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("Valid".to_string())
-        .email("user@example.com".to_string())
+        .name("Valid")
+        .email("user@example.com")
         .role(Role::Guess);
 
     let result = user.save().await?;

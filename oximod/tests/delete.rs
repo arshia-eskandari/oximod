@@ -25,18 +25,9 @@ async fn deletes_multiple_matching_documents() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(45)
-            .active(false),
-        User::default()
-            .name("User2".to_string())
-            .age(38)
-            .active(false),
-        User::default()
-            .name("User3".to_string())
-            .age(38)
-            .active(true),
+        User::default().name("User1").age(45).active(false),
+        User::default().name("User2").age(38).active(false),
+        User::default().name("User3").age(38).active(true),
     ];
 
     for user in users {
@@ -68,14 +59,8 @@ async fn delete_no_matching_documents() -> TestResult {
     User::clear().await?;
 
     let users = vec![
-        User::default()
-            .name("User1".to_string())
-            .age(45)
-            .active(true),
-        User::default()
-            .name("User2".to_string())
-            .age(38)
-            .active(true),
+        User::default().name("User1").age(45).active(true),
+        User::default().name("User2").age(38).active(true),
     ];
 
     for user in users {
@@ -115,20 +100,20 @@ async fn deletes_multiple_matching_documents_by_email() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(45)
             .active(false)
-            .email("shared@example.com".to_string()),
+            .email("shared@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(38)
             .active(false)
-            .email("shared@example.com".to_string()),
+            .email("shared@example.com"),
         User::default()
-            .name("User3".to_string())
+            .name("User3")
             .age(38)
             .active(true)
-            .email("user3@example.com".to_string()),
+            .email("user3@example.com"),
     ];
 
     for user in users {
@@ -165,15 +150,15 @@ async fn delete_no_matching_documents_by_email() -> TestResult {
 
     let users = vec![
         User::default()
-            .name("User1".to_string())
+            .name("User1")
             .age(45)
             .active(true)
-            .email("user1@example.com".to_string()),
+            .email("user1@example.com"),
         User::default()
-            .name("User2".to_string())
+            .name("User2")
             .age(38)
             .active(true)
-            .email("user2@example.com".to_string()),
+            .email("user2@example.com"),
     ];
 
     for user in users {

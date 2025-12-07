@@ -38,8 +38,8 @@ async fn test_min_length_violation() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("abc".to_string()) // too short
-        .email("x@y.com".to_string())
+        .name("abc") // too short
+        .email("x@y.com")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -74,8 +74,8 @@ async fn test_max_length_violation() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("ThisNameIsWayTooLong".to_string()) // too long
-        .email("x@y.com".to_string())
+        .name("ThisNameIsWayTooLong") // too long
+        .email("x@y.com")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -110,8 +110,8 @@ async fn test_length_valid() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("ValidName".to_string())
-        .email("user@example.com".to_string())
+        .name("ValidName")
+        .email("user@example.com")
         .role(Role::Admin);
 
     let result = user.save().await?;
@@ -145,8 +145,8 @@ async fn test_min_length_violation_non_optional() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("abc".to_string()) // too short
-        .email("x@y.com".to_string())
+        .name("abc") // too short
+        .email("x@y.com")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -181,8 +181,8 @@ async fn test_max_length_violation_non_optional() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("ThisNameIsWayTooLong".to_string()) // too long
-        .email("x@y.com".to_string())
+        .name("ThisNameIsWayTooLong") // too long
+        .email("x@y.com")
         .role(Role::Admin);
 
     let err = user.save().await;
@@ -217,8 +217,8 @@ async fn test_length_valid_non_optional() -> TestResult {
     User::clear().await?;
 
     let user = User::default()
-        .name("ValidName".to_string())
-        .email("user@example.com".to_string())
+        .name("ValidName")
+        .email("user@example.com")
         .role(Role::Admin);
 
     let result = user.save().await?;

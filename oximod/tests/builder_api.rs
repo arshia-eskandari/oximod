@@ -42,11 +42,7 @@ async fn builder_sets_all_fields() -> TestResult {
     }
 
     let id = ObjectId::new();
-    let user = User::default()
-        .id(id.clone())
-        .name("User1".to_string())
-        .age(30)
-        .active(true);
+    let user = User::default().id(id).name("User1").age(30).active(true);
 
     assert_eq!(user._id, Some(id));
     assert_eq!(user.name, "User1");
@@ -70,11 +66,11 @@ async fn builder_partial_fields_default_rest() -> TestResult {
         active: bool,
     }
 
-    let user = User::default().name("User1".to_string());
+    let user = User::default().name("User1");
 
     assert_eq!(user.name, "User1");
     assert_eq!(user.age, 0);
-    assert_eq!(user.active, false);
+    assert!(!user.active);
     assert_eq!(user._id, None);
 
     Ok(())
@@ -99,7 +95,7 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
     User::clear().await?;
 
     let saved_id = User::default()
-        .name("User1".to_string())
+        .name("User1")
         .age(42)
         .active(true)
         .save()
@@ -140,8 +136,8 @@ async fn builder_using_custom_document_id_setter() -> TestResult {
 
     let saved_id = User::default()
         .my_custom_id_setter(ObjectId::new())
-        .id("3894HR934HR00NJ23R324R".to_string())
-        .name("User1".to_string())
+        .id("3894HR934HR00NJ23R324R")
+        .name("User1")
         .age(42)
         .active(true)
         .save()

@@ -195,7 +195,7 @@ async fn test_positive_fails_non_optional() -> TestResult {
 
     NumericValidation::clear().await?;
 
-    let doc = NumericValidation::default().value(0);
+    let doc = NumericValidation::default().value(0i16);
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("positive"));
@@ -269,7 +269,7 @@ async fn test_non_negative_passes_non_optional() -> TestResult {
 
     NumericValidation::clear().await?;
 
-    let doc = NumericValidation::default().value(0);
+    let doc = NumericValidation::default().value(0isize);
     let result = doc.save().await?;
     assert_ne!(result, ObjectId::default());
     Ok(())
@@ -293,7 +293,7 @@ async fn test_non_negative_fails_non_optional() -> TestResult {
 
     NumericValidation::clear().await?;
 
-    let doc = NumericValidation::default().value(-1);
+    let doc = NumericValidation::default().value(-1isize);
     let result = doc.save().await;
     assert!(result.is_err());
     assert!(format!("{:?}", result).contains("non-negative"));

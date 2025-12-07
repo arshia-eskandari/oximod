@@ -26,14 +26,14 @@ async fn aggregates_documents_correctly() -> TestResult {
 
     let logs = vec![
         LogEntry::default()
-            .level("INFO".to_string())
-            .message("Startup complete".to_string()),
+            .level("INFO")
+            .message("Startup complete"),
         LogEntry::default()
-            .level("ERROR".to_string())
-            .message("Failed to connect".to_string()),
+            .level("ERROR")
+            .message("Failed to connect"),
         LogEntry::default()
-            .level("INFO".to_string())
-            .message("Listening on port 3000".to_string()),
+            .level("INFO")
+            .message("Listening on port 3000"),
     ];
 
     for log in logs {
@@ -79,11 +79,11 @@ async fn aggregation_with_no_matches_returns_empty() -> TestResult {
 
     let logs = vec![
         LogEntry::default()
-            .level("INFO".to_string())
-            .message("Startup complete".to_string()),
+            .level("INFO")
+            .message("Startup complete"),
         LogEntry::default()
-            .level("ERROR".to_string())
-            .message("Failed to connect".to_string()),
+            .level("ERROR")
+            .message("Failed to connect"),
     ];
 
     for log in logs {
@@ -129,23 +129,23 @@ async fn aggregates_count_emails_ending_with_com_including_missing_emails() -> T
 
     let logs = vec![
         LogEntry::default()
-            .level("INFO".to_string())
-            .message("Startup complete".to_string())
-            .email("info1@example.com".to_string()),
+            .level("INFO")
+            .message("Startup complete")
+            .email("info1@example.com"),
         LogEntry::default()
-            .level("INFO".to_string())
-            .message("Listening on port 3000".to_string())
-            .email("info2@example.org".to_string()),
+            .level("INFO")
+            .message("Listening on port 3000")
+            .email("info2@example.org"),
         LogEntry::default()
-            .level("ERROR".to_string())
-            .message("Failed to connect".to_string())
-            .email("error@example.com".to_string()),
+            .level("ERROR")
+            .message("Failed to connect")
+            .email("error@example.com"),
         LogEntry::default()
-            .level("WARN".to_string())
-            .message("No email set for this log".to_string()), // email == None
+            .level("WARN")
+            .message("No email set for this log"), // email == None
         LogEntry::default()
-            .level("DEBUG".to_string())
-            .message("Another log with no email".to_string()), // email == None
+            .level("DEBUG")
+            .message("Another log with no email"), // email == None
     ];
 
     for log in logs {

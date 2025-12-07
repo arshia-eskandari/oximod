@@ -41,9 +41,7 @@ async fn uses_get_collection_and_manual_indexing() -> TestResult {
 
     collection.create_index(index_model).await?;
 
-    let user = User::default()
-        .username("User1".to_string())
-        .email("user1@example.com".to_string());
+    let user = User::default().username("User1").email("user1@example.com");
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());

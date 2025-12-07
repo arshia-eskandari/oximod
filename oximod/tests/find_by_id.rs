@@ -25,11 +25,7 @@ async fn finds_document_by_id_correctly() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new();
-    let user = User::default()
-        .id(id.clone())
-        .name("User1".to_string())
-        .age(33)
-        .active(true);
+    let user = User::default().id(id).name("User1").age(33).active(true);
 
     user.save().await?;
 
@@ -99,11 +95,11 @@ async fn finds_document_by_id_with_email_correctly() -> TestResult {
 
     let id = ObjectId::new();
     let user = User::default()
-        .id(id.clone())
-        .name("User1".to_string())
+        .id(id)
+        .name("User1")
         .age(33)
         .active(true)
-        .email("user1@example.com".to_string()); // setter takes String
+        .email("user1@example.com"); // setter takes String
 
     user.save().await?;
 

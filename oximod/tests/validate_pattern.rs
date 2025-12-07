@@ -37,8 +37,8 @@ async fn test_invalid_pattern_format() -> TestResult {
     Product::clear().await?;
 
     let product = Product::default()
-        .code("BAD-SKU".to_string()) // ❌ does not match ^SKU-\d{4}$
-        .name("Product1".to_string())
+        .code("BAD-SKU") // ❌ does not match ^SKU-\d{4}$
+        .name("Product1")
         .quantity(10)
         .temperature(-10)
         .rating(5);
@@ -80,8 +80,8 @@ async fn test_valid_pattern_format() -> TestResult {
     Product::clear().await?;
 
     let product = Product::default()
-        .code("SKU-1234".to_string()) // ✅ matches pattern
-        .name("Product1".to_string())
+        .code("SKU-1234") // ✅ matches pattern
+        .name("Product1")
         .quantity(10)
         .temperature(-10)
         .rating(5);
@@ -122,8 +122,8 @@ async fn test_invalid_pattern_format_non_optional() -> TestResult {
     Product::clear().await?;
 
     let product = Product::default()
-        .code("BAD-SKU".to_string()) // ❌ does not match ^SKU-\d{4}$
-        .name("Product1".to_string())
+        .code("BAD-SKU") // ❌ does not match ^SKU-\d{4}$
+        .name("Product1")
         .quantity(10)
         .temperature(-10)
         .rating(5);
@@ -165,8 +165,8 @@ async fn test_valid_pattern_format_non_optional() -> TestResult {
     Product::clear().await?;
 
     let product = Product::default()
-        .code("SKU-1234".to_string()) // ✅ matches pattern
-        .name("Product1".to_string())
+        .code("SKU-1234") // ✅ matches pattern
+        .name("Product1")
         .quantity(10)
         .temperature(-10)
         .rating(5);
