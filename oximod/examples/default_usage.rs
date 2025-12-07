@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📥 Inserting customized user with fluent API...");
     let custom_user = User::default()
         .with_mongo_id(ObjectId::new())
-        .name("User1".to_string())
+        .name("User1")
         .age(30)
         .verified(true)
         .status(Status::Active)

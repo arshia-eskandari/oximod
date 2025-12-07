@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     User::clear().await?;
 
     // Insert one user using the builder API
-    let user = User::new().name("User1".to_string()).age(35); // `active` defaults to true
+    let user = User::new().name("User1").age(35); // `active` defaults to true
 
     let id = user.save().await?;
     println!("✅ Inserted user with _id: {}", id);

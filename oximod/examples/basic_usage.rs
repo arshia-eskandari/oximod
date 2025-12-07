@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     User::clear().await?;
 
     // Create and save a user using builder API (defaults `active` to true)
-    let user = User::new().name("User1".to_string()).age(28);
+    let user = User::new().name("User1").age(28);
     let id = user.save().await?;
     println!("✅ Saved user with _id: {}", id);
 

@@ -18,7 +18,7 @@ OxiMod supports `new()` and fluent builder-style setters:
 
 ```rust
 let user = User::new()
-    .name("Alice".to_string())
+    .name("Alice")
     .age(30)
     .active(true);
 ```
@@ -202,8 +202,8 @@ async fn main() -> Result<()> {
     OxiClient::init_global(mongodb_uri).await?;
 
     let user = User::new()
-        .email("alice@example.com".to_string())
-        .name("Alice".to_string())
+        .email("alice@example.com")
+        .name("Alice")
         .age(30)
         .active(true);
 
