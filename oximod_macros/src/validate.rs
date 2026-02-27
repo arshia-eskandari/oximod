@@ -84,14 +84,15 @@ pub fn generate_validate_model_tokens(
         }
     }
 
-    if let Some(min_length) = min_length_option {
-        if is_type_safe!(
+    if let Some(min_length) = min_length_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(min_length)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
+        )
+    {
+        field_rules_val.push(quote! {
                 if val.len() < (#min_length as usize) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
@@ -106,17 +107,17 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             });
-        }
     }
 
-    if let Some(max_length) = max_length_option {
-        if is_type_safe!(
+    if let Some(max_length) = max_length_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(max_length)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
+        )
+    {
+        field_rules_val.push(quote! {
                 if val.len() > (#max_length as usize) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
@@ -131,7 +132,6 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             });
-        }
     }
 
     if matches!(email_option, Some(true))
@@ -166,27 +166,28 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    if let Some(pattern) = pattern_option {
-        if is_type_safe!(
+    if let Some(pattern) = pattern_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(pattern)]` can only be applied to string fields"
-        ) {
-            match ::regex::Regex::new(pattern) {
-                Err(e) => {
-                    let msg =
-                        format!("Invalid regex pattern in validation for '{field_name_str}': {e}");
-                    compile_errors.push(quote_spanned! { field_ident.span() =>
-                        compile_error!(#msg);
-                    });
-                }
-                _ => {
-                    let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
+        )
+    {
+        match ::regex::Regex::new(pattern) {
+            Err(e) => {
+                let msg =
+                    format!("Invalid regex pattern in validation for '{field_name_str}': {e}");
+                compile_errors.push(quote_spanned! { field_ident.span() =>
+                    compile_error!(#msg);
+                });
+            }
+            _ => {
+                let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
 
-                    let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
+                let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
 
-                    field_rules_val.push(quote! {
+                field_rules_val.push(quote! {
                     #[allow(non_upper_case_globals)]
                     static #re_ident: ::std::sync::OnceLock<::oximod::_regex::Regex> =
                         ::std::sync::OnceLock::new();
@@ -206,19 +207,19 @@ pub fn generate_validate_model_tokens(
                         ));
                     }
                 });
-                }
             }
         }
     }
 
-    if let Some(true) = non_empty_option {
-        if is_type_safe!(
+    if let Some(true) = non_empty_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(non_empty)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
+        )
+    {
+        field_rules_val.push(quote! {
                 if val.trim().is_empty() {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
@@ -228,7 +229,6 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             });
-        }
     }
 
     if matches!(positive_option, Some(true))
@@ -291,77 +291,78 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    if let Some(start) = starts_with_option {
-        if is_type_safe!(
+    if let Some(start) = starts_with_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(starts_with)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
-                if !val.starts_with(#start) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must start with '{}'", #field_name_str, #start)
-                        ),
-                        @fmt
-                            "Ensure '{}' starts with {}", stringify!(#field_ident), #start
-                    ));
-                }
-            });
-        }
+        )
+    {
+        field_rules_val.push(quote! {
+            if !val.starts_with(#start) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must start with '{}'", #field_name_str, #start)
+                    ),
+                    @fmt
+                        "Ensure '{}' starts with {}", stringify!(#field_ident), #start
+                ));
+            }
+        });
     }
 
-    if let Some(end) = ends_with_option {
-        if is_type_safe!(
+    if let Some(end) = ends_with_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(ends_with)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
-                if !val.ends_with(#end) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must end with '{}'", #field_name_str, #end)
-                        ),
-                        @fmt
-                            "Ensure '{}' ends with {}", stringify!(#field_ident), #end
-                    ));
-                }
-            });
-        }
+        )
+    {
+        field_rules_val.push(quote! {
+            if !val.ends_with(#end) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must end with '{}'", #field_name_str, #end)
+                    ),
+                    @fmt
+                        "Ensure '{}' ends with {}", stringify!(#field_ident), #end
+                ));
+            }
+        });
     }
 
-    if let Some(substr) = includes_option {
-        if is_type_safe!(
+    if let Some(substr) = includes_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(includes)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
-                if !val.contains(#substr) {
-                    return Err(::oximod::_attach_printables!(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must include '{}'", #field_name_str, #substr)
-                        ),
-                        @fmt
-                            "Ensure '{}' includes {}", stringify!(#field_ident), #substr
-                    ));
-                }
-            });
-        }
+        )
+    {
+        field_rules_val.push(quote! {
+            if !val.contains(#substr) {
+                return Err(::oximod::_attach_printables!(
+                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                        format!("Field '{}' must include '{}'", #field_name_str, #substr)
+                    ),
+                    @fmt
+                        "Ensure '{}' includes {}", stringify!(#field_ident), #substr
+                ));
+            }
+        });
     }
 
-    if let Some(true) = alphanumeric_option {
-        if is_type_safe!(
+    if let Some(true) = alphanumeric_option
+        && is_type_safe!(
             is_str,
             checks,
             field_ident,
             "`#[validate(alphanumeric)]` can only be applied to string fields"
-        ) {
-            field_rules_val.push(quote! {
+        )
+    {
+        field_rules_val.push(quote! {
                 if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
                     return Err(::oximod::_attach_printables!(
                         ::oximod::_error::oximod_error::OxiModError::ValidationError(
@@ -371,33 +372,30 @@ pub fn generate_validate_model_tokens(
                     ));
                 }
             });
-        }
     }
 
-    if let Some(min) = min_option {
-        if is_type_safe!(
+    if let Some(min) = min_option
+        && is_type_safe!(
             is_num,
             checks,
             field_ident,
             "`#[validate(min)]` can only be applied to numeric fields"
-        ) {
-            if let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors) {
-                min_rhs_ts = Some(rhs);
-            }
-        }
+        )
+        && let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors)
+    {
+        min_rhs_ts = Some(rhs);
     }
 
-    if let Some(max) = max_option {
-        if is_type_safe!(
+    if let Some(max) = max_option
+        && is_type_safe!(
             is_num,
             checks,
             field_ident,
             "`#[validate(max)]` can only be applied to numeric fields"
-        ) {
-            if let Some(rhs) = rhs_for_numeric_bound(prim, max, field_ident, &mut compile_errors) {
-                max_rhs_ts = Some(rhs);
-            }
-        }
+        )
+        && let Some(rhs) = rhs_for_numeric_bound(prim, max, field_ident, &mut compile_errors)
+    {
+        max_rhs_ts = Some(rhs);
     }
 
     if let Some(min_rhs) = &min_rhs_ts {
@@ -426,40 +424,38 @@ pub fn generate_validate_model_tokens(
         });
     }
 
-    if let Some(multiple) = multiple_of_option {
-        if is_type_safe!(
+    if let Some(multiple) = multiple_of_option
+        && is_type_safe!(
             is_num && is_integer(prim),
             checks,
             field_ident,
             "`#[validate(multiple_of)]` can only be applied to integer fields"
-        ) {
-            if let Some((rhs, pow2_mask)) =
-                rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
-            {
-                if let Some(mask_lit) = pow2_mask {
-                    numeric_checks.push(quote! {
-                    if (v & #mask_lit) != 0 {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
-                            ),
-                            @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
-                        ));
-                    }
-                });
-                } else {
-                    numeric_checks.push(quote! {
-                    if (v % #rhs) != 0 {
-                        return Err(::oximod::_attach_printables!(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
-                            ),
-                            @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
-                        ));
-                    }
-                });
+        )
+        && let Some((rhs, pow2_mask)) =
+            rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
+    {
+        if let Some(mask_lit) = pow2_mask {
+            numeric_checks.push(quote! {
+                if (v & #mask_lit) != 0 {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                            format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                        ),
+                        @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
+                    ));
                 }
-            }
+            });
+        } else {
+            numeric_checks.push(quote! {
+                if (v % #rhs) != 0 {
+                    return Err(::oximod::_attach_printables!(
+                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
+                            format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                        ),
+                        @fmt "Ensure '{}' is divisible by {}", stringify!(#field_ident), #rhs
+                    ));
+                }
+            });
         }
     }
 

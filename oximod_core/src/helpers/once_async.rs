@@ -25,6 +25,12 @@ struct Meta {
     max_init: Option<Duration>,
 }
 
+impl Default for OnceAsync {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OnceAsync {
     const UNINIT: u8 = 0;
     const INPROG: u8 = 1;
@@ -50,8 +56,8 @@ impl OnceAsync {
             meta: Mutex::new(Meta {
                 attempts: 0,
                 started_at: None,
-                max_retries: max_retries,
-                max_init: max_init,
+                max_retries,
+                max_init,
             }),
         }
     }

@@ -34,15 +34,12 @@ fn stderr_is_tty() -> bool {
 #[cold]
 #[inline(never)]
 pub fn print_backtrace_cold(bt: &Backtrace) {
-    match bt.status() {
-        BacktraceStatus::Captured => {
-            if stderr_is_tty() {
-                eprintln!("\x1b[1;33mBacktrace:\x1b[0m\n{bt}");
-            } else {
-                eprintln!("Backtrace:\n{bt}");
-            }
+    if bt.status() == BacktraceStatus::Captured {
+        if stderr_is_tty() {
+            eprintln!("\x1b[1;33mBacktrace:\x1b[0m\n{bt}");
+        } else {
+            eprintln!("Backtrace:\n{bt}");
         }
-        _ => {}
     }
 }
 
