@@ -173,18 +173,20 @@ pub fn generate_validate_model_tokens(
             field_ident,
             "`#[validate(pattern)]` can only be applied to string fields"
         ) {
-            if let Err(e) = ::regex::Regex::new(pattern) {
-                let msg =
-                    format!("Invalid regex pattern in validation for '{field_name_str}': {e}");
-                compile_errors.push(quote_spanned! { field_ident.span() =>
-                    compile_error!(#msg);
-                });
-            } else {
-                let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
+            match ::regex::Regex::new(pattern) {
+                Err(e) => {
+                    let msg =
+                        format!("Invalid regex pattern in validation for '{field_name_str}': {e}");
+                    compile_errors.push(quote_spanned! { field_ident.span() =>
+                        compile_error!(#msg);
+                    });
+                }
+                _ => {
+                    let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
 
-                let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
+                    let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
 
-                field_rules_val.push(quote! {
+                    field_rules_val.push(quote! {
                     #[allow(non_upper_case_globals)]
                     static #re_ident: ::std::sync::OnceLock<::oximod::_regex::Regex> =
                         ::std::sync::OnceLock::new();
@@ -204,6 +206,7 @@ pub fn generate_validate_model_tokens(
                         ));
                     }
                 });
+                }
             }
         }
     }

@@ -6,8 +6,8 @@ use proc_macro2::TokenStream;
 use std::fmt::Display;
 use std::str::FromStr;
 use syn::{
-    spanned::Spanned, Attribute, Expr, ExprLit, ExprUnary, GenericArgument, Lit, LitFloat, LitInt,
-    Meta, PathArguments, Type, UnOp,
+    Attribute, Expr, ExprLit, ExprUnary, GenericArgument, Lit, LitFloat, LitInt, Meta,
+    PathArguments, Type, UnOp, spanned::Spanned,
 };
 
 /// Parses and returns the expression provided as the argument to the given attribute.
