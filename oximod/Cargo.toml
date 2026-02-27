@@ -11,23 +11,23 @@ keywords = ["mongodb", "odm", "mongoose", "rust"]
 categories = ["database", "asynchronous"]
 
 [dependencies]
-async-trait = "0.1.86"
-mongodb = "3.2.1"
-thiserror = "2.0.11"
+async-trait = "0.1.89"
+mongodb = "3.5.1"
+thiserror = "2.0.18"
 oximod_core = { version = "0.1.13", path = "../oximod_core" }
 oximod_macros = { version = "0.1.15", path = "../oximod_macros" }
-serde = "1.0.219"
-futures-util = "0.3.31"
+serde = "1.0.228"
+futures-util = "0.3.32"
 
 [dependencies.regex]
-version = "1.11.1"
+version = "1.12.3"
 default-features = false
 features = ["std"]
 
 [dev-dependencies]
 dotenv = "0.15.0"
 testresult = "0.4.1"
-tokio = { version = "1.43.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 
 [features]
 debug-print = ["oximod_core/debug-print"]
