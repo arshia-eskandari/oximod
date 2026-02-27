@@ -2,11 +2,11 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{
+        Mutex,
         atomic::{
             AtomicU8,
             Ordering::{AcqRel, Acquire, Release},
         },
-        Mutex,
     },
     task::{Context, Poll, Waker},
     time::{Duration, Instant},
