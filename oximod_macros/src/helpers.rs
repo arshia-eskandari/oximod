@@ -18,11 +18,17 @@ fn missing_attr_ts(attrs: &[Attribute], msg: &str) -> TokenStream {
     }
 }
 
+pub struct ModelAttrs {
+    pub collection: String,
+    pub db: String,
+    pub index_max_retries: u32,
+    pub index_max_init_seconds: u8,
+    pub document_id_setter_ident: String,
+}
+
 /// Collects and validates top-level model attributes, returning core model
 /// configuration values or compile error token streams on failure.
-pub fn collect_model_attrs(
-    attrs: &[Attribute],
-) -> Result<(String, String, u32, u8, String), TokenStream> {
+pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStream> {
     let mut collection: Option<String> = None;
     let mut db: Option<String> = None;
     let mut index_max_retries: u32 = 3;
@@ -66,16 +72,16 @@ pub fn collect_model_attrs(
 
     let db = db.ok_or_else(|| missing_attr_ts(attrs, r#"Missing #[db("db_name")] attribute"#))?;
 
-    Ok((
+    Ok(ModelAttrs {
         collection,
         db,
         index_max_retries,
         index_max_init_seconds,
         document_id_setter_ident,
-    ))
+    })
 }
 
-pub struct FieldTokenStream {
+pub struct FieldTokenStreams {
     pub indexes: Vec<TokenStream>,
     pub validations: Vec<TokenStream>,
     pub inits: Vec<TokenStream>,
@@ -101,7 +107,7 @@ pub struct FieldTokenStream {
 pub fn generate_field_tokens(
     input: &DeriveInput,
     document_id_setter_ident: &str,
-) -> Result<FieldTokenStream, TokenStream> {
+) -> Result<FieldTokenStreams, TokenStream> {
     let mut indexes = Vec::new();
     let mut validations = Vec::new();
     let mut inits = Vec::new();
@@ -160,7 +166,7 @@ pub fn generate_field_tokens(
         }
     }
 
-    Ok(FieldTokenStream {
+    Ok(FieldTokenStreams {
         indexes,
         validations,
         inits,

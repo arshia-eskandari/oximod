@@ -6,7 +6,7 @@ mod parsers;
 mod model_macro;
 mod validate;
 
-use helpers::{FieldTokenStream, collect_model_attrs, generate_field_tokens};
+use helpers::{FieldTokenStreams, ModelAttrs, collect_model_attrs, generate_field_tokens};
 use model_macro::generate_model_token;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -58,25 +58,26 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let index_once_async_ident = Ident::new(&format!("_INDEX_INIT_{name}"), Span::call_site());
 
-    let (collection, db, index_max_retries, index_max_init_seconds, document_id_setter_ident) =
-        match collect_model_attrs(&input.attrs) {
-            Ok(vals) => vals,
-            Err(err_tokens) => return err_tokens.into(),
-        };
-
-    let token_streams = match generate_field_tokens(&input, &document_id_setter_ident) {
-        Ok(token_streams) => token_streams,
-        Err(e) => {
-            return e.into();
-        }
+    let ModelAttrs {
+        collection,
+        db,
+        index_max_retries,
+        index_max_init_seconds,
+        document_id_setter_ident,
+    } = match collect_model_attrs(&input.attrs) {
+        Ok(vals) => vals,
+        Err(e) => return e.into(),
     };
 
-    let FieldTokenStream {
+    let FieldTokenStreams {
         indexes,
         validations,
         inits,
         setters,
-    } = token_streams;
+    } = match generate_field_tokens(&input, &document_id_setter_ident) {
+        Ok(token_streams) => token_streams,
+        Err(e) => return e.into(),
+    };
 
     let model_token = generate_model_token(name, &db, &collection);
 
