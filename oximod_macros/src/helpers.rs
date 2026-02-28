@@ -6,7 +6,7 @@ use crate::parsers::{
 use crate::validate::generate_validate_model_tokens;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{spanned::Spanned, Attribute, DeriveInput};
+use syn::{Attribute, DeriveInput, spanned::Spanned};
 
 /// Generates a compile error token stream for a missing required attribute,
 /// using the first attribute's span if available or the call site otherwise.
@@ -75,6 +75,13 @@ pub fn collect_model_attrs(
     ))
 }
 
+pub struct FieldTokenStream {
+    pub indexes: Vec<TokenStream>,
+    pub validations: Vec<TokenStream>,
+    pub inits: Vec<TokenStream>,
+    pub setters: Vec<TokenStream>,
+}
+
 /// Processes all fields of a struct annotated with `#[derive(Model)]`,
 /// expanding supported field-level attributes into token streams used
 /// for the generated implementation.
@@ -93,12 +100,12 @@ pub fn collect_model_attrs(
 /// or if any attribute arguments fail to parse.
 pub fn generate_field_tokens(
     input: &DeriveInput,
-    indexes: &mut Vec<TokenStream>,
-    validations: &mut Vec<TokenStream>,
-    inits: &mut Vec<TokenStream>,
-    setters: &mut Vec<TokenStream>,
     document_id_setter_ident: &str,
-) -> Result<(), TokenStream> {
+) -> Result<FieldTokenStream, TokenStream> {
+    let mut indexes = Vec::new();
+    let mut validations = Vec::new();
+    let mut inits = Vec::new();
+    let mut setters = Vec::new();
     let data_struct = match &input.data {
         syn::Data::Struct(s) => s,
         _ => {
@@ -106,16 +113,16 @@ pub fn generate_field_tokens(
                 &input.ident,
                 "Model can only be derived for structs.",
             )
-            .to_compile_error())
+            .to_compile_error());
         }
     };
 
     for field in data_struct.fields.iter() {
         if let Some(ident) = &field.ident {
             if ident == "_id" {
-                push_id_setter(setters, document_id_setter_ident)?;
+                push_id_setter(&mut setters, document_id_setter_ident)?;
             } else {
-                push_field_setter(ident, &field.ty, setters);
+                push_field_setter(ident, &field.ty, &mut setters);
             }
 
             let mut init_expr: TokenStream = quote! { Default::default() };
@@ -153,5 +160,10 @@ pub fn generate_field_tokens(
         }
     }
 
-    Ok(())
+    Ok(FieldTokenStream {
+        indexes,
+        validations,
+        inits,
+        setters,
+    })
 }
