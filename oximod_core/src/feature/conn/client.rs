@@ -125,10 +125,7 @@ impl OxiClient {
         let client = Self::connect(mongo_uri).await?;
 
         CLIENT.set(client.into()).map_err(|_| {
-            attach_printables!(
-                OxiModError::GlobalClientInitError("CLIENT set method failed.".to_string()),
-                "Ensure `init_global` is only called once, or restart the application."
-            )
+            OxiModError::GlobalClientInitError("CLIENT set method failed.".to_string())
         })?;
         Ok(())
     }
@@ -142,12 +139,10 @@ impl OxiClient {
     /// # Errors
     /// Returns a [`OxiModError::GlobalClientMissing`] if no global client has been set.
     pub fn global() -> Result<Arc<Client>, OxiModError> {
-        let client = CLIENT.get().cloned().ok_or_else(|| {
-            attach_printables!(
-                OxiModError::GlobalClientMissing("Failed to clone arc".to_string()),
-                "Ensure you call `init_global` before using `OxiClient::global`."
-            )
-        })?;
+        let client = CLIENT
+            .get()
+            .cloned()
+            .ok_or_else(|| OxiModError::GlobalClientMissing("Failed to clone arc".to_string()))?;
         Ok(client)
     }
 }
