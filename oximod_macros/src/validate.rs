@@ -40,7 +40,7 @@ pub fn generate_validate_model_tokens(
         alphanumeric: alphanumeric_option,
         multiple_of: multiple_of_option,
     } = &validate_args;
-    let field_name_str = stringify!(#field_ident);
+    let field_name_lit = syn::LitStr::new(&field_ident.to_string(), field_ident.span());
 
     let opt_inner = unwrap_option_type(field_ty);
     let is_optional = opt_inner.is_some();
@@ -73,8 +73,8 @@ pub fn generate_validate_model_tokens(
             field_rules_direct.push(quote! {
                 if self.#field_ident.is_none() {
                     return Err(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' is required", #field_name_str)
+                        ::oximod::_error::oximod_error::OxiModError::validation(
+                            format!("Field '{}' is required", #field_name_lit)
                         )
                     );
                 }
@@ -91,14 +91,18 @@ pub fn generate_validate_model_tokens(
         )
     {
         field_rules_val.push(quote! {
-                if val.len() < (#min_length as usize) {
-                    return Err(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be at least {} characters long", #field_name_str, #min_length)
+            if val.len() < (#min_length as usize) {
+                return Err(
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must be at least {} characters long",
+                            #field_name_lit,
+                            #min_length
                         )
-                    );
-                }
-            });
+                    )
+                );
+            }
+        });
     }
 
     if let Some(max_length) = max_length_option
@@ -110,14 +114,18 @@ pub fn generate_validate_model_tokens(
         )
     {
         field_rules_val.push(quote! {
-                if val.len() > (#max_length as usize) {
-                    return Err(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be at most {} characters long", #field_name_str, #max_length)
+            if val.len() > (#max_length as usize) {
+                return Err(
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must be at most {} characters long",
+                            #field_name_lit,
+                            #max_length
                         )
-                    );
-                }
-            });
+                    )
+                );
+            }
+        });
     }
 
     if matches!(email_option, Some(true))
@@ -143,8 +151,11 @@ pub fn generate_validate_model_tokens(
 
             if !__re.is_match(val) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be a valid email address", #field_name_str)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must be a valid email address",
+                            #field_name_lit
+                        )
                     )
                 );
             }
@@ -161,8 +172,10 @@ pub fn generate_validate_model_tokens(
     {
         match ::regex::Regex::new(pattern) {
             Err(e) => {
-                let msg =
-                    format!("Invalid regex pattern in validation for '{field_name_str}': {e}");
+                let msg = format!(
+                    "Invalid regex pattern in validation for '{}': {}",
+                    field_ident, e
+                );
                 compile_errors.push(quote_spanned! { field_ident.span() =>
                     compile_error!(#msg);
                 });
@@ -182,8 +195,11 @@ pub fn generate_validate_model_tokens(
 
                     if !regex.is_match(val) {
                         return Err(
-                            ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                                format!("Field '{}' does not match the required pattern", #field_name_str)
+                            ::oximod::_error::oximod_error::OxiModError::validation(
+                                format!(
+                                    "Field '{}' does not match the required pattern",
+                                    #field_name_lit
+                                )
                             )
                         );
                     }
@@ -203,8 +219,8 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if val.trim().is_empty() {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be non-empty", #field_name_str)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!("Field '{}' must be non-empty", #field_name_lit)
                     )
                 );
             }
@@ -222,8 +238,8 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if *val <= 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be positive", #field_name_str)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!("Field '{}' must be positive", #field_name_lit)
                     )
                 );
             }
@@ -241,8 +257,8 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if *val >= 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be negative", #field_name_str)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!("Field '{}' must be negative", #field_name_lit)
                     )
                 );
             }
@@ -260,8 +276,8 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if *val < 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be non-negative", #field_name_str)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!("Field '{}' must be non-negative", #field_name_lit)
                     )
                 );
             }
@@ -279,8 +295,12 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if !val.starts_with(#start) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must start with '{}'", #field_name_str, #start)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must start with '{}'",
+                            #field_name_lit,
+                            #start
+                        )
                     )
                 );
             }
@@ -298,8 +318,12 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if !val.ends_with(#end) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must end with '{}'", #field_name_str, #end)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must end with '{}'",
+                            #field_name_lit,
+                            #end,
+                        )
                     )
                 );
             }
@@ -317,8 +341,12 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if !val.contains(#substr) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must include '{}'", #field_name_str, #substr)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must include '{}'",
+                            #field_name_lit,
+                            #substr,
+                        )
                     )
                 );
             }
@@ -336,8 +364,11 @@ pub fn generate_validate_model_tokens(
         field_rules_val.push(quote! {
             if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must contain only alphanumeric characters", #field_name_str)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must contain only alphanumeric characters",
+                            #field_name_lit,
+                        )
                     )
                 );
             }
@@ -372,8 +403,12 @@ pub fn generate_validate_model_tokens(
         numeric_checks.push(quote! {
             if v < #min_rhs {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be at least {}", #field_name_str, #min_rhs)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must be at least {}",
+                            #field_name_lit,
+                            #min_rhs,
+                        )
                     )
                 );
             }
@@ -384,8 +419,12 @@ pub fn generate_validate_model_tokens(
         numeric_checks.push(quote! {
             if v > #max_rhs {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                        format!("Field '{}' must be at most {}", #field_name_str, #max_rhs)
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!(
+                            "Field '{}' must be at most {}",
+                            #field_name_lit,
+                            #max_rhs
+                        )
                     )
                 );
             }
@@ -406,8 +445,12 @@ pub fn generate_validate_model_tokens(
             numeric_checks.push(quote! {
                 if (v & #mask_lit) != 0 {
                     return Err(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                        ::oximod::_error::oximod_error::OxiModError::validation(
+                            format!(
+                                "Field '{}' must be a multiple of {}",
+                                #field_name_lit,
+                                #rhs,
+                            )
                         )
                     );
                 }
@@ -416,8 +459,12 @@ pub fn generate_validate_model_tokens(
             numeric_checks.push(quote! {
                 if (v % #rhs) != 0 {
                     return Err(
-                        ::oximod::_error::oximod_error::OxiModError::ValidationError(
-                            format!("Field '{}' must be a multiple of {}", #field_name_str, #rhs)
+                        ::oximod::_error::oximod_error::OxiModError::validation(
+                            format!(
+                                "Field '{}' must be a multiple of {}",
+                                #field_name_lit,
+                                #rhs,
+                            )
                         )
                     );
                 }

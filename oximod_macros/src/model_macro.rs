@@ -29,17 +29,25 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 Self::_create_indexes(&collection).await?;
 
                 let document = ::oximod::_mongodb::bson::to_document(&self).map_err(|e|
-                    ::oximod::_error::oximod_error::OxiModError::SerializationError(::std::format!("{e}"))
+                    ::oximod::_error::oximod_error::OxiModError::serialization(
+                        "Failed to serialize model into BSON document",
+                        e,
+                    )
                 )?;
 
                 let result = collection.insert_one(document).await.map_err(|e|
-                    ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}"))
+                    ::oximod::_error::oximod_error::OxiModError::connection(
+                        "Failed to insert document into MongoDB collection",
+                        e,
+                    )
                 )?;
 
                 match result.inserted_id.as_object_id() {
                     Some(id) => Ok(id),
                     None => Err(
-                        ::oximod::_error::oximod_error::OxiModError::SerializationError("inserted_id is not an ObjectId".to_string())
+                        ::oximod::_error::oximod_error::OxiModError::validation(
+                            "MongoDB returned a non-ObjectId inserted_id"
+                        )
                     )
                 }
             }
@@ -61,7 +69,12 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let result = collection
                     .update_many(filter.into(), update.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB update_many operation",
+                            e,
+                        )
+                    )?;
 
                 Ok(result)
             }
@@ -86,7 +99,12 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let result = collection
                     .update_one(filter.into(), update.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB update_one operation",
+                            e,
+                        )
+                    )?;
 
                 Ok(result)
             }
@@ -109,7 +127,12 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let result = collection
                     .delete_many(filter.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB delete operation",
+                            e,
+                        )
+                    )?;
 
                 Ok(result)
             }
@@ -131,7 +154,12 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let result = collection
                     .delete_one(filter.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB delete_one operation",
+                            e,
+                        )
+                    )?;
 
                 Ok(result)
             }
@@ -157,14 +185,29 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let mut cursor = collection
                     .find(filter.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB find operation",
+                            e,
+                        )
+                )?;
 
                 let mut results = vec![];
 
                 while let Some(doc) = ::oximod::_futures_util::stream::StreamExt::next(&mut cursor).await {
-                    let doc = doc.map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    let doc = doc.map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to read document from MongoDB cursor",
+                            e,
+                        )
+                    )?;
 
-                    let parsed = ::oximod::_mongodb::bson::from_document(doc).map_err(|e| ::oximod::_error::oximod_error::OxiModError::SerializationError(::std::format!("{e}")))?;
+                    let parsed = ::oximod::_mongodb::bson::from_document(doc).map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::serialization(
+                            "Failed to deserialize BSON document into model",
+                            e,
+                        )
+                    )?;
 
                     results.push(parsed);
                 }
@@ -196,13 +239,23 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let result = collection
                     .find_one(filter.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB find_one operation",
+                            e,
+                        )
+                    )?;
 
                 match result {
                     Some(doc) => {
-                        let parsed = ::oximod::_mongodb::bson::from_document(doc).map_err(|e| ::oximod::_error::oximod_error::OxiModError::SerializationError(::std::format!("{e}")))?;
+                        let parsed = ::oximod::_mongodb::bson::from_document(doc).map_err(|e|
+                            ::oximod::_error::oximod_error::OxiModError::serialization(
+                                "Failed to deserialize BSON document into model",
+                                e,
+                            )
+                        )?;
                         Ok(Some(parsed))
-                    }
+                    },
                     None => Ok(None),
                 }
             }
@@ -281,7 +334,12 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let count = collection
                     .count_documents(filter.into())
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB count_documents operation",
+                            e,
+                        )
+                    )?;
 
                 Ok(count)
             }
@@ -316,7 +374,12 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 let result = collection
                     .delete_many(::oximod::_mongodb::bson::doc! {})
                     .await
-                    .map_err(|e| ::oximod::_error::oximod_error::OxiModError::ConnectionError(::std::format!("{e}")))?;
+                    .map_err(|e|
+                        ::oximod::_error::oximod_error::OxiModError::database(
+                            "Failed to execute MongoDB delete_many operation",
+                            e,
+                        )
+                )?;
 
                 Ok(result)
             }
@@ -324,7 +387,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
             async fn clear() -> Result<::oximod::_mongodb::results::DeleteResult, ::oximod::_error::oximod_error::OxiModError> {
                 let client_arc = ::oximod::_feature::conn::client::OxiClient::global()?;
                 let client: &::oximod::_mongodb::Client = client_arc.as_ref();
-                Self::clear_with_client(&client).await
+                Self::clear_with_client(client).await
             }
         }
     }

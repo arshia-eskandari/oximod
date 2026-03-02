@@ -46,9 +46,9 @@ impl OxiClient {
     /// # Errors
     /// Returns a [`OxiModError::ConnectionError`] if the client initialization fails.
     async fn connect(mongo_uri: String) -> Result<Client, OxiModError> {
-        let client = Client::with_uri_str(&mongo_uri)
-            .await
-            .map_err(|e| OxiModError::ConnectionError(format!("{e}")))?;
+        let client = Client::with_uri_str(&mongo_uri).await.map_err(|e| {
+            OxiModError::connection("Unable to establish MongoDB client from provided URI", e)
+        })?;
 
         Ok(client)
     }
@@ -125,7 +125,7 @@ impl OxiClient {
         let client = Self::connect(mongo_uri).await?;
 
         CLIENT.set(client.into()).map_err(|_| {
-            OxiModError::GlobalClientInitError("CLIENT set method failed.".to_string())
+            OxiModError::global_client_init("Global MongoDB client has already been initialized")
         })?;
         Ok(())
     }
@@ -142,7 +142,7 @@ impl OxiClient {
         let client = CLIENT
             .get()
             .cloned()
-            .ok_or_else(|| OxiModError::GlobalClientMissing("Failed to clone arc".to_string()))?;
+            .ok_or_else(|| OxiModError::global_client_missing("Failed to clone arc"))?;
         Ok(client)
     }
 }

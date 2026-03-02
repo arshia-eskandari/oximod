@@ -109,7 +109,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         ];
 
                         if !indexes.is_empty() {
-                            collection.create_indexes(indexes).await.map_err(|e| ::oximod::_error::oximod_error::OxiModError::IndexError(::std::format!("{e}")))?;
+                            collection
+                                .create_indexes(indexes)
+                                .await
+                                .map_err(|e|
+                                    ::oximod::_error::oximod_error::OxiModError::index("Failed to create indexes for collection", e)
+                                )?;
                         }
 
                         Ok(())
