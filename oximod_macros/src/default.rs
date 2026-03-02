@@ -9,7 +9,7 @@ pub fn push_id_setter(
     setters: &mut Vec<TokenStream>,
     id_setter_name: &str,
 ) -> Result<(), TokenStream> {
-    let id_method_ident = syn::Ident::new(&id_setter_name, proc_macro2::Span::call_site());
+    let id_method_ident = syn::Ident::new(id_setter_name, proc_macro2::Span::call_site());
     let id_setter = quote! {
         /// Set the MongoDB ObjectId
         pub fn #id_method_ident(mut self, id: ::oximod::_mongodb::bson::oid::ObjectId) -> Self {

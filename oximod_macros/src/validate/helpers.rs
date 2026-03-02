@@ -24,7 +24,7 @@ pub fn is_string(ty: &Type) -> bool {
     match ty {
         Type::Path(tp) => tp.path.is_ident("String")
             || tp.path.is_ident("Cow") // Cow<'_, str>
-                && tp.path.segments.last().map_or(false, |seg| {
+                && tp.path.segments.last().is_some_and(|seg| {
                     if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
                         ab.args.iter().any(|arg| matches!(arg,
                             syn::GenericArgument::Type(syn::Type::Path(p)) if p.path.is_ident("str")))

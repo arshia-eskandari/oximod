@@ -1,9 +1,9 @@
 use crate::error::oximod_error::OxiModError;
 use async_trait;
 use mongodb::{
-    bson::{self, oid::ObjectId, Document},
-    results::{DeleteResult, UpdateResult},
     Collection,
+    bson::{self, Document, oid::ObjectId},
+    results::{DeleteResult, UpdateResult},
 };
 
 /// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro.

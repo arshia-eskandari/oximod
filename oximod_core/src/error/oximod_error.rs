@@ -1,41 +1,185 @@
+use std::error::Error as StdError;
 use thiserror::Error;
 
+/// A boxed error type used by OxiMod to preserve underlying sources.
+///
+/// This keeps OxiMod errors compatible with:
+/// - multi-threaded async runtimes (Send + Sync)
+/// - downstream applications that need error chaining via `source()`
+pub type BoxError = Box<dyn StdError + Send + Sync + 'static>;
+
 /// Represents all possible errors returned by OxiMod during database operations.
+///
+/// # Design goals
+/// - **Stable Rust compatibility** (no nightly features)
+/// - **Error chaining** via `#[source]` where applicable
+/// - **Human-friendly context** via `msg`
+/// - **Ergonomic construction** via helper constructors
+///
+/// # Downstream usage
+/// Applications can inspect causes via `.source()` and display a full chain using
+/// their preferred error/reporting stack (e.g. `anyhow`, `eyre`, `tracing`).
 #[derive(Debug, Error)]
 pub enum OxiModError {
     /// Failed to connect to the MongoDB server.
-    /// This may indicate an invalid URI, network issues, or server downtime.
-    #[error("Failed to connect to db: {0}")]
-    ConnectionError(String),
+    ///
+    /// Common causes:
+    /// - invalid connection URI
+    /// - network connectivity issues
+    /// - authentication failure
+    /// - server unavailable
+    #[error("Failed to connect to db: {msg}")]
+    Connection {
+        /// Human-readable context describing *what* was being attempted.
+        msg: String,
+        /// The underlying driver or IO error.
+        #[source]
+        source: BoxError,
+    },
 
     /// Failed to initialize the global MongoDB client.
-    /// This typically happens when trying to set it more than once.
-    #[error("Failed to set CLIENT")]
-    GlobalClientInitError(String),
+    ///
+    /// Typically occurs when attempting to set the global client more than once
+    /// or when the underlying synchronization primitive fails.
+    #[error("Failed to set CLIENT: {msg}")]
+    GlobalClientInit {
+        /// Human-readable context describing the initialization failure.
+        msg: String,
+    },
 
-    /// Attempted to retrieve the global MongoDB client before initialization.
-    /// Make sure to call `set_global_client()` before performing any database operations.
-    #[error("CLIENT not found: {0}")]
-    GlobalClientMissing(String),
+    /// Attempted to retrieve the global MongoDB client before it was initialized.
+    ///
+    /// Ensure your application calls the global initialization routine before
+    /// performing any database operations that depend on it.
+    #[error("CLIENT not found: {msg}")]
+    GlobalClientMissing {
+        /// Human-readable context explaining what was requested.
+        msg: String,
+    },
 
     /// Error serializing or deserializing between MongoDB documents and Rust structs.
-    /// This usually indicates a mismatch between struct fields and BSON types.
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
+    ///
+    /// Common causes:
+    /// - mismatched BSON types
+    /// - schema drift
+    /// - invalid data for the expected Rust type
+    #[error("Serialization error: {msg}")]
+    Serialization {
+        /// Human-readable context describing the serialization step that failed.
+        msg: String,
+        /// The underlying BSON/serde error.
+        #[source]
+        source: BoxError,
+    },
 
     /// An error occurred while executing an aggregation pipeline.
-    /// This may result from malformed pipeline stages or collection access issues.
-    #[error("Aggregation error: {0}")]
-    AggregationError(String),
+    ///
+    /// Common causes:
+    /// - malformed pipeline stages
+    /// - collection access issues
+    /// - server-side execution errors
+    #[error("Aggregation error: {msg}")]
+    Aggregation {
+        /// Human-readable context describing the aggregation step that failed.
+        msg: String,
+        /// The underlying MongoDB error.
+        #[source]
+        source: BoxError,
+    },
 
     /// An error occurred during index creation, deletion, or retrieval.
-    /// This may indicate invalid index specifications, duplicate definitions,
-    /// or issues with interacting with the MongoDB server's index system.
-    #[error("Index error: {0}")]
-    IndexError(String),
+    ///
+    /// Common causes:
+    /// - invalid index specifications
+    /// - duplicate definitions
+    /// - insufficient permissions
+    /// - server-side errors
+    #[error("Index error: {msg}")]
+    Index {
+        /// Human-readable context describing the index operation that failed.
+        msg: String,
+        /// The underlying MongoDB error.
+        #[source]
+        source: BoxError,
+    },
 
-    /// A validation rule was violated on one or more fields.
-    /// This typically occurs when data does not meet constraints like `min_length`, `max`, `enum`, etc.
-    #[error("Validation error: {0}")]
-    ValidationError(String),
+    /// A validation rule was violated.
+    ///
+    /// Examples:
+    /// - `required` field missing
+    /// - `min_length` / `max_length` violated
+    /// - bounds like `min` / `max` violated
+    /// - `pattern` mismatch
+    ///
+    /// This variant intentionally has no `source` because validation failures
+    /// are domain errors, not driver/system errors.
+    #[error("Validation error: {msg}")]
+    Validation {
+        /// A human-readable description of the violated rule.
+        msg: String,
+    },
+
+    #[error("Database operation failed: {msg}")]
+    Database {
+        msg: String,
+        #[source]
+        source: BoxError,
+    },
+}
+
+impl OxiModError {
+    /// Create a `Connection` error with a message and an underlying source error.
+    pub fn connection(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::Connection {
+            msg: msg.into(),
+            source: source.into(),
+        }
+    }
+
+    /// Create a `GlobalClientInit` error with a message and an underlying source error.
+    pub fn global_client_init(msg: impl Into<String>) -> Self {
+        Self::GlobalClientInit { msg: msg.into() }
+    }
+
+    /// Create a `GlobalClientMissing` error with a message.
+    pub fn global_client_missing(msg: impl Into<String>) -> Self {
+        Self::GlobalClientMissing { msg: msg.into() }
+    }
+
+    /// Create a `Serialization` error with a message and an underlying source error.
+    pub fn serialization(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::Serialization {
+            msg: msg.into(),
+            source: source.into(),
+        }
+    }
+
+    /// Create an `Aggregation` error with a message and an underlying source error.
+    pub fn aggregation(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::Aggregation {
+            msg: msg.into(),
+            source: source.into(),
+        }
+    }
+
+    /// Create an `Index` error with a message and an underlying source error.
+    pub fn index(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::Index {
+            msg: msg.into(),
+            source: source.into(),
+        }
+    }
+
+    /// Create a `Validation` error with a message.
+    pub fn validation(msg: impl Into<String>) -> Self {
+        Self::Validation { msg: msg.into() }
+    }
+
+    /// Create a `Database` error with a message and an underlying source error.
+    pub fn database(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::Database {
+            msg: msg.into(),
+            source: source.into(),
+        }
+    }
 }

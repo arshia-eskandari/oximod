@@ -1,7 +1,7 @@
 [package]
 name = "oximod_core"
 version = "0.1.13"
-edition = "2021"
+edition = "2024"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "The core logic and error handling for OxiMod, a MongoDB ODM for Rust."
 license = "MIT"
@@ -11,9 +11,9 @@ keywords = ["mongodb", "odm", "mongoose", "rust"]
 categories = ["database", "asynchronous"]
 
 [dependencies]
-async-trait = "0.1.86"
-mongodb = "3.2.1"
-thiserror = "2.0.11"
+async-trait = "0.1.89"
+mongodb = "3.5.1"
+thiserror = "2.0.18"
 
 [features]
 # enables diagnostics in release builds

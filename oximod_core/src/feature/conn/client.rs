@@ -1,4 +1,4 @@
-use crate::{attach_printables, error::oximod_error::OxiModError};
+use crate::error::oximod_error::OxiModError;
 use mongodb::Client;
 use std::sync::{Arc, OnceLock};
 
@@ -46,9 +46,9 @@ impl OxiClient {
     /// # Errors
     /// Returns a [`OxiModError::ConnectionError`] if the client initialization fails.
     async fn connect(mongo_uri: String) -> Result<Client, OxiModError> {
-        let client = Client::with_uri_str(&mongo_uri)
-            .await
-            .map_err(|e| OxiModError::ConnectionError(format!("{e}")))?;
+        let client = Client::with_uri_str(&mongo_uri).await.map_err(|e| {
+            OxiModError::connection("Unable to establish MongoDB client from provided URI", e)
+        })?;
 
         Ok(client)
     }
@@ -125,10 +125,7 @@ impl OxiClient {
         let client = Self::connect(mongo_uri).await?;
 
         CLIENT.set(client.into()).map_err(|_| {
-            attach_printables!(
-                OxiModError::GlobalClientInitError("CLIENT set method failed.".to_string()),
-                "Ensure `init_global` is only called once, or restart the application."
-            )
+            OxiModError::global_client_init("Global MongoDB client has already been initialized")
         })?;
         Ok(())
     }
@@ -142,12 +139,10 @@ impl OxiClient {
     /// # Errors
     /// Returns a [`OxiModError::GlobalClientMissing`] if no global client has been set.
     pub fn global() -> Result<Arc<Client>, OxiModError> {
-        let client = CLIENT.get().cloned().ok_or_else(|| {
-            attach_printables!(
-                OxiModError::GlobalClientMissing("Failed to clone arc".to_string()),
-                "Ensure you call `init_global` before using `OxiClient::global`."
-            )
-        })?;
+        let client = CLIENT
+            .get()
+            .cloned()
+            .ok_or_else(|| OxiModError::global_client_missing("Failed to clone arc"))?;
         Ok(client)
     }
 }

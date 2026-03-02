@@ -2,11 +2,11 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{
+        Mutex,
         atomic::{
             AtomicU8,
             Ordering::{AcqRel, Acquire, Release},
         },
-        Mutex,
     },
     task::{Context, Poll, Waker},
     time::{Duration, Instant},
@@ -23,6 +23,12 @@ struct Meta {
     started_at: Option<Instant>,
     max_retries: Option<u32>,
     max_init: Option<Duration>,
+}
+
+impl Default for OnceAsync {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OnceAsync {
@@ -50,9 +56,24 @@ impl OnceAsync {
             meta: Mutex::new(Meta {
                 attempts: 0,
                 started_at: None,
-                max_retries: max_retries,
-                max_init: max_init,
+                max_retries,
+                max_init,
             }),
+        }
+    }
+
+    // ---- small helpers: recover on poison instead of panicking ----
+    fn lock_meta(&self) -> std::sync::MutexGuard<'_, Meta> {
+        match self.meta.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    fn lock_waiters(&self) -> std::sync::MutexGuard<'_, Vec<Waker>> {
+        match self.waiters.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
         }
     }
 
@@ -65,12 +86,12 @@ impl OnceAsync {
     }
 
     pub fn with_max_retries(mut self, n: u32) -> Self {
-        let meta = self.meta.get_mut();
-        #[allow(clippy::unnecessary_mut_passed)]
-        {
-            let m = meta.unwrap();
-            m.max_retries = Some(n);
-        }
+        // Mutex::get_mut() returns Result<&mut T, PoisonError<&mut T>>
+        let m = match self.meta.get_mut() {
+            Ok(m) => m,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        m.max_retries = Some(n);
         self
     }
 
@@ -79,17 +100,16 @@ impl OnceAsync {
     }
 
     pub fn with_max_init(mut self, d: Duration) -> Self {
-        let meta = self.meta.get_mut();
-        #[allow(clippy::unnecessary_mut_passed)]
-        {
-            let m = meta.unwrap();
-            m.max_init = Some(d);
-        }
+        let m = match self.meta.get_mut() {
+            Ok(m) => m,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        m.max_init = Some(d);
         self
     }
 
     pub fn set_max_retries(&self, n: u32) -> &Self {
-        self.meta.lock().unwrap().max_retries = Some(n);
+        self.lock_meta().max_retries = Some(n);
         self
     }
 
@@ -98,7 +118,7 @@ impl OnceAsync {
     }
 
     pub fn set_max_init(&self, d: Duration) -> &Self {
-        self.meta.lock().unwrap().max_init = Some(d);
+        self.lock_meta().max_init = Some(d);
         self
     }
 
@@ -107,11 +127,11 @@ impl OnceAsync {
     }
 
     pub fn attempts(&self) -> u32 {
-        self.meta.lock().unwrap().attempts
+        self.lock_meta().attempts
     }
 
     pub fn has_exceeded_retries(&self) -> bool {
-        let m = self.meta.lock().unwrap();
+        let m = self.lock_meta();
         match m.max_retries {
             Some(limit) => m.attempts >= limit,
             None => false,
@@ -122,7 +142,7 @@ impl OnceAsync {
         if self.state.load(Acquire) != Self::INPROG {
             return false;
         }
-        let m = self.meta.lock().unwrap();
+        let m = self.lock_meta();
         match (m.started_at, m.max_init) {
             (Some(start), Some(limit)) => start.elapsed() > limit,
             _ => false,
@@ -150,14 +170,14 @@ impl OnceAsync {
                 };
 
                 {
-                    let mut m = self.meta.lock().unwrap();
+                    let mut m = self.lock_meta();
                     m.started_at = Some(Instant::now());
                 }
 
                 let res = init().await;
 
                 {
-                    let mut m = self.meta.lock().unwrap();
+                    let mut m = self.lock_meta();
                     m.started_at = None;
                 }
 
@@ -170,7 +190,7 @@ impl OnceAsync {
                     }
                     Err(e) => {
                         {
-                            let mut m = self.meta.lock().unwrap();
+                            let mut m = self.lock_meta();
                             m.attempts = m.attempts.saturating_add(1);
                         }
                         return Err(e);
@@ -183,7 +203,7 @@ impl OnceAsync {
     }
 
     fn notify_all(&self) {
-        let waiters = std::mem::take(&mut *self.waiters.lock().unwrap());
+        let waiters = std::mem::take(&mut *self.lock_waiters());
         for w in waiters {
             w.wake();
         }
@@ -199,9 +219,10 @@ impl<'a> Drop for InProgGuard<'a> {
     fn drop(&mut self) {
         if !self.done {
             self.once.state.store(OnceAsync::UNINIT, Release);
-            let mut m = self.once.meta.lock().unwrap();
-            m.started_at = None;
-            drop(m);
+            {
+                let mut m = self.once.lock_meta();
+                m.started_at = None;
+            }
             self.once.notify_all();
         }
     }
@@ -219,7 +240,7 @@ impl<'a> Future for Wait<'a> {
             return Poll::Ready(());
         }
 
-        let mut ws = self.once.waiters.lock().unwrap();
+        let mut ws = self.once.lock_waiters();
         if self.once.state.load(Acquire) != OnceAsync::INPROG {
             return Poll::Ready(());
         }

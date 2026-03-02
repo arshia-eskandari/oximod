@@ -6,12 +6,12 @@ mod parsers;
 mod model_macro;
 mod validate;
 
-use helpers::{collect_model_attrs, generate_field_tokens};
+use helpers::{FieldTokenStreams, ModelAttrs, collect_model_attrs, generate_field_tokens};
 use model_macro::generate_model_token;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Ident};
+use syn::{DeriveInput, Ident, parse_macro_input};
 
 #[proc_macro_derive(
     Model,
@@ -58,27 +58,26 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let index_once_async_ident = Ident::new(&format!("_INDEX_INIT_{name}"), Span::call_site());
 
-    let mut setters = Vec::new();
-    let mut validations = Vec::new();
-    let mut indexes = Vec::new();
-    let mut inits = Vec::new();
+    let ModelAttrs {
+        collection,
+        db,
+        index_max_retries,
+        index_max_init_seconds,
+        document_id_setter_ident,
+    } = match collect_model_attrs(&input.attrs) {
+        Ok(vals) => vals,
+        Err(e) => return e.into(),
+    };
 
-    let (collection, db, index_max_retries, index_max_init_seconds, document_id_setter_ident) =
-        match collect_model_attrs(&input.attrs) {
-            Ok(vals) => vals,
-            Err(err_tokens) => return err_tokens.into(),
-        };
-
-    if let Err(e) = generate_field_tokens(
-        &input,
-        &mut indexes,
-        &mut validations,
-        &mut inits,
-        &mut setters,
-        &document_id_setter_ident,
-    ) {
-        return e.into();
-    }
+    let FieldTokenStreams {
+        indexes,
+        validations,
+        inits,
+        setters,
+    } = match generate_field_tokens(&input, &document_id_setter_ident) {
+        Ok(token_streams) => token_streams,
+        Err(e) => return e.into(),
+    };
 
     let model_token = generate_model_token(name, &db, &collection);
 
@@ -110,12 +109,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         ];
 
                         if !indexes.is_empty() {
-                            collection.create_indexes(indexes).await.map_err(|e| {
-                                ::oximod::_attach_printables!(
-                                    ::oximod::_error::oximod_error::OxiModError::IndexError(::std::format!("{e}")),
-                                    @static "Failed to create indexes on the collection."
-                                )
-                            })?;
+                            collection
+                                .create_indexes(indexes)
+                                .await
+                                .map_err(|e|
+                                    ::oximod::_error::oximod_error::OxiModError::index("Failed to create indexes for collection", e)
+                                )?;
                         }
 
                         Ok(())

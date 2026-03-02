@@ -1,5 +1,4 @@
 pub mod args;
-
 pub use args::IndexArgs;
 
 use proc_macro2::TokenStream;

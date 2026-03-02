@@ -1,6 +1,6 @@
 use futures_util::TryStreamExt;
 use mongodb::{
-    bson::{doc, oid::ObjectId, DateTime},
+    bson::{DateTime, doc, oid::ObjectId},
     options::{IndexVersion, TextIndexVersion},
 };
 use oximod::Model;
@@ -110,12 +110,11 @@ async fn index_version_is_applied_correctly() -> TestResult {
     let mut found = false;
 
     while let Some(index) = cursor.try_next().await? {
-        if let Some(opts) = index.options {
-            if opts.name.as_deref() == Some("v2_idx") {
-                if let Some(IndexVersion::V2) = opts.version {
-                    found = true;
-                }
-            }
+        if let Some(opts) = index.options
+            && opts.name.as_deref() == Some("v2_idx")
+            && let Some(IndexVersion::V2) = opts.version
+        {
+            found = true;
         }
     }
 
@@ -149,12 +148,11 @@ async fn text_index_version_is_applied_correctly() -> TestResult {
     let mut found = false;
 
     while let Some(index) = cursor.try_next().await? {
-        if let Some(opts) = index.options {
-            if opts.name.as_deref() == Some("text_v2_idx") {
-                if let Some(TextIndexVersion::V2) = opts.text_index_version {
-                    found = true;
-                }
-            }
+        if let Some(opts) = index.options
+            && opts.name.as_deref() == Some("text_v2_idx")
+            && let Some(TextIndexVersion::V2) = opts.text_index_version
+        {
+            found = true;
         }
     }
 
@@ -185,13 +183,13 @@ async fn hidden_index_is_applied_correctly() -> TestResult {
     let mut found = false;
 
     while let Some(index) = cursor.try_next().await? {
-        if let Some(name) = index.options.as_ref().and_then(|opts| opts.name.as_ref()) {
-            if name == "hidden_idx" {
-                let hidden = index.options.as_ref().and_then(|opts| opts.hidden);
-                assert_eq!(hidden, Some(true));
-                found = true;
-                break;
-            }
+        if let Some(name) = index.options.as_ref().and_then(|opts| opts.name.as_ref())
+            && name == "hidden_idx"
+        {
+            let hidden = index.options.as_ref().and_then(|opts| opts.hidden);
+            assert_eq!(hidden, Some(true));
+            found = true;
+            break;
         }
     }
 

@@ -6,7 +6,7 @@ use crate::parsers::{
 use crate::validate::generate_validate_model_tokens;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{spanned::Spanned, Attribute, DeriveInput};
+use syn::{Attribute, DeriveInput, spanned::Spanned};
 
 /// Generates a compile error token stream for a missing required attribute,
 /// using the first attribute's span if available or the call site otherwise.
@@ -18,11 +18,17 @@ fn missing_attr_ts(attrs: &[Attribute], msg: &str) -> TokenStream {
     }
 }
 
+pub struct ModelAttrs {
+    pub collection: String,
+    pub db: String,
+    pub index_max_retries: u32,
+    pub index_max_init_seconds: u8,
+    pub document_id_setter_ident: String,
+}
+
 /// Collects and validates top-level model attributes, returning core model
 /// configuration values or compile error token streams on failure.
-pub fn collect_model_attrs(
-    attrs: &[Attribute],
-) -> Result<(String, String, u32, u8, String), TokenStream> {
+pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStream> {
     let mut collection: Option<String> = None;
     let mut db: Option<String> = None;
     let mut index_max_retries: u32 = 3;
@@ -66,13 +72,20 @@ pub fn collect_model_attrs(
 
     let db = db.ok_or_else(|| missing_attr_ts(attrs, r#"Missing #[db("db_name")] attribute"#))?;
 
-    Ok((
+    Ok(ModelAttrs {
         collection,
         db,
         index_max_retries,
         index_max_init_seconds,
         document_id_setter_ident,
-    ))
+    })
+}
+
+pub struct FieldTokenStreams {
+    pub indexes: Vec<TokenStream>,
+    pub validations: Vec<TokenStream>,
+    pub inits: Vec<TokenStream>,
+    pub setters: Vec<TokenStream>,
 }
 
 /// Processes all fields of a struct annotated with `#[derive(Model)]`,
@@ -93,12 +106,12 @@ pub fn collect_model_attrs(
 /// or if any attribute arguments fail to parse.
 pub fn generate_field_tokens(
     input: &DeriveInput,
-    indexes: &mut Vec<TokenStream>,
-    validations: &mut Vec<TokenStream>,
-    inits: &mut Vec<TokenStream>,
-    setters: &mut Vec<TokenStream>,
     document_id_setter_ident: &str,
-) -> Result<(), TokenStream> {
+) -> Result<FieldTokenStreams, TokenStream> {
+    let mut indexes = Vec::new();
+    let mut validations = Vec::new();
+    let mut inits = Vec::new();
+    let mut setters = Vec::new();
     let data_struct = match &input.data {
         syn::Data::Struct(s) => s,
         _ => {
@@ -106,16 +119,16 @@ pub fn generate_field_tokens(
                 &input.ident,
                 "Model can only be derived for structs.",
             )
-            .to_compile_error())
+            .to_compile_error());
         }
     };
 
     for field in data_struct.fields.iter() {
         if let Some(ident) = &field.ident {
             if ident == "_id" {
-                push_id_setter(setters, document_id_setter_ident)?;
+                push_id_setter(&mut setters, document_id_setter_ident)?;
             } else {
-                push_field_setter(ident, &field.ty, setters);
+                push_field_setter(ident, &field.ty, &mut setters);
             }
 
             let mut init_expr: TokenStream = quote! { Default::default() };
@@ -153,5 +166,10 @@ pub fn generate_field_tokens(
         }
     }
 
-    Ok(())
+    Ok(FieldTokenStreams {
+        indexes,
+        validations,
+        inits,
+        setters,
+    })
 }
