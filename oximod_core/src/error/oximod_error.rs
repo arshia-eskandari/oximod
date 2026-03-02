@@ -175,6 +175,7 @@ impl OxiModError {
         Self::Validation { msg: msg.into() }
     }
 
+    /// Create a `Database` error with a message and an underlying source error.
     pub fn database(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Database {
             msg: msg.into(),
