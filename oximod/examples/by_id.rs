@@ -4,9 +4,9 @@
 //!
 //! This demonstrates how to:
 //! - Insert a document
-//! - Find a document by its `_id`
-//! - Update a document by its `_id`
-//! - Delete a document by its `_id`
+//! - Find a document by its `_id` using `Model::find_by_id`
+//! - Update a document by its `_id` using `Model::update_by_id`
+//! - Delete a document by its `_id` using `Model::delete_by_id`
 
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
@@ -39,25 +39,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let id = user.save().await?;
     println!("✅ Inserted user with _id: {}", id);
 
-    // Get collection
-    let collection = User::get_collection()?;
-
-    // Find by _id
-    if let Some(found) = collection.find_one(doc! { "_id": id }).await? {
+    // Find by _id using OxiMod helper
+    if let Some(found) = User::find_by_id(id).await? {
         println!("🔍 Found user: {} (age {})", found.name, found.age);
     }
 
-    // Update by _id
-    let update_result = collection
-        .update_one(doc! { "_id": id }, doc! { "$set": { "active": false } })
-        .await?;
+    // Update by _id using OxiMod helper
+    let update_result = User::update_by_id(id, doc! { "$set": { "active": false } }).await?;
+    println!(
+        "♻️  Modified {} document(s) using Model::update_by_id",
+        update_result.modified_count
+    );
 
-    println!("♻️  Modified {} document(s)", update_result.modified_count);
-
-    // Delete by _id
-    let delete_result = collection.delete_one(doc! { "_id": id }).await?;
-
-    println!("🗑️  Deleted {} document(s)", delete_result.deleted_count);
+    // Delete by _id using OxiMod helper
+    let delete_result = User::delete_by_id(id).await?;
+    println!(
+        "🗑️  Deleted {} document(s) using Model::delete_by_id",
+        delete_result.deleted_count
+    );
 
     Ok(())
 }
