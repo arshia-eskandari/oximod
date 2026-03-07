@@ -4,9 +4,9 @@
 //!
 //! This demonstrates how to:
 //! - Insert users
-//! - Delete multiple documents
-//! - Delete a document by ID
-//! - Delete one document with a filter
+//! - Delete multiple documents (raw MongoDB collection)
+//! - Delete one document with a filter (raw MongoDB collection)
+//! - Delete a document by ID using `Model::delete_by_id`
 
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
@@ -47,21 +47,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inserted_ids.push(id);
     }
 
+    // Access raw MongoDB collection (full control)
     let collection = User::get_collection()?;
 
-    // Delete all inactive users
+    // Delete all inactive users (raw MongoDB API)
     let result = collection.delete_many(doc! { "active": false }).await?;
     println!("🗑️ Deleted {} inactive users", result.deleted_count);
 
-    // Delete one active user
+    // Delete one active user (raw MongoDB API)
     let result = collection.delete_one(doc! { "active": true }).await?;
     println!("🧹 Deleted {} active user(s)", result.deleted_count);
 
-    // Delete the last one by ID
+    // Delete by ID using OxiMod helper
     if let Some(id) = inserted_ids.pop() {
-        let result = collection.delete_one(doc! { "_id": id }).await?;
-
-        println!("❌ Deleted by ID: {}", result.deleted_count);
+        let result = User::delete_by_id(id).await?;
+        println!(
+            "❌ Deleted by ID using Model::delete_by_id → {}",
+            result.deleted_count
+        );
     }
 
     Ok(())

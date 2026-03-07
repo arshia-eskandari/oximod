@@ -6,7 +6,8 @@
 //! - Connect to MongoDB
 //! - Define a model with the `Model` derive macro
 //! - Save a document using the builder API
-//! - Count documents in a collection
+//! - Count documents (raw MongoDB vs OxiMod helper)
+//! - Check existence using both APIs
 
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
@@ -14,15 +15,14 @@ use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load MongoDB URI from .env or environment
+    // Load MongoDB URI
     dotenv::dotenv().ok();
     let mongodb_uri = std::env::var("MONGODB_URI")
         .expect("MONGODB_URI must be set in your .env file or environment");
 
-    // Set up the global MongoDB client
+    // Init global client
     OxiClient::init_global(mongodb_uri).await?;
 
-    // Define your model
     #[derive(Debug, Serialize, Deserialize, Model)]
     #[db("basic_usage_db")]
     #[collection("users")]
@@ -40,17 +40,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Clean up previous runs
     User::clear().await?;
 
-    // Create and save a user using builder API (defaults `active` to true)
+    // Insert user
     let user = User::new().name("User1").age(28);
     let id = user.save().await?;
     println!("✅ Saved user with _id: {}", id);
 
-    // Get collection manually
+    // Get raw collection
     let collection = User::get_collection()?;
 
-    // Count all users in the collection
-    let count = collection.count_documents(doc! {}).await?;
-    println!("📊 There are {} user(s) in the collection.", count);
+    // ---------------------------
+    // COUNT (raw MongoDB)
+    // ---------------------------
+
+    let raw_count = collection.count_documents(doc! {}).await?;
+    println!("📊 Raw count: {}", raw_count);
+
+    // ---------------------------
+    // COUNT (OxiMod helper)
+    // ---------------------------
+
+    let helper_count = User::count(doc! {}).await?;
+    println!("⚡ Helper count: {}", helper_count);
+
+    // Compare
+    println!("Counts match: {}", raw_count == helper_count);
+
+    // ---------------------------
+    // EXISTS (raw MongoDB)
+    // ---------------------------
+
+    let raw_exists = collection
+        .find_one(doc! { "name": "User1" })
+        .await?
+        .is_some();
+
+    println!("🔎 Raw exists: {}", raw_exists);
+
+    // ---------------------------
+    // EXISTS (OxiMod helper)
+    // ---------------------------
+
+    let helper_exists = User::exists(doc! { "name": "User1" }).await?;
+
+    println!("⚡ Helper exists: {}", helper_exists);
+
+    println!("Exists match: {}", raw_exists == helper_exists);
 
     Ok(())
 }
