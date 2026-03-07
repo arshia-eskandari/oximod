@@ -14,15 +14,6 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 Ok(db.collection::<Self>(#collection))
             }
 
-            fn get_collection() -> Result<
-                ::oximod::_mongodb::Collection<Self>,
-                ::oximod::_error::oximod_error::OxiModError
-            > {
-                let client_arc = ::oximod::_feature::conn::client::OxiClient::global()?;
-                let client: &::oximod::_mongodb::Client = client_arc.as_ref();
-                Self::get_collection_from(client)
-            }
-
             async fn save_from(&self, client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::bson::oid::ObjectId,
                 ::oximod::_error::oximod_error::OxiModError
@@ -48,15 +39,6 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 }
             }
 
-            async fn save(&self) -> Result<
-                ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::_error::oximod_error::OxiModError
-            > {
-                let client_arc = ::oximod::_feature::conn::client::OxiClient::global()?;
-                let client: &::oximod::_mongodb::Client = client_arc.as_ref();
-                self.save_from(client).await
-            }
-
             async fn clear_from(client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::results::DeleteResult,
                 ::oximod::_error::oximod_error::OxiModError
@@ -74,15 +56,6 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 )?;
 
                 Ok(result)
-            }
-
-            async fn clear() -> Result<
-                ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::_error::oximod_error::OxiModError
-            > {
-                let client_arc = ::oximod::_feature::conn::client::OxiClient::global()?;
-                let client: &::oximod::_mongodb::Client = client_arc.as_ref();
-                Self::clear_from(client).await
             }
         }
     }
