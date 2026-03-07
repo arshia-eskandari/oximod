@@ -29,10 +29,12 @@ async fn deletes_document_by_id_correctly() -> TestResult {
 
     user.save().await?;
 
-    let deleted = User::delete_by_id(id).await?;
+    let collection = User::get_collection()?;
+
+    let deleted = collection.delete_one(doc! { "_id": id }).await?;
     assert_eq!(deleted.deleted_count, 1);
 
-    let result = User::find_by_id(id).await?;
+    let result = collection.find_one(doc! { "_id": id }).await?;
     assert!(result.is_none());
 
     Ok(())
@@ -57,8 +59,9 @@ async fn delete_by_id_no_matching_document() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new(); // but never inserted
+    let collection = User::get_collection()?;
 
-    let deleted = User::delete_by_id(id).await?;
+    let deleted = collection.delete_one(doc! { "_id": id }).await?;
     assert_eq!(
         deleted.deleted_count, 0,
         "No documents should have been deleted for non-existent ID"
@@ -99,10 +102,12 @@ async fn deletes_document_by_id_correctly_with_email() -> TestResult {
 
     user.save().await?;
 
-    let deleted = User::delete_by_id(id).await?;
+    let collection = User::get_collection()?;
+
+    let deleted = collection.delete_one(doc! { "_id": id }).await?;
     assert_eq!(deleted.deleted_count, 1);
 
-    let result = User::find_by_id(id).await?;
+    let result = collection.find_one(doc! { "_id": id }).await?;
     assert!(result.is_none());
 
     Ok(())
@@ -131,8 +136,9 @@ async fn delete_by_id_no_matching_document_with_email() -> TestResult {
     User::clear().await?;
 
     let id = ObjectId::new(); // not inserted
+    let collection = User::get_collection()?;
 
-    let deleted = User::delete_by_id(id).await?;
+    let deleted = collection.delete_one(doc! { "_id": id }).await?;
     assert_eq!(
         deleted.deleted_count, 0,
         "No documents should have been deleted for non-existent ID"

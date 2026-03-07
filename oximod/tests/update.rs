@@ -34,12 +34,14 @@ async fn updates_multiple_documents_correctly() -> TestResult {
         user.save().await?;
     }
 
-    // Deactivate users aged 65+
-    let result = User::update(
-        doc! { "age": { "$gte": 65 } },
-        doc! { "$set": { "active": false } },
-    )
-    .await?;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_many(
+            doc! { "age": { "$gte": 65 } },
+            doc! { "$set": { "active": false } },
+        )
+        .await?;
 
     assert_eq!(result.matched_count, 2);
     assert_eq!(result.modified_count, 2);
@@ -75,8 +77,11 @@ async fn updates_multiple_documents_invalid_update_fails() -> TestResult {
         user.save().await?;
     }
 
-    // Intentionally invalid update: $set is a scalar, not a document
-    let result = User::update(doc! { "age": { "$gte": 65 } }, doc! { "$set": "invalid" }).await;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_many(doc! { "age": { "$gte": 65 } }, doc! { "$set": "invalid" })
+        .await;
 
     assert!(result.is_err());
     Ok(())
@@ -123,12 +128,14 @@ async fn updates_optional_email_to_valid() -> TestResult {
         user.save().await?;
     }
 
-    // Set email of users aged 65+ to a valid email
-    let result = User::update(
-        doc! { "age": { "$gte": 65 } },
-        doc! { "$set": { "email": "user@example.com" } },
-    )
-    .await?;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_many(
+            doc! { "age": { "$gte": 65 } },
+            doc! { "$set": { "email": "user@example.com" } },
+        )
+        .await?;
 
     assert_eq!(result.matched_count, 2);
     assert_eq!(result.modified_count, 2);

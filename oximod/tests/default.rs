@@ -30,7 +30,8 @@ async fn saves_with_default_string_and_number() -> TestResult {
     let thing = Thing::default();
     let id = thing.save().await?;
 
-    let doc = Thing::find_one(doc! { "_id": id }).await?.unwrap();
+    let collection = Thing::get_collection()?;
+    let doc = collection.find_one(doc! { "_id": id }).await?.unwrap();
 
     assert_eq!(doc.name, "Anonymous");
     assert_eq!(doc.count, 0);
@@ -62,7 +63,9 @@ async fn override_default_values() -> TestResult {
     let rec = Record::default().user("Alice").retries(5);
     let id = rec.save().await?;
 
-    let got = Record::find_by_id(id).await?.unwrap();
+    let collection = Record::get_collection()?;
+    let got = collection.find_one(doc! { "_id": id }).await?.unwrap();
+
     assert_eq!(got.user, "Alice");
     assert_eq!(got.retries, 5);
 
@@ -95,15 +98,17 @@ async fn enum_default_and_override() -> TestResult {
 
     Task::clear().await?;
 
+    let collection = Task::get_collection()?;
+
     let t1 = Task::default().description("T1");
     let id1 = t1.save().await?;
-    let got1 = Task::find_by_id(id1).await?.unwrap();
+    let got1 = collection.find_one(doc! { "_id": id1 }).await?.unwrap();
     assert_eq!(got1.status, Status::Pending);
     assert_eq!(got1.description, "T1");
 
     let t2 = Task::default().status(Status::Complete).description("T2");
     let id2 = t2.save().await?;
-    let got2 = Task::find_by_id(id2).await?.unwrap();
+    let got2 = collection.find_one(doc! { "_id": id2 }).await?.unwrap();
     assert_eq!(got2.status, Status::Complete);
     assert_eq!(got2.description, "T2");
 

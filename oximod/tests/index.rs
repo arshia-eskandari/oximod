@@ -75,12 +75,9 @@ async fn ttl_index_removes_expired_documents() -> TestResult {
 
     sleep(Duration::from_secs(65));
 
-    let remaining = Session::find(doc! {}).await?;
-    assert_eq!(
-        remaining.len(),
-        0,
-        "Expected document to be expired and deleted"
-    );
+    let collection = Session::get_collection()?;
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 0, "Expected document to be expired and deleted");
 
     Ok(())
 }

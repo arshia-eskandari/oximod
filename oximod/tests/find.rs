@@ -1,3 +1,4 @@
+use futures_util::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};
@@ -34,7 +35,10 @@ async fn finds_multiple_matching_documents() -> TestResult {
         user.save().await?;
     }
 
-    let matched_users = User::find(doc! { "age": 28 }).await?;
+    let collection = User::get_collection()?;
+    let cursor = collection.find(doc! { "age": 28 }).await?;
+    let matched_users: Vec<User> = cursor.try_collect().await?;
+
     assert_eq!(matched_users.len(), 2);
 
     let names: Vec<String> = matched_users.into_iter().map(|u| u.name).collect();
@@ -71,8 +75,9 @@ async fn finds_no_matching_documents() -> TestResult {
         user.save().await?;
     }
 
-    // Query for age that does not exist
-    let matched_users = User::find(doc! { "age": 99 }).await?;
+    let collection = User::get_collection()?;
+    let cursor = collection.find(doc! { "age": 99 }).await?;
+    let matched_users: Vec<User> = cursor.try_collect().await?;
 
     assert_eq!(matched_users.len(), 0, "Expected no documents to match");
 
@@ -123,7 +128,12 @@ async fn finds_multiple_matching_documents_by_email() -> TestResult {
         user.save().await?;
     }
 
-    let matched_users = User::find(doc! { "email": "shared@example.com" }).await?;
+    let collection = User::get_collection()?;
+    let cursor = collection
+        .find(doc! { "email": "shared@example.com" })
+        .await?;
+    let matched_users: Vec<User> = cursor.try_collect().await?;
+
     assert_eq!(matched_users.len(), 2);
 
     let names: Vec<String> = matched_users.into_iter().map(|u| u.name).collect();
@@ -172,8 +182,11 @@ async fn finds_no_matching_documents_by_email() -> TestResult {
         user.save().await?;
     }
 
-    // Query for email that does not exist
-    let matched_users = User::find(doc! { "email": "notfound@example.com" }).await?;
+    let collection = User::get_collection()?;
+    let cursor = collection
+        .find(doc! { "email": "notfound@example.com" })
+        .await?;
+    let matched_users: Vec<User> = cursor.try_collect().await?;
 
     assert_eq!(matched_users.len(), 0, "Expected no documents to match");
 

@@ -34,7 +34,10 @@ async fn counts_matching_documents_correctly() -> TestResult {
         user.save().await?;
     }
 
-    let count = User::count(doc! { "age": 30 }).await?;
+    let collection = User::get_collection()?;
+
+    let count = collection.count_documents(doc! { "age": 30 }).await?;
+
     assert_eq!(count, 2);
 
     Ok(())
@@ -58,7 +61,10 @@ async fn counts_no_matching_documents() -> TestResult {
 
     User::clear().await?;
 
-    let count = User::count(doc! { "age": 999 }).await?;
+    let collection = User::get_collection()?;
+
+    let count = collection.count_documents(doc! { "age": 999 }).await?;
+
     assert_eq!(count, 0);
 
     Ok(())
@@ -108,7 +114,12 @@ async fn counts_matching_documents_by_email_correctly() -> TestResult {
         user.save().await?;
     }
 
-    let count = User::count(doc! { "email": "shared@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let count = collection
+        .count_documents(doc! { "email": "shared@example.com" })
+        .await?;
+
     assert_eq!(count, 2);
 
     Ok(())
@@ -136,7 +147,12 @@ async fn counts_no_matching_documents_by_email() -> TestResult {
 
     User::clear().await?;
 
-    let count = User::count(doc! { "email": "notfound@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let count = collection
+        .count_documents(doc! { "email": "notfound@example.com" })
+        .await?;
+
     assert_eq!(count, 0);
 
     Ok(())

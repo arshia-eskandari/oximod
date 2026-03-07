@@ -35,22 +35,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     User::clear().await?;
 
     // Insert one user using the builder API
-    let user = User::new().name("User1").age(35); // `active` defaults to true
-
+    let user = User::new().name("User1").age(35);
     let id = user.save().await?;
     println!("✅ Inserted user with _id: {}", id);
 
+    // Get collection
+    let collection = User::get_collection()?;
+
     // Find by _id
-    if let Some(found) = User::find_by_id(id).await? {
+    if let Some(found) = collection.find_one(doc! { "_id": id }).await? {
         println!("🔍 Found user: {} (age {})", found.name, found.age);
     }
 
     // Update by _id
-    let update_result = User::update_by_id(id, doc! { "$set": { "active": false } }).await?;
+    let update_result = collection
+        .update_one(doc! { "_id": id }, doc! { "$set": { "active": false } })
+        .await?;
+
     println!("♻️  Modified {} document(s)", update_result.modified_count);
 
     // Delete by _id
-    let delete_result = User::delete_by_id(id).await?;
+    let delete_result = collection.delete_one(doc! { "_id": id }).await?;
+
     println!("🗑️  Deleted {} document(s)", delete_result.deleted_count);
 
     Ok(())

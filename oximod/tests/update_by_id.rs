@@ -29,10 +29,14 @@ async fn updates_document_by_id_correctly() -> TestResult {
 
     user.save().await?;
 
-    // Update age to 32
-    User::update_by_id(id, doc! { "$set": { "age": 32 } }).await?;
+    let collection = User::get_collection()?;
 
-    let updated = User::find_by_id(id).await?;
+    // Update age to 32
+    collection
+        .update_one(doc! { "_id": id }, doc! { "$set": { "age": 32 } })
+        .await?;
+
+    let updated = collection.find_one(doc! { "_id": id }).await?;
     assert!(updated.is_some());
 
     if let Some(u) = updated {
@@ -66,8 +70,12 @@ async fn updates_document_by_id_invalid_update_fails() -> TestResult {
 
     user.save().await?;
 
-    // Invalid update: $set is scalar
-    let result = User::update_by_id(id, doc! { "$set": "invalid" }).await;
+    let collection = User::get_collection()?;
+
+    // Invalid update
+    let result = collection
+        .update_one(doc! { "_id": id }, doc! { "$set": "invalid" })
+        .await;
 
     assert!(result.is_err());
 
@@ -101,13 +109,19 @@ async fn updates_by_id_optional_email_to_valid() -> TestResult {
 
     user.save().await?;
 
-    // Update email to valid email
-    let result = User::update_by_id(id, doc! { "$set": { "email": "user@example.com" } }).await?;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_one(
+            doc! { "_id": id },
+            doc! { "$set": { "email": "user@example.com" } },
+        )
+        .await?;
 
     assert_eq!(result.matched_count, 1);
     assert_eq!(result.modified_count, 1);
 
-    let updated = User::find_by_id(id).await?;
+    let updated = collection.find_one(doc! { "_id": id }).await?;
     assert!(updated.is_some());
 
     if let Some(u) = updated {

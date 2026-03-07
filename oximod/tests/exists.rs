@@ -27,10 +27,18 @@ async fn checks_existence_of_matching_document() -> TestResult {
     let user = User::default().name("User1").age(27).active(true);
     user.save().await?;
 
-    let exists = User::exists(doc! { "name": "User1" }).await?;
+    let collection = User::get_collection()?;
+
+    let exists = collection
+        .find_one(doc! { "name": "User1" })
+        .await?
+        .is_some();
     assert!(exists);
 
-    let not_exists = User::exists(doc! { "name": "SomeoneWhoDoesNotExist" }).await?;
+    let not_exists = collection
+        .find_one(doc! { "name": "SomeoneWhoDoesNotExist" })
+        .await?
+        .is_some();
     assert!(!not_exists);
 
     Ok(())
@@ -63,12 +71,21 @@ async fn checks_existence_of_matching_document_by_email() -> TestResult {
         .age(27)
         .active(true)
         .email("user1@example.com");
+
     user.save().await?;
 
-    let exists = User::exists(doc! { "email": "user1@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let exists = collection
+        .find_one(doc! { "email": "user1@example.com" })
+        .await?
+        .is_some();
     assert!(exists);
 
-    let not_exists = User::exists(doc! { "email": "nonexistent@example.com" }).await?;
+    let not_exists = collection
+        .find_one(doc! { "email": "nonexistent@example.com" })
+        .await?
+        .is_some();
     assert!(!not_exists);
 
     Ok(())

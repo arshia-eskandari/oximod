@@ -1,7 +1,7 @@
 mod common;
 
 use common::init;
-use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
@@ -103,7 +103,10 @@ async fn builder_and_save_works_end_to_end() -> TestResult {
 
     assert_ne!(saved_id, ObjectId::default());
 
-    let fetched = User::find_by_id(saved_id).await?;
+    let fetched = User::get_collection()?
+        .find_one(doc! { "_id": saved_id })
+        .await?;
+
     assert!(fetched.is_some());
 
     let user = fetched.unwrap();
@@ -134,8 +137,10 @@ async fn builder_using_custom_document_id_setter() -> TestResult {
 
     User::clear().await?;
 
+    let custom_id = ObjectId::new();
+
     let saved_id = User::default()
-        .my_custom_id_setter(ObjectId::new())
+        .my_custom_id_setter(custom_id)
         .id("3894HR934HR00NJ23R324R")
         .name("User1")
         .age(42)
@@ -145,13 +150,17 @@ async fn builder_using_custom_document_id_setter() -> TestResult {
 
     assert_ne!(saved_id, ObjectId::default());
 
-    let fetched = User::find_by_id(saved_id).await?;
+    let fetched = User::get_collection()?
+        .find_one(doc! { "_id": saved_id })
+        .await?;
+
     assert!(fetched.is_some());
 
     let user = fetched.unwrap();
     assert_eq!(user.name, "User1");
     assert_eq!(user.age, 42);
     assert!(user.active);
+    assert_eq!(user.id, "3894HR934HR00NJ23R324R");
 
     Ok(())
 }

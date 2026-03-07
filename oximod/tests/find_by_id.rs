@@ -29,7 +29,8 @@ async fn finds_document_by_id_correctly() -> TestResult {
 
     user.save().await?;
 
-    let found = User::find_by_id(id).await?;
+    let collection = User::get_collection()?;
+    let found = collection.find_one(doc! { "_id": id }).await?;
     assert!(found.is_some());
 
     if let Some(u) = found {
@@ -61,8 +62,11 @@ async fn finds_document_by_id_returns_none_when_not_found() -> TestResult {
     User::clear().await?;
 
     let id_that_does_not_exist = ObjectId::new();
+    let collection = User::get_collection()?;
 
-    let found = User::find_by_id(id_that_does_not_exist).await?;
+    let found = collection
+        .find_one(doc! { "_id": id_that_does_not_exist })
+        .await?;
     assert!(
         found.is_none(),
         "Expected no document to be found for non-existent _id"
@@ -99,11 +103,12 @@ async fn finds_document_by_id_with_email_correctly() -> TestResult {
         .name("User1")
         .age(33)
         .active(true)
-        .email("user1@example.com"); // setter takes String
+        .email("user1@example.com");
 
     user.save().await?;
 
-    let found = User::find_by_id(id).await?;
+    let collection = User::get_collection()?;
+    let found = collection.find_one(doc! { "_id": id }).await?;
     assert!(found.is_some());
 
     if let Some(u) = found {
@@ -140,8 +145,11 @@ async fn finds_document_by_id_returns_none_when_not_found_with_email() -> TestRe
     User::clear().await?;
 
     let id_that_does_not_exist = ObjectId::new();
+    let collection = User::get_collection()?;
 
-    let found = User::find_by_id(id_that_does_not_exist).await?;
+    let found = collection
+        .find_one(doc! { "_id": id_that_does_not_exist })
+        .await?;
     assert!(
         found.is_none(),
         "Expected no document to be found for non-existent _id"

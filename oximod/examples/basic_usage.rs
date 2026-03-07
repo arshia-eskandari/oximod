@@ -45,8 +45,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let id = user.save().await?;
     println!("✅ Saved user with _id: {}", id);
 
+    // Get collection manually
+    let collection = User::get_collection()?;
+
     // Count all users in the collection
-    let count = User::count(doc! {}).await?;
+    let count = collection.count_documents(doc! {}).await?;
     println!("📊 There are {} user(s) in the collection.", count);
 
     Ok(())

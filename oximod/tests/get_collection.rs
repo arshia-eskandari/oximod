@@ -1,7 +1,7 @@
 use mongodb::{
+    IndexModel,
     bson::{doc, oid::ObjectId},
     options::IndexOptions,
-    IndexModel,
 };
 use oximod::Model;
 use serde::{Deserialize, Serialize};
@@ -46,7 +46,9 @@ async fn uses_get_collection_and_manual_indexing() -> TestResult {
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());
 
-    let fetched = User::find_one(doc! { "email": "user1@example.com" }).await?;
+    let fetched = collection
+        .find_one(doc! { "email": "user1@example.com" })
+        .await?;
     assert!(fetched.is_some());
 
     Ok(())

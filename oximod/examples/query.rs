@@ -8,6 +8,7 @@
 //! - Query with `find_one`
 //! - Check if a document exists
 
+use futures_util::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
@@ -45,20 +46,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("📝 Inserted user {} with _id: {}", user.name, id);
     }
 
+    let collection = User::get_collection()?;
+
     // Query all active users
-    let active_users = User::find(doc! { "active": true }).await?;
+    let cursor = collection.find(doc! { "active": true }).await?;
+    let active_users: Vec<User> = cursor.try_collect().await?;
+
     println!("\n✅ Active users:");
     for user in active_users {
         println!("- {} (age: {})", user.name, user.age);
     }
 
     // Find one user named Bob
-    if let Some(bob) = User::find_one(doc! { "name": "Bob" }).await? {
+    if let Some(bob) = collection.find_one(doc! { "name": "Bob" }).await? {
         println!("\n🔍 Found Bob (age: {})", bob.age);
     }
 
     // Check if any inactive user exists
-    let exists = User::exists(doc! { "active": false }).await?;
+    let exists = collection
+        .find_one(doc! { "active": false })
+        .await?
+        .is_some();
+
     println!("\n❓ Is there any inactive user? {}", exists);
 
     Ok(())
