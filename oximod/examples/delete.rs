@@ -4,9 +4,9 @@
 //!
 //! This demonstrates how to:
 //! - Insert users
-//! - Delete multiple documents
-//! - Delete a document by ID
-//! - Delete one document with a filter
+//! - Delete multiple documents (raw MongoDB collection)
+//! - Delete one document with a filter (raw MongoDB collection)
+//! - Delete a document by ID using `Model::delete_by_id`
 
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
@@ -37,8 +37,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let users = vec![
         User::new().name("User1").age(20).active(false),
         User::new().name("User2").age(25).active(false),
-        User::new().name("User3").age(30), // active: true by default
-        User::new().name("User4").age(30), // active: true by default
+        User::new().name("User3").age(30),
+        User::new().name("User4").age(30),
     ];
 
     let mut inserted_ids = vec![];
@@ -47,18 +47,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inserted_ids.push(id);
     }
 
-    // Delete all inactive users
-    let result = User::delete(doc! { "active": false }).await?;
+    // Access raw MongoDB collection (full control)
+    let collection = User::get_collection()?;
+
+    // Delete all inactive users (raw MongoDB API)
+    let result = collection.delete_many(doc! { "active": false }).await?;
     println!("🗑️ Deleted {} inactive users", result.deleted_count);
 
-    // Delete one active user
-    let result = User::delete_one(doc! { "active": true }).await?;
+    // Delete one active user (raw MongoDB API)
+    let result = collection.delete_one(doc! { "active": true }).await?;
     println!("🧹 Deleted {} active user(s)", result.deleted_count);
 
-    // Delete the last one by ID
+    // Delete by ID using OxiMod helper
     if let Some(id) = inserted_ids.pop() {
         let result = User::delete_by_id(id).await?;
-        println!("❌ Deleted by ID: {}", result.deleted_count);
+        println!(
+            "❌ Deleted by ID using Model::delete_by_id → {}",
+            result.deleted_count
+        );
     }
 
     Ok(())

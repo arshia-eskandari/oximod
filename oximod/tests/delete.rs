@@ -34,8 +34,13 @@ async fn deletes_multiple_matching_documents() -> TestResult {
         user.save().await?;
     }
 
-    let deleted_result = User::delete(doc! { "active": false }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted_result = collection.delete_many(doc! { "active": false }).await?;
     assert_eq!(deleted_result.deleted_count, 2);
+
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 1);
 
     Ok(())
 }
@@ -67,11 +72,16 @@ async fn delete_no_matching_documents() -> TestResult {
         user.save().await?;
     }
 
-    let deleted_result = User::delete(doc! { "active": false }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted_result = collection.delete_many(doc! { "active": false }).await?;
     assert_eq!(
         deleted_result.deleted_count, 0,
         "No documents should have been deleted"
     );
+
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 2);
 
     Ok(())
 }
@@ -120,8 +130,15 @@ async fn deletes_multiple_matching_documents_by_email() -> TestResult {
         user.save().await?;
     }
 
-    let deleted_result = User::delete(doc! { "email": "shared@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted_result = collection
+        .delete_many(doc! { "email": "shared@example.com" })
+        .await?;
     assert_eq!(deleted_result.deleted_count, 2);
+
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 1);
 
     Ok(())
 }
@@ -165,11 +182,18 @@ async fn delete_no_matching_documents_by_email() -> TestResult {
         user.save().await?;
     }
 
-    let deleted_result = User::delete(doc! { "email": "notfound@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted_result = collection
+        .delete_many(doc! { "email": "notfound@example.com" })
+        .await?;
     assert_eq!(
         deleted_result.deleted_count, 0,
         "No documents should have been deleted"
     );
+
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 2);
 
     Ok(())
 }

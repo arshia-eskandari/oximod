@@ -5,9 +5,9 @@
 //! This demonstrates how to:
 //! - Create an `OxiClient` instance with a MongoDB URI
 //! - Obtain a `mongodb::Client` from it
-//! - Clear a collection with `clear_with_client`
-//! - Insert a document with `save_with_client`
-//! - Update documents using `update_with_client` and `update_by_id_with_client`
+//! - Clear a collection with `clear_from`
+//! - Insert a document with `save_from`
+//! - Update documents using the raw MongoDB collection API
 
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Missing MONGODB_URI env var. Please set it before running this example.");
 
     // Create a scoped OxiClient instance and grab the underlying mongodb::Client
-    let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
+    let oxiclient = OxiClient::new(mongodb_uri).await?;
     let client = oxiclient.client().expect("OxiClient has no inner client");
 
     #[derive(Debug, Serialize, Deserialize, Model)]
@@ -37,28 +37,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Clean up previous runs using the explicit client
-    User::clear_with_client(client).await?;
+    User::clear_from(client).await?;
 
-    // Insert a user using the fluent builder + save_with_client
+    // Insert a user using the fluent builder + save_from
     let user = User::new().name("User1").age(45).active(false);
 
-    let id = user.save_with_client(client).await?;
+    let id = user.save_from(client).await?;
     println!("📝 Inserted user with _id: {}", id);
+
+    let collection = User::get_collection_from(client)?;
 
     // Generic update with explicit client:
     // Set active = true for all users over 40
-    let result = User::update_with_client(
-        doc! { "age": { "$gt": 40 } },
-        doc! { "$set": { "active": true } },
-        client,
-    )
-    .await?;
+    let result = collection
+        .update_many(
+            doc! { "age": { "$gt": 40 } },
+            doc! { "$set": { "active": true } },
+        )
+        .await?;
     println!("🔁 Updated {} document(s)", result.modified_count);
 
     // Update a single document by ID with explicit client
-    let result =
-        User::update_by_id_with_client(id, doc! { "$set": { "name": "User1 Updated" } }, client)
-            .await?;
+    let result = collection
+        .update_one(
+            doc! { "_id": id },
+            doc! { "$set": { "name": "User1 Updated" } },
+        )
+        .await?;
     println!(
         "🆔 Updated {} document(s) by ID using client",
         result.modified_count

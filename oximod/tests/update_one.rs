@@ -33,11 +33,24 @@ async fn updates_first_matching_document_only() -> TestResult {
         user.save().await?;
     }
 
-    // Only one of the users with age 65 should be updated
-    let result = User::update_one(doc! { "age": 65 }, doc! { "$set": { "active": false } }).await?;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_one(doc! { "age": 65 }, doc! { "$set": { "active": false } })
+        .await?;
 
     assert_eq!(result.matched_count, 1);
     assert_eq!(result.modified_count, 1);
+
+    let active_count = collection
+        .count_documents(doc! { "age": 65, "active": true })
+        .await?;
+    let inactive_count = collection
+        .count_documents(doc! { "age": 65, "active": false })
+        .await?;
+
+    assert_eq!(active_count, 1);
+    assert_eq!(inactive_count, 1);
 
     Ok(())
 }
@@ -69,8 +82,11 @@ async fn updates_first_matching_document_invalid_update_fails() -> TestResult {
         user.save().await?;
     }
 
-    // Invalid update: $set is a scalar instead of a document
-    let result = User::update_one(doc! { "age": 65 }, doc! { "$set": "invalid" }).await;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_one(doc! { "age": 65 }, doc! { "$set": "invalid" })
+        .await;
 
     assert!(result.is_err());
     Ok(())
@@ -107,15 +123,22 @@ async fn updates_one_optional_email_to_valid() -> TestResult {
         user.save().await?;
     }
 
-    // Set email of first matching user to a valid email
-    let result = User::update_one(
-        doc! { "age": 65 },
-        doc! { "$set": { "email": "user@example.com" } },
-    )
-    .await?;
+    let collection = User::get_collection()?;
+
+    let result = collection
+        .update_one(
+            doc! { "age": 65 },
+            doc! { "$set": { "email": "user@example.com" } },
+        )
+        .await?;
 
     assert_eq!(result.matched_count, 1);
     assert_eq!(result.modified_count, 1);
+
+    let updated_count = collection
+        .count_documents(doc! { "age": 65, "email": "user@example.com" })
+        .await?;
+    assert_eq!(updated_count, 1);
 
     Ok(())
 }

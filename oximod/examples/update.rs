@@ -4,7 +4,8 @@
 //!
 //! This demonstrates how to:
 //! - Insert a document
-//! - Update fields using `update` and `update_by_id`
+//! - Update documents using the raw MongoDB collection
+//! - Update a document by ID using `Model::update_by_id`
 
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
@@ -37,17 +38,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let id = user.save().await?;
     println!("📝 Inserted user with _id: {}", id);
 
-    // Generic update: Set active = true for all users over 40
-    let result = User::update(
-        doc! { "age": { "$gt": 40 } },
-        doc! { "$set": { "active": true } },
-    )
-    .await?;
+    let collection = User::get_collection()?;
+
+    // Generic update using raw MongoDB API
+    let result = collection
+        .update_many(
+            doc! { "age": { "$gt": 40 } },
+            doc! { "$set": { "active": true } },
+        )
+        .await?;
+
     println!("🔁 Updated {} document(s)", result.modified_count);
 
-    // Update by ID
+    // Update by ID using OxiMod helper
     let result = User::update_by_id(id, doc! { "$set": { "name": "User1 Updated" } }).await?;
-    println!("🆔 Updated {} document(s) by ID", result.modified_count);
+
+    println!(
+        "🆔 Updated {} document(s) using Model::update_by_id",
+        result.modified_count
+    );
 
     Ok(())
 }

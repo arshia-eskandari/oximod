@@ -33,8 +33,17 @@ async fn deletes_first_matching_document_only() -> TestResult {
         user.save().await?;
     }
 
-    let deleted = User::delete_one(doc! { "age": 50, "active": false }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted = collection
+        .delete_one(doc! { "age": 50, "active": false })
+        .await?;
     assert_eq!(deleted.deleted_count, 1);
+
+    let remaining = collection
+        .count_documents(doc! { "age": 50, "active": false })
+        .await?;
+    assert_eq!(remaining, 1);
 
     Ok(())
 }
@@ -66,11 +75,18 @@ async fn delete_one_no_matching_document() -> TestResult {
         user.save().await?;
     }
 
-    let deleted = User::delete_one(doc! { "age": 50, "active": false }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted = collection
+        .delete_one(doc! { "age": 50, "active": false })
+        .await?;
     assert_eq!(
         deleted.deleted_count, 0,
         "No documents should have been deleted"
     );
+
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 2);
 
     Ok(())
 }
@@ -114,8 +130,17 @@ async fn deletes_first_matching_document_by_email_only() -> TestResult {
         user.save().await?;
     }
 
-    let deleted = User::delete_one(doc! { "email": "shared@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted = collection
+        .delete_one(doc! { "email": "shared@example.com" })
+        .await?;
     assert_eq!(deleted.deleted_count, 1);
+
+    let remaining = collection
+        .count_documents(doc! { "email": "shared@example.com" })
+        .await?;
+    assert_eq!(remaining, 1);
 
     Ok(())
 }
@@ -159,11 +184,18 @@ async fn delete_one_no_matching_document_by_email() -> TestResult {
         user.save().await?;
     }
 
-    let deleted = User::delete_one(doc! { "email": "notfound@example.com" }).await?;
+    let collection = User::get_collection()?;
+
+    let deleted = collection
+        .delete_one(doc! { "email": "notfound@example.com" })
+        .await?;
     assert_eq!(
         deleted.deleted_count, 0,
         "No documents should have been deleted"
     );
+
+    let remaining = collection.count_documents(doc! {}).await?;
+    assert_eq!(remaining, 2);
 
     Ok(())
 }

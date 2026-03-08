@@ -29,7 +29,8 @@ async fn finds_document_by_id_correctly() -> TestResult {
 
     user.save().await?;
 
-    let found = User::find_by_id(id).await?;
+    let collection = User::get_collection()?;
+    let found = collection.find_one(doc! { "_id": id }).await?;
     assert!(found.is_some());
 
     if let Some(u) = found {
@@ -61,8 +62,11 @@ async fn finds_document_by_id_returns_none_when_not_found() -> TestResult {
     User::clear().await?;
 
     let id_that_does_not_exist = ObjectId::new();
+    let collection = User::get_collection()?;
 
-    let found = User::find_by_id(id_that_does_not_exist).await?;
+    let found = collection
+        .find_one(doc! { "_id": id_that_does_not_exist })
+        .await?;
     assert!(
         found.is_none(),
         "Expected no document to be found for non-existent _id"
@@ -99,11 +103,12 @@ async fn finds_document_by_id_with_email_correctly() -> TestResult {
         .name("User1")
         .age(33)
         .active(true)
-        .email("user1@example.com"); // setter takes String
+        .email("user1@example.com");
 
     user.save().await?;
 
-    let found = User::find_by_id(id).await?;
+    let collection = User::get_collection()?;
+    let found = collection.find_one(doc! { "_id": id }).await?;
     assert!(found.is_some());
 
     if let Some(u) = found {
@@ -125,6 +130,154 @@ async fn finds_document_by_id_returns_none_when_not_found_with_email() -> TestRe
     #[derive(Model, Serialize, Deserialize, Debug)]
     #[db("test")]
     #[collection("find_by_id_test_returns_none_when_not_found_with_email")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        age: i32,
+        active: bool,
+
+        #[validate(email)]
+        email: Option<String>,
+    }
+
+    User::clear().await?;
+
+    let id_that_does_not_exist = ObjectId::new();
+    let collection = User::get_collection()?;
+
+    let found = collection
+        .find_one(doc! { "_id": id_that_does_not_exist })
+        .await?;
+    assert!(
+        found.is_none(),
+        "Expected no document to be found for non-existent _id"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run finds_document_by_id_correctly_using_model_helper
+#[tokio::test]
+async fn finds_document_by_id_correctly_using_model_helper() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_by_id_test_finds_document_by_id_correctly_using_model_helper")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let id = ObjectId::new();
+    let user = User::default().id(id).name("User1").age(33).active(true);
+
+    user.save().await?;
+
+    let found = User::find_by_id(id).await?;
+    assert!(found.is_some());
+
+    if let Some(u) = found {
+        assert_eq!(u._id, Some(id));
+        assert_eq!(u.name, "User1");
+        assert_eq!(u.age, 33);
+        assert!(u.active);
+    }
+
+    Ok(())
+}
+
+// Run test: cargo nextest run finds_document_by_id_returns_none_when_not_found_using_model_helper
+#[tokio::test]
+async fn finds_document_by_id_returns_none_when_not_found_using_model_helper() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_by_id_test_returns_none_when_not_found_using_model_helper")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    let id_that_does_not_exist = ObjectId::new();
+
+    let found = User::find_by_id(id_that_does_not_exist).await?;
+    assert!(
+        found.is_none(),
+        "Expected no document to be found for non-existent _id"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run finds_document_by_id_with_email_correctly_using_model_helper
+#[tokio::test]
+async fn finds_document_by_id_with_email_correctly_using_model_helper() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_by_id_test_with_email_correctly_using_model_helper")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        age: i32,
+        active: bool,
+
+        #[validate(email)]
+        email: Option<String>,
+    }
+
+    User::clear().await?;
+
+    let id = ObjectId::new();
+    let user = User::default()
+        .id(id)
+        .name("User1")
+        .age(33)
+        .active(true)
+        .email("user1@example.com");
+
+    user.save().await?;
+
+    let found = User::find_by_id(id).await?;
+    assert!(found.is_some());
+
+    if let Some(u) = found {
+        assert_eq!(u._id, Some(id));
+        assert_eq!(u.name, "User1");
+        assert_eq!(u.age, 33);
+        assert!(u.active);
+        assert_eq!(u.email.as_deref(), Some("user1@example.com"));
+    }
+
+    Ok(())
+}
+
+// Run test: cargo nextest run finds_document_by_id_returns_none_when_not_found_with_email_using_model_helper
+#[tokio::test]
+async fn finds_document_by_id_returns_none_when_not_found_with_email_using_model_helper()
+-> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("find_by_id_test_returns_none_when_not_found_with_email_using_model_helper")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,

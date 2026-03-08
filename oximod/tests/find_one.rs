@@ -33,7 +33,8 @@ async fn finds_first_matching_document_correctly() -> TestResult {
         user.save().await?;
     }
 
-    let matched = User::find_one(doc! { "age": 22 }).await?;
+    let collection = User::get_collection()?;
+    let matched = collection.find_one(doc! { "age": 22 }).await?;
     assert!(matched.is_some());
 
     if let Some(user) = matched {
@@ -71,7 +72,8 @@ async fn finds_first_matching_document_none_when_no_match() -> TestResult {
         user.save().await?;
     }
 
-    let matched = User::find_one(doc! { "age": 99 }).await?; // No user with age 99
+    let collection = User::get_collection()?;
+    let matched = collection.find_one(doc! { "age": 99 }).await?;
     assert!(matched.is_none(), "Expected no document to match");
 
     Ok(())
@@ -116,7 +118,10 @@ async fn finds_first_matching_document_by_email() -> TestResult {
         user.save().await?;
     }
 
-    let matched = User::find_one(doc! { "email": "user1@example.com" }).await?;
+    let collection = User::get_collection()?;
+    let matched = collection
+        .find_one(doc! { "email": "user1@example.com" })
+        .await?;
     assert!(matched.is_some(), "Expected to find user by email");
 
     if let Some(user) = matched {
@@ -166,7 +171,10 @@ async fn finds_first_matching_document_by_email_none_when_no_match() -> TestResu
         user.save().await?;
     }
 
-    let matched = User::find_one(doc! { "email": "notfound@example.com" }).await?;
+    let collection = User::get_collection()?;
+    let matched = collection
+        .find_one(doc! { "email": "notfound@example.com" })
+        .await?;
     assert!(
         matched.is_none(),
         "Expected no user to match non-existing email"

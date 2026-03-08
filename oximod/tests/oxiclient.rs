@@ -23,12 +23,13 @@ async fn oxiclient_works() -> TestResult {
     let oxiclient = OxiClient::new(mongodb_uri.clone()).await?;
     let client = oxiclient.client().unwrap();
 
-    User::clear_with_client(client).await?;
+    User::clear_from(client).await?;
     let id = ObjectId::new();
     let user_new = User::new().id(id);
-    user_new.save_with_client(client).await?;
+    user_new.save_from(client).await?;
 
-    let result = User::find_by_id_with_client(id, client).await?;
+    let collection = User::get_collection_from(client)?;
+    let result = collection.find_one(doc! { "_id": id }).await?;
     assert!(result.is_some());
     Ok(())
 }

@@ -1,525 +1,579 @@
 use crate::error::oximod_error::OxiModError;
+use crate::feature::conn::client::OxiClient;
 use async_trait;
+use mongodb::Client;
 use mongodb::{
     Collection,
-    bson::{self, Document, oid::ObjectId},
+    bson::{Document, doc, oid::ObjectId},
     results::{DeleteResult, UpdateResult},
 };
+use serde::de::DeserializeOwned;
 
-/// An asynchronous trait for MongoDB models enabling CRUD operations, typically implemented via the #[derive(Model)] macro.
+/// Core asynchronous model interface for OxiMod-backed MongoDB documents.
+///
+/// This trait is typically implemented automatically via `#[derive(Model)]`.
+/// It provides a minimal, typed API for:
+///
+/// - accessing a model's MongoDB collection,
+/// - saving a model instance,
+/// - clearing all documents from a model's collection,
+/// - querying documents by `_id`,
+/// - deleting and updating documents by `_id`,
+/// - checking document existence,
+/// - counting documents,
+/// - working either with an explicit [`mongodb::Client`] or the globally
+///   initialized [`OxiClient`].
+///
+/// # Design
+///
+/// `Model` is intentionally lightweight. OxiMod provides schema-awareness,
+/// builder-style ergonomics, and validation, while still exposing the underlying
+/// MongoDB driver patterns when needed.
+///
+/// In practice, this means:
+///
+/// - use [`Model::save`] and [`Model::clear`] for common persistence operations,
+/// - use helpers like [`Model::find_by_id`], [`Model::delete_by_id`],
+///   [`Model::update_by_id`], [`Model::exists`], and [`Model::count`] for
+///   common convenience workflows,
+/// - use [`Model::get_collection`] when you want direct access to
+///   `mongodb::Collection<Self>`,
+/// - use [`Model::get_document_collection`] when you want a raw
+///   `mongodb::Collection<Document>` for untyped operations.
+///
+/// # Global vs explicit client usage
+///
+/// The trait supports two access patterns:
+///
+/// ## 1. Global client
+///
+/// Methods like [`Model::save`], [`Model::clear`], [`Model::get_collection`],
+/// [`Model::find_by_id`], and [`Model::count`] use the globally initialized
+/// [`OxiClient`].
+///
+/// ## 2. Explicit client
+///
+/// Methods ending in `_from`, such as [`Model::save_from`] and
+/// [`Model::find_by_id_from`], operate on a caller-provided [`mongodb::Client`].
+///
+/// This is useful for:
+///
+/// - tests,
+/// - scoped client lifetimes,
+/// - multi-client or multi-database setups,
+/// - avoiding reliance on global state.
+///
+/// # Typed vs raw collections
+///
+/// [`Model::get_collection`] and [`Model::get_collection_from`] return
+/// `Collection<Self>`, which is the preferred typed API.
+///
+/// [`Model::get_document_collection`] and
+/// [`Model::get_document_collection_from`] return `Collection<Document>`,
+/// which is useful when you need to work with raw BSON documents.
+///
+/// # Implementors
+///
+/// This trait is generally not implemented manually. Instead, derive it:
+///
+/// ```ignore
+/// #[derive(Model, Serialize, Deserialize)]
+/// #[db("app_db")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+///     age: i32,
+/// }
+/// ```
+///
+/// # Thread-safety
+///
+/// Implementors must be:
+///
+/// - [`Send`]
+/// - [`Sync`]
+/// - [`Sized`]
+///
+/// so model operations can safely participate in async workflows.
 #[async_trait::async_trait]
-pub trait Model {
-    /// Retrieves the MongoDB collection associated with the model using the passed in client.
+pub trait Model
+where
+    Self: Send + Sync + Sized + DeserializeOwned,
+{
+    /// Returns the typed MongoDB collection for this model using an explicit client.
     ///
-    /// This method is typically used internally by the framework, but it can be called
-    /// directly when you need low-level access to the collection—such as for creating
-    /// indexes manually or performing custom MongoDB operations not covered by the trait.
+    /// This is the fundamental collection accessor that implementors are expected
+    /// to provide. It resolves the model's configured database and collection name
+    /// and returns a typed `Collection<Self>`.
     ///
-    /// # Returns
-    /// - [`Collection<Document>`](https://docs.rs/mongodb/latest/mongodb/struct.Collection.html): A handle to the MongoDB collection.
-    /// - [`OxiModError`](crate::error::oximod_error::OximodError): If the global client is not initialized or the collection name is missing.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let collection = User::get_collection_with_client(client)?;
-    /// let count = collection.count_documents(doc! {}).await?;
-    /// println!("Total documents: {}", count);
-    /// ```
-    fn get_collection_with_client(
-        client: &mongodb::Client,
-    ) -> Result<Collection<Document>, OxiModError>;
-    /// Inserts the current model instance into the MongoDB collection using the passed in client.
-    ///
-    /// # Returns
-    /// - `ObjectId` of the inserted document.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    ///
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let id = user.save_with_client(client).await?;
-    /// println!("Inserted user ID: {}", id);
-    /// ```
-    async fn save_with_client(&self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
-    /// Updates all documents in the collection that match the given filter using the passed in
-    /// client.
+    /// Most users will prefer [`Model::get_collection`] unless they specifically
+    /// need to work with an explicit client.
     ///
     /// # Parameters
-    /// - `filter`: A BSON document specifying which documents to match.
-    /// - `update`: A BSON document with the update operations to apply.
+    ///
+    /// - `client`: A MongoDB client to use for resolving the collection.
     ///
     /// # Returns
-    /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) containing matched and modified counts.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let result = User::update_with_client(doc! { "active": false }, doc! { "$set": { "active": true } }, client).await?;
-    /// assert_eq!(result.modified_count, 3);
-    /// ```
-    async fn update_with_client(
-        filter: impl Into<bson::Document> + Send,
-        update: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<UpdateResult, OxiModError>;
-    /// Updates the **first document** in the collection that matches the given filter using the
-    /// passed in client.
+    /// A typed [`mongodb::Collection`] whose document type is `Self`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if the collection cannot be resolved.
+    fn get_collection_from(client: &mongodb::Client) -> Result<Collection<Self>, OxiModError>;
+
+    /// Returns the raw BSON document collection for this model using an explicit client.
+    ///
+    /// This is a convenience wrapper around [`Model::get_collection_from`] that
+    /// converts the typed collection into `Collection<Document>`.
+    ///
+    /// This is useful when you want to work directly with raw BSON documents
+    /// instead of strongly typed model instances.
     ///
     /// # Parameters
-    /// - `filter`: A BSON document to find a single matching document.
-    /// - `update`: The update operations to apply (e.g., `$set`, `$unset`, etc.).
+    ///
+    /// - `client`: A MongoDB client to use for resolving the collection.
     ///
     /// # Returns
-    /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with `matched_count` and `modified_count`.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let result = User::update_one_with_client(doc! { "age": 25 }, doc! { "$set": { "active": false } }, client).await?;
-    /// assert_eq!(result.matched_count, 1);
-    /// ```
-    async fn update_one_with_client(
-        filter: impl Into<bson::Document> + Send,
-        update: impl Into<bson::Document> + Send,
+    /// A raw [`mongodb::Collection`] of [`mongodb::bson::Document`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if the underlying typed collection cannot be resolved.
+    fn get_document_collection_from(
         client: &mongodb::Client,
-    ) -> Result<UpdateResult, OxiModError>;
-    /// Deletes all documents in the collection that match the given filter using the passed in
-    /// client.
+    ) -> Result<Collection<Document>, OxiModError> {
+        Ok(Self::get_collection_from(client)?.clone_with_type::<Document>())
+    }
+
+    /// Persists this model instance using an explicit MongoDB client.
+    ///
+    /// Implementations are expected to serialize and insert `self` into the model's
+    /// configured collection, returning the inserted document's [`ObjectId`].
+    ///
+    /// This method is the explicit-client counterpart to [`Model::save`].
     ///
     /// # Parameters
-    /// - `filter`: A BSON document specifying which documents to delete.
+    ///
+    /// - `client`: The MongoDB client to use for the save operation.
     ///
     /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of documents deleted.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let result = User::delete_with_client(doc! { "active": false }, client).await?;
-    /// println!("Deleted {} users", result.deleted_count);
-    /// ```
-    async fn delete_with_client(
-        filter: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<DeleteResult, OxiModError>;
-    /// Deletes the **first** document in the collection that matches the given filter using the
-    /// passed in client.
+    /// The inserted document's [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if validation, serialization, collection access,
+    /// or insertion fails.
+    async fn save_from(&self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
+
+    /// Deletes all documents in this model's collection using an explicit client.
+    ///
+    /// This method removes every document in the collection associated with the model.
+    /// It is primarily useful for tests, examples, and resetting known datasets.
+    ///
+    /// This is the explicit-client counterpart to [`Model::clear`].
     ///
     /// # Parameters
-    /// - `filter`: A BSON document used to find a single document to delete.
+    ///
+    /// - `client`: The MongoDB client to use for the delete operation.
     ///
     /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with details about the deletion.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let result = User::delete_one_with_client(doc! { "name": "user_a" }, client).await?;
-    /// assert_eq!(result.deleted_count, 1);
+    /// A [`DeleteResult`] describing how many documents were removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection access or deletion fails.
+    ///
+    /// # Warning
+    ///
+    /// This removes **all documents** from the model's collection.
+    async fn clear_from(client: &mongodb::Client) -> Result<DeleteResult, OxiModError>;
+
+    /// Finds a document by its `_id` using an explicit client.
+    ///
+    /// This is a convenience method for a very common query pattern:
+    /// resolving a single typed document by its MongoDB `_id`.
+    ///
+    /// Internally, this is equivalent in behavior to:
+    ///
+    /// ```ignore
+    /// let collection = User::get_collection_from(client)?;
+    /// let found = collection.find_one(doc! { "_id": id }).await?;
     /// ```
-    async fn delete_one_with_client(
-        filter: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<DeleteResult, OxiModError>;
-    /// Finds all documents in the collection that match the given filter using the passed in
-    /// client.
     ///
     /// # Parameters
-    /// - `filter`: A BSON query document used to match documents.
+    ///
+    /// - `id`: The `_id` of the document to find.
+    /// - `client`: The MongoDB client to use for the query.
     ///
     /// # Returns
-    /// - A `Vec<Self>` containing all matched documents.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let users = User::find_with_client(doc! { "active": true }, client).await?;
-    /// assert!(!users.is_empty());
-    /// ```
-    async fn find_with_client(
-        filter: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<Vec<Self>, OxiModError>
-    where
-        Self: Sized;
-    /// Finds the **first document** in the collection that matches the given filter using the
-    /// passed in client.
+    /// `Ok(Some(Self))` if a matching document is found, otherwise `Ok(None)`.
     ///
-    /// # Parameters
-    /// - `filter`: A BSON document to match a single document.
+    /// # Errors
     ///
-    /// # Returns
-    /// - `Some(Self)` if a document is found, or `None` otherwise.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// if let Some(user) = User::find_one_with_client(doc! { "name": "user_a" }, client).await? {
-    ///     println!("Found user: {}", user.name);
-    /// }
-    /// ```
-    async fn find_one_with_client(
-        filter: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<Option<Self>, OxiModError>
-    where
-        Self: Sized;
-    /// Finds a document in the collection by its MongoDB `_id` field using the passed in client.
-    ///
-    /// # Parameters
-    /// - `id`: The [`ObjectId`](https://docs.rs/mongodb/latest/mongodb/bson/oid/struct.ObjectId.html) of the document.
-    ///
-    /// # Returns
-    /// - `Some(Self)` if found, or `None` if no document matches the ID.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let user = User::find_by_id_with_client(id, client).await?;
-    /// if let Some(u) = user {
-    ///     println!("Found: {}", u.name);
-    /// }
-    /// ```
-    async fn find_by_id_with_client(
+    /// Returns [`OxiModError`] if collection resolution or the query fails.
+    async fn find_by_id_from(
         id: ObjectId,
         client: &mongodb::Client,
-    ) -> Result<Option<Self>, OxiModError>
-    where
-        Self: Sized;
-    /// Updates a document by its MongoDB `_id` field using the passed in client.
+    ) -> Result<Option<Self>, OxiModError> {
+        let collection = Self::get_collection_from(client)?;
+        collection
+            .find_one(doc! { "_id": id })
+            .await
+            .map_err(|e| OxiModError::database("Failed to find document by _id", e))
+    }
+
+    /// Deletes a document by its `_id` using an explicit client.
+    ///
+    /// This method removes at most one document whose `_id` matches `id`.
+    ///
+    /// Internally, this is equivalent in behavior to:
+    ///
+    /// ```ignore
+    /// let collection = User::get_collection_from(client)?;
+    /// let result = collection.delete_one(doc! { "_id": id }).await?;
+    /// ```
     ///
     /// # Parameters
-    /// - `id`: The [`ObjectId`](https://docs.rs/mongodb/latest/mongodb/bson/oid/struct.ObjectId.html) of the document to update.
-    /// - `update`: A BSON document containing update operations (e.g., `$set`).
+    ///
+    /// - `id`: The `_id` of the document to delete.
+    /// - `client`: The MongoDB client to use for the delete operation.
     ///
     /// # Returns
-    /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with details on the matched and modified document.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let result = User::update_by_id_with_client(id, doc! { "$set": { "active": false } }, client).await?;
-    /// assert_eq!(result.matched_count, 1);
-    /// ```
-    async fn update_by_id_with_client(
-        id: ObjectId,
-        update: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<UpdateResult, OxiModError>;
-    /// Deletes a document from the collection by its MongoDB `_id` field using the passed in
-    /// client.
+    /// A [`DeleteResult`] indicating whether a document was deleted.
     ///
-    /// # Parameters
-    /// - `id`: The [`ObjectId`](https://docs.rs/mongodb/latest/mongodb/bson/oid/struct.ObjectId.html) of the document to delete.
+    /// # Errors
     ///
-    /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the deletion outcome.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let result = User::delete_by_id_with_client(id, client).await?;
-    /// assert_eq!(result.deleted_count, 1);
-    /// ```
-    async fn delete_by_id_with_client(
+    /// Returns [`OxiModError`] if collection resolution or deletion fails.
+    async fn delete_by_id_from(
         id: ObjectId,
         client: &mongodb::Client,
-    ) -> Result<DeleteResult, OxiModError>;
-    /// Counts the number of documents in the collection that match the given filter using the
-    /// passed in client.
+    ) -> Result<DeleteResult, OxiModError> {
+        let collection = Self::get_collection_from(client)?;
+        collection
+            .delete_one(doc! { "_id": id })
+            .await
+            .map_err(|e| OxiModError::database("Failed to delete document by _id", e))
+    }
+
+    /// Updates a document by its `_id` using an explicit client.
+    ///
+    /// This method updates at most one document whose `_id` matches `id`.
+    ///
+    /// The `update` document must follow MongoDB update syntax, such as:
+    ///
+    /// ```ignore
+    /// doc! { "$set": { "active": false } }
+    /// ```
+    ///
+    /// Internally, this is equivalent in behavior to:
+    ///
+    /// ```ignore
+    /// let collection = User::get_collection_from(client)?;
+    /// let result = collection.update_one(doc! { "_id": id }, update).await?;
+    /// ```
     ///
     /// # Parameters
-    /// - `filter`: A BSON document used to match documents.
+    ///
+    /// - `id`: The `_id` of the document to update.
+    /// - `update`: A MongoDB update document.
+    /// - `client`: The MongoDB client to use for the update operation.
     ///
     /// # Returns
-    /// - The number of matching documents as `u64`.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let count = User::count_with_client(doc! { "active": true }, client).await?;
-    /// println!("Active users: {}", count);
-    /// ```
-    async fn count_with_client(
-        filter: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<u64, OxiModError>;
-    /// Checks if any document in the collection matches the given filter using the passed in
-    /// client.
+    /// An [`UpdateResult`] indicating how many documents matched and were modified.
     ///
-    /// # Parameters
-    /// - `filter`: A BSON document to match against.
+    /// # Errors
     ///
-    /// # Returns
-    /// - `true` if at least one document matches, `false` otherwise.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let exists = User::exists_with_client(doc! { "name": "user_a" }, client).await?;
-    /// if exists {
-    ///     println!("User exists!");
-    /// }
-    /// ```
-    async fn exists_with_client(
-        filter: impl Into<bson::Document> + Send,
-        client: &mongodb::Client,
-    ) -> Result<bool, OxiModError>;
-    /// Deletes all documents from the model's collection using the passed in client.
-    ///
-    /// This is useful for resetting test data or clearing out a dataset.
-    ///
-    /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of deleted documents.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let oxiclient = OxiClient::new(mongodb_uri).await?;
-    /// let client = oxiclient.client().unwrap();
-    /// let result = User::clear_with_client(client).await?;
-    /// println!("Cleared {} documents", result.deleted_count);
-    /// ```
-    async fn clear_with_client(client: &mongodb::Client) -> Result<DeleteResult, OxiModError>;
-    /// Retrieves the MongoDB collection associated with the model.
-    ///
-    /// This method is typically used internally by the framework, but it can be called
-    /// directly when you need low-level access to the collection—such as for creating
-    /// indexes manually or performing custom MongoDB operations not covered by the trait.
-    ///
-    /// # Returns
-    /// - [`Collection<Document>`](https://docs.rs/mongodb/latest/mongodb/struct.Collection.html): A handle to the MongoDB collection.
-    /// - [`OxiModError`](crate::error::oximod_error::OximodError): If the global client is not initialized or the collection name is missing.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let collection = User::get_collection()?;
-    /// let count = collection.count_documents(doc! {}).await?;
-    /// println!("Total documents: {}", count);
-    /// ```
-    fn get_collection() -> Result<Collection<Document>, OxiModError>;
-    /// Inserts the current model instance into the MongoDB collection.
-    ///
-    /// # Returns
-    /// - `ObjectId` of the inserted document.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let id = user.save().await?;
-    /// println!("Inserted user ID: {}", id);
-    /// ```
-    async fn save(&self) -> Result<ObjectId, OxiModError>;
-    /// Updates all documents in the collection that match the given filter.
-    ///
-    /// # Parameters
-    /// - `filter`: A BSON document specifying which documents to match.
-    /// - `update`: A BSON document with the update operations to apply.
-    ///
-    /// # Returns
-    /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) containing matched and modified counts.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = User::update(doc! { "active": false }, doc! { "$set": { "active": true } }).await?;
-    /// assert_eq!(result.modified_count, 3);
-    /// ```
-    async fn update(
-        filter: impl Into<bson::Document> + Send,
-        update: impl Into<bson::Document> + Send,
-    ) -> Result<UpdateResult, OxiModError>;
-    /// Updates the **first document** in the collection that matches the given filter.
-    ///
-    /// # Parameters
-    /// - `filter`: A BSON document to find a single matching document.
-    /// - `update`: The update operations to apply (e.g., `$set`, `$unset`, etc.).
-    ///
-    /// # Returns
-    /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with `matched_count` and `modified_count`.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = User::update_one(doc! { "age": 25 }, doc! { "$set": { "active": false } }).await?;
-    /// assert_eq!(result.matched_count, 1);
-    /// ```
-    async fn update_one(
-        filter: impl Into<bson::Document> + Send,
-        update: impl Into<bson::Document> + Send,
-    ) -> Result<UpdateResult, OxiModError>;
-    /// Deletes all documents in the collection that match the given filter.
-    ///
-    /// # Parameters
-    /// - `filter`: A BSON document specifying which documents to delete.
-    ///
-    /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of documents deleted.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = User::delete(doc! { "active": false }).await?;
-    /// println!("Deleted {} users", result.deleted_count);
-    /// ```
-    async fn delete(filter: impl Into<bson::Document> + Send) -> Result<DeleteResult, OxiModError>;
-    /// Deletes the **first** document in the collection that matches the given filter.
-    ///
-    /// # Parameters
-    /// - `filter`: A BSON document used to find a single document to delete.
-    ///
-    /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with details about the deletion.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = User::delete_one(doc! { "name": "user_a" }).await?;
-    /// assert_eq!(result.deleted_count, 1);
-    /// ```
-    async fn delete_one(
-        filter: impl Into<bson::Document> + Send,
-    ) -> Result<DeleteResult, OxiModError>;
-    /// Finds all documents in the collection that match the given filter.
-    ///
-    /// # Parameters
-    /// - `filter`: A BSON query document used to match documents.
-    ///
-    /// # Returns
-    /// - A `Vec<Self>` containing all matched documents.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let users = User::find(doc! { "active": true }).await?;
-    /// assert!(!users.is_empty());
-    /// ```
-    async fn find(filter: impl Into<bson::Document> + Send) -> Result<Vec<Self>, OxiModError>
-    where
-        Self: Sized;
-    /// Finds the **first document** in the collection that matches the given filter.
-    ///
-    /// # Parameters
-    /// - `filter`: A BSON document to match a single document.
-    ///
-    /// # Returns
-    /// - `Some(Self)` if a document is found, or `None` otherwise.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// if let Some(user) = User::find_one(doc! { "name": "user_a" }).await? {
-    ///     println!("Found user: {}", user.name);
-    /// }
-    /// ```
-    async fn find_one(
-        filter: impl Into<bson::Document> + Send,
-    ) -> Result<Option<Self>, OxiModError>
-    where
-        Self: Sized;
-    /// Finds a document in the collection by its MongoDB `_id` field.
-    ///
-    /// # Parameters
-    /// - `id`: The [`ObjectId`](https://docs.rs/mongodb/latest/mongodb/bson/oid/struct.ObjectId.html) of the document.
-    ///
-    /// # Returns
-    /// - `Some(Self)` if found, or `None` if no document matches the ID.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let user = User::find_by_id(id).await?;
-    /// if let Some(u) = user {
-    ///     println!("Found: {}", u.name);
-    /// }
-    /// ```
-    async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OxiModError>
-    where
-        Self: Sized;
-    /// Updates a document by its MongoDB `_id` field.
-    ///
-    /// # Parameters
-    /// - `id`: The [`ObjectId`](https://docs.rs/mongodb/latest/mongodb/bson/oid/struct.ObjectId.html) of the document to update.
-    /// - `update`: A BSON document containing update operations (e.g., `$set`).
-    ///
-    /// # Returns
-    /// - [`UpdateResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.UpdateResult.html) with details on the matched and modified document.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let result = User::update_by_id(id, doc! { "$set": { "active": false } }).await?;
-    /// assert_eq!(result.matched_count, 1);
-    /// ```
-    async fn update_by_id(
+    /// Returns [`OxiModError`] if collection resolution or update execution fails.
+    async fn update_by_id_from(
         id: ObjectId,
-        update: impl Into<bson::Document> + Send,
-    ) -> Result<UpdateResult, OxiModError>;
-    /// Deletes a document from the collection by its MongoDB `_id` field.
+        update: Document,
+        client: &mongodb::Client,
+    ) -> Result<UpdateResult, OxiModError> {
+        let collection = Self::get_collection_from(client)?;
+        collection
+            .update_one(doc! { "_id": id }, update)
+            .await
+            .map_err(|e| OxiModError::database("Failed to update document by _id", e))
+    }
+
+    /// Checks whether any document matching `filter` exists using an explicit client.
+    ///
+    /// This method is implemented using `find_one(filter).await?.is_some()`,
+    /// which is typically more efficient for existence checks than counting
+    /// all matching documents.
     ///
     /// # Parameters
-    /// - `id`: The [`ObjectId`](https://docs.rs/mongodb/latest/mongodb/bson/oid/struct.ObjectId.html) of the document to delete.
+    ///
+    /// - `filter`: A MongoDB filter document.
+    /// - `client`: The MongoDB client to use for the query.
     ///
     /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the deletion outcome.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let id = ObjectId::parse_str("652efcddfc13ae2c82000001")?;
-    /// let result = User::delete_by_id(id).await?;
-    /// assert_eq!(result.deleted_count, 1);
-    /// ```
-    async fn delete_by_id(id: ObjectId) -> Result<DeleteResult, OxiModError>;
-    /// Counts the number of documents in the collection that match the given filter.
+    /// `true` if at least one matching document exists, otherwise `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or the query fails.
+    async fn exists_from(filter: Document, client: &mongodb::Client) -> Result<bool, OxiModError> {
+        let collection = Self::get_collection_from(client)?;
+        let found = collection
+            .find_one(filter)
+            .await
+            .map_err(|e| OxiModError::database("Failed to check document existence", e))?;
+        Ok(found.is_some())
+    }
+
+    /// Counts documents matching `filter` using an explicit client.
+    ///
+    /// This is a convenience wrapper around MongoDB's `count_documents`.
     ///
     /// # Parameters
-    /// - `filter`: A BSON document used to match documents.
+    ///
+    /// - `filter`: A MongoDB filter document.
+    /// - `client`: The MongoDB client to use for the count operation.
     ///
     /// # Returns
-    /// - The number of matching documents as `u64`.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let count = User::count(doc! { "active": true }).await?;
-    /// println!("Active users: {}", count);
-    /// ```
-    async fn count(filter: impl Into<bson::Document> + Send) -> Result<u64, OxiModError>;
-    /// Checks if any document in the collection matches the given filter.
+    /// The number of matching documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or the count operation fails.
+    async fn count_from(filter: Document, client: &mongodb::Client) -> Result<u64, OxiModError> {
+        let collection = Self::get_collection_from(client)?;
+        collection
+            .count_documents(filter)
+            .await
+            .map_err(|e| OxiModError::database("Failed to count matching documents", e))
+    }
+
+    /// Returns the typed MongoDB collection for this model using the global [`OxiClient`].
+    ///
+    /// This method retrieves the globally initialized client via [`OxiClient::global`]
+    /// and delegates to [`Model::get_collection_from`].
+    ///
+    /// # Returns
+    ///
+    /// A typed [`mongodb::Collection`] whose document type is `Self`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - or the collection cannot be resolved.
+    fn get_collection() -> Result<Collection<Self>, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::get_collection_from(client)
+    }
+
+    /// Returns the raw BSON document collection for this model using the global [`OxiClient`].
+    ///
+    /// This is a convenience wrapper around [`Model::get_collection`] that converts
+    /// the typed collection into `Collection<Document>`.
+    ///
+    /// # Returns
+    ///
+    /// A raw [`mongodb::Collection`] of [`mongodb::bson::Document`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - or the collection cannot be resolved.
+    fn get_document_collection() -> Result<Collection<Document>, OxiModError> {
+        Ok(Self::get_collection()?.clone_with_type::<Document>())
+    }
+
+    /// Persists this model instance using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::save_from`].
+    ///
+    /// # Returns
+    ///
+    /// The inserted document's [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - validation fails,
+    /// - serialization fails,
+    /// - collection resolution fails,
+    /// - or insertion fails.
+    async fn save(&self) -> Result<ObjectId, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        self.save_from(client).await
+    }
+
+    /// Deletes all documents in this model's collection using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::clear_from`].
+    ///
+    /// # Returns
+    ///
+    /// A [`DeleteResult`] describing how many documents were removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - collection resolution fails,
+    /// - or deletion fails.
+    ///
+    /// # Warning
+    ///
+    /// This removes **all documents** from the model's collection.
+    async fn clear() -> Result<DeleteResult, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::clear_from(client).await
+    }
+
+    /// Finds a document by its `_id` using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::find_by_id_from`].
     ///
     /// # Parameters
-    /// - `filter`: A BSON document to match against.
+    ///
+    /// - `id`: The `_id` of the document to find.
     ///
     /// # Returns
-    /// - `true` if at least one document matches, `false` otherwise.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let exists = User::exists(doc! { "name": "user_a" }).await?;
-    /// if exists {
-    ///     println!("User exists!");
-    /// }
-    /// ```
-    async fn exists(filter: impl Into<bson::Document> + Send) -> Result<bool, OxiModError>;
-    /// Deletes all documents from the model's collection.
+    /// `Ok(Some(Self))` if a matching document is found, otherwise `Ok(None)`.
     ///
-    /// This is useful for resetting test data or clearing out a dataset.
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - collection resolution fails,
+    /// - or the query fails.
+    async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::find_by_id_from(id, client).await
+    }
+
+    /// Deletes a document by its `_id` using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::delete_by_id_from`].
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The `_id` of the document to delete.
     ///
     /// # Returns
-    /// - [`DeleteResult`](https://docs.rs/mongodb/latest/mongodb/results/struct.DeleteResult.html) with the number of deleted documents.
     ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = User::clear().await?;
-    /// println!("Cleared {} documents", result.deleted_count);
-    /// ```
-    async fn clear() -> Result<DeleteResult, OxiModError>;
+    /// A [`DeleteResult`] indicating whether a document was deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - collection resolution fails,
+    /// - or deletion fails.
+    async fn delete_by_id(id: ObjectId) -> Result<DeleteResult, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::delete_by_id_from(id, client).await
+    }
+
+    /// Updates a document by its `_id` using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::update_by_id_from`].
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The `_id` of the document to update.
+    /// - `update`: A MongoDB update document.
+    ///
+    /// # Returns
+    ///
+    /// An [`UpdateResult`] indicating how many documents matched and were modified.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - collection resolution fails,
+    /// - or update execution fails.
+    async fn update_by_id(id: ObjectId, update: Document) -> Result<UpdateResult, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::update_by_id_from(id, update, client).await
+    }
+
+    /// Checks whether any document matching `filter` exists using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::exists_from`].
+    ///
+    /// # Parameters
+    ///
+    /// - `filter`: A MongoDB filter document.
+    ///
+    /// # Returns
+    ///
+    /// `true` if at least one matching document exists, otherwise `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - collection resolution fails,
+    /// - or the query fails.
+    async fn exists(filter: Document) -> Result<bool, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::exists_from(filter, client).await
+    }
+
+    /// Counts documents matching `filter` using the global [`OxiClient`].
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::count_from`].
+    ///
+    /// # Parameters
+    ///
+    /// - `filter`: A MongoDB filter document.
+    ///
+    /// # Returns
+    ///
+    /// The number of matching documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - collection resolution fails,
+    /// - or the count operation fails.
+    async fn count(filter: Document) -> Result<u64, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        Self::count_from(filter, client).await
+    }
 }
