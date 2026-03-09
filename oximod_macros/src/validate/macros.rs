@@ -27,9 +27,12 @@ pub(crate) use opt_check;
 macro_rules! is_type_safe {
     ($cond:expr, $checks:expr, $field_ident:expr, $msg:expr) => {{
         if !$cond {
+            let __msg = $msg;
+
             $checks.push(quote_spanned! { $field_ident.span() =>
-                compile_error!($msg);
+                compile_error!(#__msg);
             });
+
             false
         } else {
             true

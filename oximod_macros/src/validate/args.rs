@@ -1,3 +1,4 @@
+use proc_macro2::TokenStream;
 use syn::{LitFloat, LitInt};
 
 /// Represents a numeric literal
@@ -136,4 +137,16 @@ pub enum PrimitiveNum {
     F32,
     F64,
     NonNumeric,
+}
+
+/// Includes all validation token streams
+#[derive(Default)]
+pub struct BuiltChecks {
+    pub checks: Vec<TokenStream>,
+    pub field_rules_val: Vec<TokenStream>,
+    pub compile_errors: Vec<TokenStream>,
+    pub field_rules_direct: Vec<TokenStream>,
+    pub min_rhs_ts: Option<TokenStream>,
+    pub max_rhs_ts: Option<TokenStream>,
+    pub numeric_checks: Vec<TokenStream>,
 }
