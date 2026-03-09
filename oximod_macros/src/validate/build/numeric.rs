@@ -3,7 +3,7 @@ use super::super::{
     helpers::{is_integer, is_signed, rhs_for_integer_multiple_of, rhs_for_numeric_bound},
     macros::is_type_safe,
 };
-use quote::{quote, quote_spanned};
+use quote::quote;
 use syn::Ident;
 
 pub fn build_numeric_checks(
@@ -14,7 +14,7 @@ pub fn build_numeric_checks(
     field_ident: &Ident,
     field_name_lit: &syn::LitStr,
 ) {
-    if matches!(validate_args.positive, Some(true))
+    if let Some(true) = validate_args.positive
         && is_type_safe!(
             is_num && is_signed(prim),
             build_checks.checks,
@@ -33,7 +33,7 @@ pub fn build_numeric_checks(
         });
     }
 
-    if matches!(validate_args.negative, Some(true))
+    if let Some(true) = validate_args.negative
         && is_type_safe!(
             is_num && is_signed(prim),
             build_checks.checks,
@@ -52,7 +52,7 @@ pub fn build_numeric_checks(
         });
     }
 
-    if matches!(validate_args.non_negative, Some(true))
+    if let Some(true) = validate_args.non_negative
         && is_type_safe!(
             is_num && is_signed(prim),
             build_checks.checks,

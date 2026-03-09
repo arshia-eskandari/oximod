@@ -391,7 +391,7 @@ pub fn rhs_for_integer_multiple_of(
                 return None;
             }
 
-            let pow2_mask = if !super::is_signed(prim) && (mag & (mag - 1)) == 0 {
+            let pow2_mask = if !is_signed(prim) && (mag & (mag - 1)) == 0 {
                 let mask = mag - 1;
                 Some(syn::LitInt::new(&mask.to_string(), lit.span()))
             } else {

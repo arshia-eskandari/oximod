@@ -59,7 +59,7 @@ pub fn build_string_checks(
         });
     }
 
-    if matches!(validate_args.email, Some(true))
+    if let Some(true) = validate_args.email
         && is_type_safe!(
             is_str,
             build_checks.checks,
