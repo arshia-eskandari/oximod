@@ -101,22 +101,70 @@ pub enum LitNum {
 /// }
 /// ```
 pub struct ValidateArgs {
+    // must be string
     pub min_length: Option<u32>,
-    pub max_length: Option<u32>,
-    pub required: Option<bool>,
-    pub email: Option<bool>,
-    pub pattern: Option<String>,
-    pub non_empty: Option<bool>,
-    pub positive: Option<bool>,
-    pub negative: Option<bool>,
-    pub non_negative: Option<bool>,
-    pub min: Option<LitNum>,
-    pub max: Option<LitNum>,
     pub starts_with: Option<String>,
     pub ends_with: Option<String>,
     pub includes: Option<String>,
     pub alphanumeric: Option<bool>,
+    pub non_empty: Option<bool>,
+    pub max_length: Option<u32>,
+    pub email: Option<bool>,
+    pub pattern: Option<String>,
+
+    // must be signed number
+    pub positive: Option<bool>,
+    pub negative: Option<bool>,
+    pub non_negative: Option<bool>,
+
+    // must be number
+    pub min: Option<LitNum>,
+    pub max: Option<LitNum>,
+
+    // must be integer
     pub multiple_of: Option<syn::LitInt>,
+
+    // must be optional
+    pub required: Option<bool>,
+}
+
+impl ValidateArgs {
+    pub fn must_be_string(&self) -> bool {
+        self.min_length.is_some()
+            || self.starts_with.is_some()
+            || self.ends_with.is_some()
+            || self.includes.is_some()
+            || self.alphanumeric.is_some()
+            || self.non_empty.is_some()
+            || self.max_length.is_some()
+            || self.email.is_some()
+            || self.pattern.is_some()
+    }
+
+    pub fn must_be_signed_number(&self) -> bool {
+        self.positive.is_some() || self.negative.is_some() || self.non_negative.is_some()
+    }
+
+    pub fn must_be_integer(&self) -> bool {
+        self.multiple_of.is_some()
+    }
+
+    pub fn must_be_number(&self) -> bool {
+        self.min.is_some()
+            || self.max.is_some()
+            || self.multiple_of.is_some()
+            || self.positive.is_some()
+            || self.negative.is_some()
+            || self.non_negative.is_some()
+    }
+
+    pub fn must_be_optional(&self) -> bool {
+        self.required.is_some()
+    }
+
+    pub fn has_type_collision(&self) -> bool {
+        self.must_be_string() && self.must_be_number()
+    }
 }
 
 /// Includes all numeric types

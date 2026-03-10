@@ -1,12 +1,16 @@
 pub mod args;
-mod build;
+mod build_checks;
 pub mod helpers;
 pub mod macros;
 
 use crate::parsers::unwrap_option_type;
 pub use args::{BuiltChecks, LitNum, ValidateArgs};
-use build::{numeric::build_numeric_checks, string::build_string_checks};
-use helpers::{is_numeric, is_signed, is_string, primitive_of};
+use build_checks::{
+    numbers::{build_integer_checks, build_number_checks, build_signed_number_checks},
+    options::build_option_checks,
+    strings::build_string_checks,
+};
+use helpers::{is_integer, is_numeric, is_signed, is_string, primitive_of};
 use macros::opt_check;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
@@ -25,51 +29,93 @@ pub fn generate_validate_model_tokens(
     let opt_inner = unwrap_option_type(field_ty);
     let is_optional = opt_inner.is_some();
     let inner_ty = opt_inner.unwrap_or(field_ty);
-    let is_str = is_string(inner_ty);
     let prim = primitive_of(inner_ty);
-    let is_num = is_numeric(&prim);
 
-    build_string_checks(
-        &mut build_checks,
-        &validate_args,
-        is_str,
-        field_ident,
-        &field_name_lit,
-        struct_ident,
-    );
-    build_numeric_checks(
-        &mut build_checks,
-        &validate_args,
-        is_num,
-        prim,
-        field_ident,
-        &field_name_lit,
-    );
-
-    if matches!(validate_args.required, Some(true)) {
-        if !is_optional {
-            build_checks
-                .compile_errors
-                .push(quote_spanned! { field_ident.span() =>
-                    compile_error!(
-                        concat!(
-                            "Field '", stringify!(#field_ident),
-                            "' cannot use #[validate(required)] because it is not Option<T>"
-                        )
-                    );
-                });
-        } else {
-            build_checks.field_rules_direct.push(quote! {
-                if self.#field_ident.is_none() {
-                    return Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
-                            format!("Field '{}' is required", #field_name_lit)
-                        )
-                    );
-                }
-            });
-        }
+    if validate_args.has_type_collision() {
+        return vec![quote_spanned! { field_ident.span() =>
+            compile_error!(
+                "invalid validation rules: cannot apply validations from different type groups to the same field"
+            );
+        }];
     }
+
+    if validate_args.must_be_number() && !is_numeric(&prim) {
+        return vec![quote_spanned! { field_ident.span() =>
+            compile_error!(
+                concat!(
+                    "Field '", stringify!(#field_ident),
+                    "' uses numeric validation rules, but its type is not numeric"
+                )
+            );
+        }];
+    } else {
+        build_number_checks(
+            &mut build_checks,
+            &validate_args,
+            prim,
+            field_ident,
+            &field_name_lit,
+        );
+    }
+
+    if validate_args.must_be_signed_number() && !is_signed(&prim) {
+        return vec![quote_spanned! { field_ident.span() =>
+            compile_error!(
+                concat!(
+                    "Field '", stringify!(#field_ident),
+                    "' uses signed-number validation rules, but its type is not a signed numeric type"
+                )
+            );
+        }];
+    } else {
+        build_signed_number_checks(&mut build_checks, &validate_args, &field_name_lit);
+    }
+
+    if validate_args.must_be_integer() && !is_integer(&prim) {
+        return vec![quote_spanned! { field_ident.span() =>
+            compile_error!(
+                concat!(
+                    "Field '", stringify!(#field_ident),
+                    "' uses integer-only validation rules, but its type is not an integer"
+                )
+            );
+        }];
+    } else {
+        build_integer_checks(
+            &mut build_checks,
+            &validate_args,
+            prim,
+            field_ident,
+            &field_name_lit,
+        );
+    }
+
+    if validate_args.must_be_string() && !is_string(inner_ty) {
+        return vec![quote_spanned! { field_ident.span() =>
+            compile_error!(
+                concat!(
+                    "Field '", stringify!(#field_ident),
+                    "' uses string validation rules, but its type is not String or &str"
+                )
+            );
+        }];
+    } else {
+        build_string_checks(
+            &mut build_checks,
+            &validate_args,
+            field_ident,
+            &field_name_lit,
+            struct_ident,
+        );
+    }
+
+    build_option_checks(
+        &mut build_checks,
+        &validate_args,
+        field_ident,
+        &field_name_lit,
+        is_optional,
+    );
 
     if !build_checks.numeric_checks.is_empty() {
         let numeric_checks = build_checks.numeric_checks;

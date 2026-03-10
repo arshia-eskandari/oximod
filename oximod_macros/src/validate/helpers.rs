@@ -5,13 +5,13 @@ use quote::{quote, quote_spanned};
 use syn::{Ident, LitFloat, LitInt, Type};
 
 #[inline]
-pub fn is_signed(prim: PrimitiveNum) -> bool {
+pub fn is_signed(prim: &PrimitiveNum) -> bool {
     use PrimitiveNum::*;
     matches!(prim, I8 | I16 | I32 | I64 | I128 | Isize | F32 | F64)
 }
 
 #[inline]
-pub fn is_integer(prim: PrimitiveNum) -> bool {
+pub fn is_integer(prim: &PrimitiveNum) -> bool {
     use PrimitiveNum::*;
     matches!(
         prim,
@@ -391,7 +391,7 @@ pub fn rhs_for_integer_multiple_of(
                 return None;
             }
 
-            let pow2_mask = if !is_signed(prim) && (mag & (mag - 1)) == 0 {
+            let pow2_mask = if !is_signed(&prim) && (mag & (mag - 1)) == 0 {
                 let mask = mag - 1;
                 Some(syn::LitInt::new(&mask.to_string(), lit.span()))
             } else {

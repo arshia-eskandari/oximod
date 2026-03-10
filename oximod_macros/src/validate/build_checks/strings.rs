@@ -1,26 +1,15 @@
-use super::super::{
-    args::{BuiltChecks, ValidateArgs},
-    macros::is_type_safe,
-};
+use super::super::args::{BuiltChecks, ValidateArgs};
 use quote::{format_ident, quote, quote_spanned};
 use syn::Ident;
 
 pub fn build_string_checks(
     build_checks: &mut BuiltChecks,
     validate_args: &ValidateArgs,
-    is_str: bool,
     field_ident: &Ident,
     field_name_lit: &syn::LitStr,
     struct_ident: &Ident,
 ) {
-    if let Some(min_length) = validate_args.min_length
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(min_length)]` can only be applied to string fields"
-        )
-    {
+    if let Some(min_length) = validate_args.min_length {
         build_checks.field_rules_val.push(quote! {
             if val.len() < (#min_length as usize) {
                 return Err(
@@ -36,14 +25,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(max_length) = validate_args.max_length
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(max_length)]` can only be applied to string fields"
-        )
-    {
+    if let Some(max_length) = validate_args.max_length {
         build_checks.field_rules_val.push(quote! {
             if val.len() > (#max_length as usize) {
                 return Err(
@@ -59,14 +41,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(true) = validate_args.email
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(email)]` can only be applied to string fields"
-        )
-    {
+    if let Some(true) = validate_args.email {
         let re_ident = format_ident!("__oximod_email_re_{}_{}", struct_ident, field_ident);
         let email_pat = syn::LitStr::new(
             r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
@@ -93,14 +68,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(pattern) = &validate_args.pattern
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(pattern)]` can only be applied to string fields"
-        )
-    {
+    if let Some(pattern) = &validate_args.pattern {
         match ::regex::Regex::new(pattern) {
             Err(e) => {
                 let msg = format!(
@@ -141,14 +109,7 @@ pub fn build_string_checks(
         }
     }
 
-    if let Some(true) = validate_args.non_empty
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(non_empty)]` can only be applied to string fields"
-        )
-    {
+    if let Some(true) = validate_args.non_empty {
         build_checks.field_rules_val.push(quote! {
             if val.trim().is_empty() {
                 return Err(
@@ -160,14 +121,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(start) = &validate_args.starts_with
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(starts_with)]` can only be applied to string fields"
-        )
-    {
+    if let Some(start) = &validate_args.starts_with {
         build_checks.field_rules_val.push(quote! {
             if !val.starts_with(#start) {
                 return Err(
@@ -183,14 +137,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(end) = &validate_args.ends_with
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(ends_with)]` can only be applied to string fields"
-        )
-    {
+    if let Some(end) = &validate_args.ends_with {
         build_checks.field_rules_val.push(quote! {
             if !val.ends_with(#end) {
                 return Err(
@@ -206,14 +153,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(substr) = &validate_args.includes
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(includes)]` can only be applied to string fields"
-        )
-    {
+    if let Some(substr) = &validate_args.includes {
         build_checks.field_rules_val.push(quote! {
             if !val.contains(#substr) {
                 return Err(
@@ -229,14 +169,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(true) = validate_args.alphanumeric
-        && is_type_safe!(
-            is_str,
-            build_checks.checks,
-            field_ident,
-            "`#[validate(alphanumeric)]` can only be applied to string fields"
-        )
-    {
+    if let Some(true) = validate_args.alphanumeric {
         build_checks.field_rules_val.push(quote! {
             if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
                 return Err(
