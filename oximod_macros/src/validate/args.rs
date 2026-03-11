@@ -116,6 +116,7 @@ pub struct ValidateArgs {
     pub positive: bool,
     pub negative: bool,
     pub non_negative: bool,
+    pub non_positive: bool,
 
     // must be number
     pub min: Option<LitNum>,
@@ -142,7 +143,7 @@ impl ValidateArgs {
     }
 
     pub fn must_be_signed_number(&self) -> bool {
-        self.positive || self.negative || self.non_negative
+        self.positive || self.negative || self.non_negative || self.non_positive
     }
 
     pub fn must_be_integer(&self) -> bool {

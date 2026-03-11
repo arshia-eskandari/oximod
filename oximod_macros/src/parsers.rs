@@ -289,6 +289,8 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
                 args.negative = true;
             } else if meta.path.is_ident("non_negative") {
                 args.non_negative = true;
+            } else if meta.path.is_ident("non_positive") {
+                args.non_positive = true;
             } else if meta.path.is_ident("min") {
                 let expr: Expr = meta.value()?.parse()?;
                 args.min = Some(parse_num_lit_expr(expr)?);

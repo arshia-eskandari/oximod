@@ -103,6 +103,18 @@ pub fn build_signed_number_checks(
             }
         });
     }
+
+    if validate_args.non_positive {
+        build_checks.field_rules_val.push(quote! {
+            if *val > 0 {
+                return Err(
+                    ::oximod::_error::oximod_error::OxiModError::validation(
+                        format!("Field '{}' must be non-positive", #field_name_lit)
+                    )
+                );
+            }
+        });
+    }
 }
 
 pub fn build_integer_checks(
