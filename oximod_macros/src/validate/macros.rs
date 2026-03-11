@@ -1,3 +1,4 @@
+#[allow(unused)]
 macro_rules! is_type_safe {
     ($cond:expr, $checks:expr, $field_ident:expr, $msg:expr) => {{
         if !$cond {
@@ -15,6 +16,7 @@ macro_rules! is_type_safe {
     }};
 }
 
+#[allow(unused)]
 macro_rules! opt_check {
     ($is_optional:expr, $field_ident:expr, $($body:tt)*) => {{
         let __field_ident = $field_ident;
@@ -36,5 +38,4 @@ macro_rules! opt_check {
     }};
 }
 
-pub(crate) use is_type_safe;
 pub(crate) use opt_check;

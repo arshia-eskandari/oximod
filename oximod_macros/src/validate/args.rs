@@ -159,7 +159,11 @@ impl ValidateArgs {
     }
 
     pub fn must_be_optional(&self) -> bool {
-        self.required.is_some()
+        if let Some(true) = self.required {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn has_type_collision(&self) -> bool {
@@ -194,7 +198,5 @@ pub struct BuiltChecks {
     pub field_rules_val: Vec<TokenStream>,
     pub compile_errors: Vec<TokenStream>,
     pub field_rules_direct: Vec<TokenStream>,
-    pub min_rhs_ts: Option<TokenStream>,
-    pub max_rhs_ts: Option<TokenStream>,
     pub numeric_checks: Vec<TokenStream>,
 }

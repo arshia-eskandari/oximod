@@ -27,7 +27,6 @@ pub fn generate_validate_model_tokens(
     let mut build_checks = BuiltChecks::default();
     let field_name_lit = syn::LitStr::new(&field_ident.to_string(), field_ident.span());
     let opt_inner = unwrap_option_type(field_ty);
-    let is_optional = opt_inner.is_some();
     let inner_ty = opt_inner.unwrap_or(field_ty);
     let prim = primitive_of(inner_ty);
 
@@ -109,13 +108,14 @@ pub fn generate_validate_model_tokens(
         );
     }
 
-    build_option_checks(
-        &mut build_checks,
-        &validate_args,
-        field_ident,
-        &field_name_lit,
-        is_optional,
-    );
+    if validate_args.must_be_optional() {
+        build_option_checks(
+            &mut build_checks,
+            field_ident,
+            &field_name_lit,
+            opt_inner.is_some(),
+        );
+    }
 
     if !build_checks.numeric_checks.is_empty() {
         let numeric_checks = build_checks.numeric_checks;
@@ -135,7 +135,7 @@ pub fn generate_validate_model_tokens(
 
     if !build_checks.field_rules_val.is_empty() {
         let field_rules_val = build_checks.field_rules_val;
-        let grouped = opt_check!(is_optional, field_ident, {
+        let grouped = opt_check!(opt_inner.is_some(), field_ident, {
             #(#field_rules_val)*
         });
         build_checks.checks.push(grouped);
