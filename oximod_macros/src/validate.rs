@@ -39,14 +39,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if validate_args.must_be_number() && !is_numeric(&prim) {
-        return vec![quote_spanned! { field_ident.span() =>
-            compile_error!(
-                concat!(
-                    "Field '", stringify!(#field_ident),
-                    "' uses numeric validation rules, but its type is not numeric"
-                )
-            );
-        }];
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses numeric validation rules, but its type is not numeric"
+                    )
+                );
+            });
     } else {
         build_number_checks(
             &mut build_checks,
@@ -58,27 +60,31 @@ pub fn generate_validate_model_tokens(
     }
 
     if validate_args.must_be_signed_number() && !is_signed(&prim) {
-        return vec![quote_spanned! { field_ident.span() =>
-            compile_error!(
-                concat!(
-                    "Field '", stringify!(#field_ident),
-                    "' uses signed-number validation rules, but its type is not a signed numeric type"
-                )
-            );
-        }];
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses signed-number validation rules, but its type is not a signed numeric type"
+                    )
+                );
+            });
     } else {
         build_signed_number_checks(&mut build_checks, &validate_args, &field_name_lit);
     }
 
     if validate_args.must_be_integer() && !is_integer(&prim) {
-        return vec![quote_spanned! { field_ident.span() =>
-            compile_error!(
-                concat!(
-                    "Field '", stringify!(#field_ident),
-                    "' uses integer-only validation rules, but its type is not an integer"
-                )
-            );
-        }];
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses integer-only validation rules, but its type is not an integer"
+                    )
+                );
+            });
     } else {
         build_integer_checks(
             &mut build_checks,
@@ -90,14 +96,16 @@ pub fn generate_validate_model_tokens(
     }
 
     if validate_args.must_be_string() && !is_string(inner_ty) {
-        return vec![quote_spanned! { field_ident.span() =>
-            compile_error!(
-                concat!(
-                    "Field '", stringify!(#field_ident),
-                    "' uses string validation rules, but its type is not String or &str"
-                )
-            );
-        }];
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses string validation rules, but its type is not String or &str"
+                    )
+                );
+            });
     } else {
         build_string_checks(
             &mut build_checks,
@@ -108,12 +116,23 @@ pub fn generate_validate_model_tokens(
         );
     }
 
-    if validate_args.must_be_optional() {
+    if validate_args.must_be_optional() && opt_inner.is_none() {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses option validation rules, but its type is not Option<T>"
+                    )
+                );
+            });
+    } else {
         build_option_checks(
             &mut build_checks,
+            &validate_args,
             field_ident,
             &field_name_lit,
-            opt_inner.is_some(),
         );
     }
 

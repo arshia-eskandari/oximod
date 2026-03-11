@@ -159,11 +159,7 @@ impl ValidateArgs {
     }
 
     pub fn must_be_optional(&self) -> bool {
-        if let Some(true) = self.required {
-            true
-        } else {
-            false
-        }
+        self.required.is_some()
     }
 
     pub fn has_type_collision(&self) -> bool {
