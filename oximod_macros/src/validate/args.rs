@@ -106,16 +106,16 @@ pub struct ValidateArgs {
     pub starts_with: Option<String>,
     pub ends_with: Option<String>,
     pub includes: Option<String>,
-    pub alphanumeric: Option<bool>,
-    pub non_empty: Option<bool>,
+    pub alphanumeric: bool,
+    pub non_empty: bool,
     pub max_length: Option<u32>,
-    pub email: Option<bool>,
+    pub email: bool,
     pub pattern: Option<String>,
 
     // must be signed number
-    pub positive: Option<bool>,
-    pub negative: Option<bool>,
-    pub non_negative: Option<bool>,
+    pub positive: bool,
+    pub negative: bool,
+    pub non_negative: bool,
 
     // must be number
     pub min: Option<LitNum>,
@@ -125,7 +125,7 @@ pub struct ValidateArgs {
     pub multiple_of: Option<syn::LitInt>,
 
     // must be optional
-    pub required: Option<bool>,
+    pub required: bool,
 }
 
 impl ValidateArgs {
@@ -134,15 +134,15 @@ impl ValidateArgs {
             || self.starts_with.is_some()
             || self.ends_with.is_some()
             || self.includes.is_some()
-            || self.alphanumeric.is_some()
-            || self.non_empty.is_some()
+            || self.alphanumeric
+            || self.non_empty
             || self.max_length.is_some()
-            || self.email.is_some()
+            || self.email
             || self.pattern.is_some()
     }
 
     pub fn must_be_signed_number(&self) -> bool {
-        self.positive.is_some() || self.negative.is_some() || self.non_negative.is_some()
+        self.positive || self.negative || self.non_negative
     }
 
     pub fn must_be_integer(&self) -> bool {
@@ -153,13 +153,13 @@ impl ValidateArgs {
         self.min.is_some()
             || self.max.is_some()
             || self.multiple_of.is_some()
-            || self.positive.is_some()
-            || self.negative.is_some()
-            || self.non_negative.is_some()
+            || self.positive
+            || self.negative
+            || self.non_negative
     }
 
     pub fn must_be_optional(&self) -> bool {
-        self.required.is_some()
+        self.required
     }
 
     pub fn has_type_collision(&self) -> bool {

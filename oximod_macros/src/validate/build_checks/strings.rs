@@ -41,7 +41,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(true) = validate_args.email {
+    if validate_args.email {
         let re_ident = format_ident!("__oximod_email_re_{}_{}", struct_ident, field_ident);
         let email_pat = syn::LitStr::new(
             r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
@@ -109,7 +109,7 @@ pub fn build_string_checks(
         }
     }
 
-    if let Some(true) = validate_args.non_empty {
+    if validate_args.non_empty {
         build_checks.field_rules_val.push(quote! {
             if val.trim().is_empty() {
                 return Err(
@@ -169,7 +169,7 @@ pub fn build_string_checks(
         });
     }
 
-    if let Some(true) = validate_args.alphanumeric {
+    if validate_args.alphanumeric {
         build_checks.field_rules_val.push(quote! {
             if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
                 return Err(

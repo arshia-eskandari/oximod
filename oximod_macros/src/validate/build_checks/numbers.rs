@@ -68,7 +68,7 @@ pub fn build_signed_number_checks(
     validate_args: &ValidateArgs,
     field_name_lit: &syn::LitStr,
 ) {
-    if let Some(true) = validate_args.positive {
+    if validate_args.positive {
         build_checks.field_rules_val.push(quote! {
             if *val <= 0 {
                 return Err(
@@ -80,7 +80,7 @@ pub fn build_signed_number_checks(
         });
     }
 
-    if let Some(true) = validate_args.negative {
+    if validate_args.negative {
         build_checks.field_rules_val.push(quote! {
             if *val >= 0 {
                 return Err(
@@ -92,7 +92,7 @@ pub fn build_signed_number_checks(
         });
     }
 
-    if let Some(true) = validate_args.non_negative {
+    if validate_args.non_negative {
         build_checks.field_rules_val.push(quote! {
             if *val < 0 {
                 return Err(

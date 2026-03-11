@@ -8,7 +8,7 @@ pub fn build_option_checks(
     field_ident: &Ident,
     field_name_lit: &syn::LitStr,
 ) {
-    if let Some(true) = validate_args.required {
+    if validate_args.required {
         build_checks.field_rules_direct.push(quote! {
             if self.#field_ident.is_none() {
                 return Err(

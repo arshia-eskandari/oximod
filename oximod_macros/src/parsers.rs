@@ -268,9 +268,9 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
                     ));
                 }
             } else if meta.path.is_ident("required") {
-                args.required = Some(true);
+                args.required = true;
             } else if meta.path.is_ident("email") {
-                args.email = Some(true);
+                args.email = true;
             } else if meta.path.is_ident("pattern") {
                 let lit: Lit = meta.value()?.parse()?;
                 if let Lit::Str(lit_str) = lit {
@@ -282,13 +282,13 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
                     ));
                 }
             } else if meta.path.is_ident("non_empty") {
-                args.non_empty = Some(true);
+                args.non_empty = true;
             } else if meta.path.is_ident("positive") {
-                args.positive = Some(true);
+                args.positive = true;
             } else if meta.path.is_ident("negative") {
-                args.negative = Some(true);
+                args.negative = true;
             } else if meta.path.is_ident("non_negative") {
-                args.non_negative = Some(true);
+                args.non_negative = true;
             } else if meta.path.is_ident("min") {
                 let expr: Expr = meta.value()?.parse()?;
                 args.min = Some(parse_num_lit_expr(expr)?);
@@ -326,7 +326,7 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
                     ));
                 }
             } else if meta.path.is_ident("alphanumeric") {
-                args.alphanumeric = Some(true);
+                args.alphanumeric = true;
             } else if meta.path.is_ident("multiple_of") {
                 let lit = meta.value()?.parse()?;
                 if let Lit::Int(lit_int) = lit {
