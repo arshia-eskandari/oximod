@@ -2,7 +2,7 @@ use crate::parsers::{parse_f64_for_range, parse_u128_for_range};
 use crate::validate::args::{LitNum, PrimitiveNum};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
-use syn::{Ident, LitFloat, LitInt, Type};
+use syn::{Ident, LitFloat, LitInt, Result, Type};
 
 #[inline]
 pub fn is_signed(prim: &PrimitiveNum) -> bool {
@@ -400,5 +400,89 @@ pub fn rhs_for_integer_multiple_of(
 
             Some((quote! { #lit }, pow2_mask))
         }
+    }
+}
+
+pub enum LitNumOperation {
+    Gt,
+    Lt,
+    Gte,
+    Lte,
+    Eq,
+    Nq,
+}
+
+pub fn compare_lit_num(
+    left: &LitNum,
+    op: LitNumOperation,
+    right: &LitNum,
+    field_ident: &Ident,
+) -> Result<bool> {
+    match (left, right) {
+        (
+            LitNum::Int {
+                lit: left_lit,
+                neg: left_neg,
+            },
+            LitNum::Int {
+                lit: right_lit,
+                neg: right_neg,
+            },
+        ) => {
+            let left_val = parse_u128_for_range(left_lit)?;
+            let right_val = parse_u128_for_range(right_lit)?;
+
+            let left_signed = if *left_neg {
+                -(left_val as i128)
+            } else {
+                left_val as i128
+            };
+
+            let right_signed = if *right_neg {
+                -(right_val as i128)
+            } else {
+                right_val as i128
+            };
+
+            Ok(match op {
+                LitNumOperation::Gt => left_signed > right_signed,
+                LitNumOperation::Lt => left_signed < right_signed,
+                LitNumOperation::Gte => left_signed >= right_signed,
+                LitNumOperation::Lte => left_signed <= right_signed,
+                LitNumOperation::Eq => left_signed == right_signed,
+                LitNumOperation::Nq => left_signed != right_signed,
+            })
+        }
+
+        (
+            LitNum::Float {
+                lit: left_lit,
+                neg: left_neg,
+            },
+            LitNum::Float {
+                lit: right_lit,
+                neg: right_neg,
+            },
+        ) => {
+            let left_val = parse_f64_for_range(left_lit)?;
+            let right_val = parse_f64_for_range(right_lit)?;
+
+            let left_signed = if *left_neg { -left_val } else { left_val };
+            let right_signed = if *right_neg { -right_val } else { right_val };
+
+            Ok(match op {
+                LitNumOperation::Gt => left_signed > right_signed,
+                LitNumOperation::Lt => left_signed < right_signed,
+                LitNumOperation::Gte => left_signed >= right_signed,
+                LitNumOperation::Lte => left_signed <= right_signed,
+                LitNumOperation::Eq => left_signed == right_signed,
+                LitNumOperation::Nq => left_signed != right_signed,
+            })
+        }
+
+        _ => Err(syn::Error::new(
+            field_ident.span(),
+            "`left` and `right` must have the same numeric type",
+        )),
     }
 }

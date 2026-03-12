@@ -1,8 +1,9 @@
 use super::super::{
     args::{BuiltChecks, PrimitiveNum, ValidateArgs},
-    helpers::{rhs_for_integer_multiple_of, rhs_for_numeric_bound},
+    helpers::{
+        LitNumOperation, compare_lit_num, rhs_for_integer_multiple_of, rhs_for_numeric_bound,
+    },
 };
-use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
@@ -13,26 +14,32 @@ pub fn build_number_checks(
     field_ident: &Ident,
     field_name_lit: &syn::LitStr,
 ) {
-    let mut min_rhs_ts: Option<TokenStream> = None;
-    let mut max_rhs_ts: Option<TokenStream> = None;
-
-    if let Some(min) = &validate_args.min
-        && let Some(rhs) =
-            rhs_for_numeric_bound(prim, min, field_ident, &mut build_checks.compile_errors)
-    {
-        min_rhs_ts = Some(rhs);
+    if let (Some(min), Some(max)) = (&validate_args.min, &validate_args.max) {
+        match compare_lit_num(min, LitNumOperation::Gte, max, field_ident) {
+            Ok(true) => {
+                build_checks.compile_errors.push(
+                    syn::Error::new(field_ident.span(), "`min` must be less than `max`")
+                        .to_compile_error(),
+                );
+            }
+            Ok(false) => {}
+            Err(err) => {
+                build_checks.compile_errors.push(err.to_compile_error());
+            }
+        }
     }
 
-    if let Some(max) = &validate_args.max
-        && let Some(rhs) =
-            rhs_for_numeric_bound(prim, max, field_ident, &mut build_checks.compile_errors)
-    {
-        max_rhs_ts = Some(rhs);
-    }
+    let min_rhs_ts = validate_args.min.as_ref().and_then(|min| {
+        rhs_for_numeric_bound(prim, min, field_ident, &mut build_checks.compile_errors)
+    });
+
+    let max_rhs_ts = validate_args.max.as_ref().and_then(|max| {
+        rhs_for_numeric_bound(prim, max, field_ident, &mut build_checks.compile_errors)
+    });
 
     if let Some(min_rhs) = &min_rhs_ts {
         build_checks.numeric_checks.push(quote! {
-            if v < #min_rhs {
+            if v <= #min_rhs {
                 return Err(
                     ::oximod::_error::oximod_error::OxiModError::validation(
                         format!(
@@ -48,7 +55,7 @@ pub fn build_number_checks(
 
     if let Some(max_rhs) = &max_rhs_ts {
         build_checks.numeric_checks.push(quote! {
-            if v > #max_rhs {
+            if v >= #max_rhs {
                 return Err(
                     ::oximod::_error::oximod_error::OxiModError::validation(
                         format!(

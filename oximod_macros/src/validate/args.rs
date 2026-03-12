@@ -8,6 +8,7 @@ pub enum LitNum {
     Float { lit: LitFloat, neg: bool },
 }
 
+/// TODO: add docs for new fields
 #[derive(Default, Debug)]
 /// Arguments for field validation in OxiMod using the `#[validate(...)]` attribute.
 ///
@@ -157,6 +158,7 @@ impl ValidateArgs {
             || self.positive
             || self.negative
             || self.non_negative
+            || self.non_positive
     }
 
     pub fn must_be_optional(&self) -> bool {
