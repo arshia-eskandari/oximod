@@ -122,6 +122,8 @@ pub struct ValidateArgs {
     // must be number
     pub min: Option<LitNum>,
     pub max: Option<LitNum>,
+    pub min_exclusive: bool,
+    pub max_exclusive: bool,
 
     // must be integer
     pub multiple_of: Option<syn::LitInt>,
@@ -159,6 +161,8 @@ impl ValidateArgs {
             || self.negative
             || self.non_negative
             || self.non_positive
+            || self.min_exclusive
+            || self.max_exclusive
     }
 
     pub fn must_be_optional(&self) -> bool {

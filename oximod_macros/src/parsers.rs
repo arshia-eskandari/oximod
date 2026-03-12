@@ -297,6 +297,10 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
             } else if meta.path.is_ident("max") {
                 let expr: Expr = meta.value()?.parse()?;
                 args.max = Some(parse_num_lit_expr(expr)?);
+            } else if meta.path.is_ident("min_exclusive") {
+                args.min_exclusive = true;
+            } else if meta.path.is_ident("max_exclusive") {
+                args.max_exclusive = true;
             } else if meta.path.is_ident("starts_with") {
                 let lit = meta.value()?.parse()?;
                 if let Lit::Str(lit_str) = lit {

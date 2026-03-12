@@ -41,6 +41,41 @@ async fn test_book_min_violation() -> TestResult {
     Ok(())
 }
 
+// Run test: cargo nextest run test_book_min_exclusive_violation
+#[tokio::test]
+async fn test_book_min_exclusive_violation() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_min_exclusive_only")]
+    struct Book {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min = 100, min_exclusive)]
+        pages: i32,
+
+        #[validate(max = 100)]
+        price: i32,
+
+        #[validate(min = 1900, max = 2025)]
+        year: i32,
+    }
+
+    Book::clear().await?;
+
+    let book = Book::default()
+        .pages(100) // ❌ cannot be equal to min
+        .price(80)
+        .year(2000);
+
+    let err = book.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("more than 100"));
+    Ok(())
+}
+
 // Run test: cargo nextest run test_book_max_violation
 #[tokio::test]
 async fn test_book_max_violation() -> TestResult {
@@ -73,6 +108,41 @@ async fn test_book_max_violation() -> TestResult {
     let err = book.save().await;
     assert!(err.is_err());
     assert!(format!("{:?}", err).contains("at most 100"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_book_max_exclusive_violation
+#[tokio::test]
+async fn test_book_max_exclusive_violation() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_max_exclusive_only")]
+    struct Book {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min = 100)]
+        pages: i32,
+
+        #[validate(max = 100, max_exclusive)]
+        price: i32,
+
+        #[validate(min = 1900, max = 2025)]
+        year: i32,
+    }
+
+    Book::clear().await?;
+
+    let book = Book::default()
+        .pages(120)
+        .price(100) // ❌ cannot be equal to max
+        .year(2000);
+
+    let err = book.save().await;
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("less than 100"));
     Ok(())
 }
 

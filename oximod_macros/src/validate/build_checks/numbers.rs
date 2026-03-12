@@ -38,13 +38,19 @@ pub fn build_number_checks(
     });
 
     if let Some(min_rhs) = &min_rhs_ts {
+        let (op, msg) = if validate_args.min_exclusive {
+            (quote! { <= }, "more than")
+        } else {
+            (quote! { < }, "at least")
+        };
         build_checks.numeric_checks.push(quote! {
-            if v <= #min_rhs {
+            if v #op #min_rhs {
                 return Err(
                     ::oximod::_error::oximod_error::OxiModError::validation(
                         format!(
-                            "Field '{}' must be at least {}",
+                            "Field '{}' must be {} {}",
                             #field_name_lit,
+                            #msg,
                             #min_rhs,
                         )
                     )
@@ -54,13 +60,19 @@ pub fn build_number_checks(
     }
 
     if let Some(max_rhs) = &max_rhs_ts {
+        let (op, msg) = if validate_args.max_exclusive {
+            (quote! { >= }, "less than")
+        } else {
+            (quote! { > }, "at most")
+        };
         build_checks.numeric_checks.push(quote! {
-            if v >= #max_rhs {
+            if v #op #max_rhs {
                 return Err(
                     ::oximod::_error::oximod_error::OxiModError::validation(
                         format!(
-                            "Field '{}' must be at most {}",
+                            "Field '{}' must be {} {}",
                             #field_name_lit,
+                            #msg,
                             #max_rhs
                         )
                     )

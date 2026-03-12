@@ -403,6 +403,7 @@ pub fn rhs_for_integer_multiple_of(
     }
 }
 
+#[allow(dead_code)]
 pub enum LitNumOperation {
     Gt,
     Lt,
