@@ -102,14 +102,16 @@ pub enum LitNum {
 /// }
 /// ```
 pub struct ValidateArgs {
-    // must be string
+    // must be length type
     pub min_length: Option<u32>,
+    pub max_length: Option<u32>,
+    pub non_empty: bool,
+
+    // must be string
     pub starts_with: Option<String>,
     pub ends_with: Option<String>,
     pub includes: Option<String>,
     pub alphanumeric: bool,
-    pub non_empty: bool,
-    pub max_length: Option<u32>,
     pub email: bool,
     pub pattern: Option<String>,
 
@@ -133,14 +135,15 @@ pub struct ValidateArgs {
 }
 
 impl ValidateArgs {
+    pub fn must_be_length_type(&self) -> bool {
+        self.min_length.is_some() || self.max_length.is_some() || self.non_empty
+    }
+
     pub fn must_be_string(&self) -> bool {
-        self.min_length.is_some()
-            || self.starts_with.is_some()
+        self.starts_with.is_some()
             || self.ends_with.is_some()
             || self.includes.is_some()
             || self.alphanumeric
-            || self.non_empty
-            || self.max_length.is_some()
             || self.email
             || self.pattern.is_some()
     }
@@ -170,7 +173,7 @@ impl ValidateArgs {
     }
 
     pub fn has_type_collision(&self) -> bool {
-        self.must_be_string() && self.must_be_number()
+        (self.must_be_length_type() || self.must_be_string()) && self.must_be_number()
     }
 }
 

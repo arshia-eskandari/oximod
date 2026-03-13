@@ -4,6 +4,34 @@ use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::{Ident, LitFloat, LitInt, Result, Type};
 
+macro_rules! path_type_check {
+    ($fn_name:ident, $target:ident) => {
+        #[inline]
+        pub fn $fn_name(ty: &syn::Type) -> bool {
+            match ty {
+                syn::Type::Path(tp) => tp
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|seg| seg.ident == stringify!($target)),
+                _ => false,
+            }
+        }
+    };
+}
+
+path_type_check!(is_vec, Vec);
+path_type_check!(is_vecdeque, VecDeque);
+path_type_check!(is_hashset, HashSet);
+path_type_check!(is_btreeset, BTreeSet);
+path_type_check!(is_hashmap, HashMap);
+path_type_check!(is_btreemap, BTreeMap);
+
+#[inline]
+pub fn is_array(ty: &syn::Type) -> bool {
+    matches!(ty, syn::Type::Array(_))
+}
+
 #[inline]
 pub fn is_signed(prim: &PrimitiveNum) -> bool {
     use PrimitiveNum::*;
@@ -22,14 +50,18 @@ pub fn is_integer(prim: &PrimitiveNum) -> bool {
 #[inline]
 pub fn is_string(ty: &Type) -> bool {
     match ty {
-        Type::Path(tp) => tp.path.is_ident("String")
-            || tp.path.is_ident("Cow") // Cow<'_, str>
-                && tp.path.segments.last().is_some_and(|seg| {
-                    if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
-                        ab.args.iter().any(|arg| matches!(arg,
-                            syn::GenericArgument::Type(syn::Type::Path(p)) if p.path.is_ident("str")))
-                    } else { false }
-                }),
+        Type::Path(tp) => {
+            tp.path.is_ident("String")
+                || tp.path.segments.last().is_some_and(|seg| {
+                    seg.ident == "Cow"
+                        && matches!(&seg.arguments, syn::PathArguments::AngleBracketed(ab)
+                        if ab.args.iter().any(|arg| matches!(
+                            arg,
+                            syn::GenericArgument::Type(syn::Type::Path(p))
+                                if p.path.is_ident("str")
+                        )))
+                })
+        }
         Type::Reference(r) => match &*r.elem {
             Type::Path(tp) => tp.path.is_ident("str") || tp.path.is_ident("String"),
             _ => false,
@@ -41,6 +73,47 @@ pub fn is_string(ty: &Type) -> bool {
 #[inline]
 pub fn is_numeric(prim: &PrimitiveNum) -> bool {
     prim != &PrimitiveNum::NonNumeric
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LengthKind {
+    String,
+    Vec,
+    Array,
+    VecDeque,
+    HashSet,
+    BTreeSet,
+    HashMap,
+    BTreeMap,
+}
+
+#[inline]
+pub fn length_kind_of(ty: &Type) -> Option<LengthKind> {
+    let inner = crate::parsers::unwrap_option_type(ty).unwrap_or(ty);
+
+    if is_string(inner) {
+        Some(LengthKind::String)
+    } else if is_vec(inner) {
+        Some(LengthKind::Vec)
+    } else if is_array(inner) {
+        Some(LengthKind::Array)
+    } else if is_vecdeque(inner) {
+        Some(LengthKind::VecDeque)
+    } else if is_hashset(inner) {
+        Some(LengthKind::HashSet)
+    } else if is_btreeset(inner) {
+        Some(LengthKind::BTreeSet)
+    } else if is_hashmap(inner) {
+        Some(LengthKind::HashMap)
+    } else if is_btreemap(inner) {
+        Some(LengthKind::BTreeMap)
+    } else {
+        None
+    }
+}
+
+pub fn is_length_type(ty: &Type) -> bool {
+    length_kind_of(ty).is_some()
 }
 
 #[inline]

@@ -9,38 +9,6 @@ pub fn build_string_checks(
     field_name_lit: &syn::LitStr,
     struct_ident: &Ident,
 ) {
-    if let Some(min_length) = validate_args.min_length {
-        build_checks.field_rules_val.push(quote! {
-            if val.len() < (#min_length as usize) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be at least {} characters long",
-                            #field_name_lit,
-                            #min_length
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(max_length) = validate_args.max_length {
-        build_checks.field_rules_val.push(quote! {
-            if val.len() > (#max_length as usize) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be at most {} characters long",
-                            #field_name_lit,
-                            #max_length
-                        )
-                    )
-                );
-            }
-        });
-    }
-
     if validate_args.email {
         let re_ident = format_ident!("__oximod_email_re_{}_{}", struct_ident, field_ident);
         let email_pat = syn::LitStr::new(
@@ -107,18 +75,6 @@ pub fn build_string_checks(
                 });
             }
         }
-    }
-
-    if validate_args.non_empty {
-        build_checks.field_rules_val.push(quote! {
-            if val.trim().is_empty() {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!("Field '{}' must be non-empty", #field_name_lit)
-                    )
-                );
-            }
-        });
     }
 
     if let Some(start) = &validate_args.starts_with {

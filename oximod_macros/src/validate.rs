@@ -6,11 +6,12 @@ pub mod macros;
 use crate::parsers::unwrap_option_type;
 pub use args::{BuiltChecks, LitNum, ValidateArgs};
 use build_checks::{
+    length_types::build_length_checks,
     numbers::{build_integer_checks, build_number_checks, build_signed_number_checks},
     options::build_option_checks,
     strings::build_string_checks,
 };
-use helpers::{is_integer, is_numeric, is_signed, is_string, primitive_of};
+use helpers::{is_integer, is_length_type, is_numeric, is_signed, is_string, primitive_of};
 use macros::opt_check;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
@@ -24,12 +25,6 @@ pub fn generate_validate_model_tokens(
     field_ty: &Type,
     validate_args: ValidateArgs,
 ) -> Vec<TokenStream> {
-    let mut build_checks = BuiltChecks::default();
-    let field_name_lit = syn::LitStr::new(&field_ident.to_string(), field_ident.span());
-    let opt_inner = unwrap_option_type(field_ty);
-    let inner_ty = opt_inner.unwrap_or(field_ty);
-    let prim = primitive_of(inner_ty);
-
     if validate_args.has_type_collision() {
         return vec![quote_spanned! { field_ident.span() =>
             compile_error!(
@@ -37,6 +32,13 @@ pub fn generate_validate_model_tokens(
             );
         }];
     }
+
+    let mut build_checks = BuiltChecks::default();
+    let field_name_lit = syn::LitStr::new(&field_ident.to_string(), field_ident.span());
+    let opt_inner = unwrap_option_type(field_ty);
+    let inner_ty = opt_inner.unwrap_or(field_ty);
+    let prim = primitive_of(inner_ty);
+    let is_str = is_string(inner_ty);
 
     if validate_args.must_be_number() && !is_numeric(&prim) {
         build_checks
@@ -95,7 +97,7 @@ pub fn generate_validate_model_tokens(
         );
     }
 
-    if validate_args.must_be_string() && !is_string(inner_ty) {
+    if validate_args.must_be_string() && !is_str {
         build_checks
             .compile_errors
             .push(quote_spanned! { field_ident.span() =>
@@ -114,6 +116,21 @@ pub fn generate_validate_model_tokens(
             &field_name_lit,
             struct_ident,
         );
+    }
+
+    if validate_args.must_be_length_type() && !is_length_type(inner_ty) {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses length validation rules, but its type does not support length"
+                    )
+                );
+            });
+    } else {
+        build_length_checks(&mut build_checks, &validate_args, &field_name_lit, is_str);
     }
 
     if validate_args.must_be_optional() && opt_inner.is_none() {
