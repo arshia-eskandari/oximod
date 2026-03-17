@@ -224,55 +224,155 @@ OxiMod is tested with `tokio`, while remaining compatible with MongoDB driver wo
 
 ### Field-level validation
 
-OxiMod supports a flexible validation system through the `#[validate(...)]` attribute.
+OxiMod provides a flexible validation system through the `#[validate(...)]` attribute.
+Validators are grouped by field type, and incompatible combinations are rejected at compile time.
 
-Validators are grouped by the type of field they apply to, and OxiMod performs
-compile-time checks to prevent incompatible validators from being used together.
-
-Validation runs automatically when calling:
+Validation runs automatically before a document is written to MongoDB when calling:
 
 - save()
 - save_from(...)
 
-and before any document is written to MongoDB.
-
----
+------------------------------------------------------------
 
 Length validators
 
-These apply to any type that has a length, including:
+Applies to any type that has a length:
 
-String, Vec, HashSet, BTreeSet, HashMap, BTreeMap, arrays, etc.
+- String / &str / Cow<str>
+- Vec<T>
+- HashSet<T> / BTreeSet<T>
+- HashMap<K, V> / BTreeMap<K, V>
+- arrays
+- other length-aware containers
 
 Supported:
 
-min_length = N
-max_length = N
-non_empty
+- min_length = N
+- max_length = N
+- non_empty
 
 Example:
 
-#[validate(min_length = 3, max_length = 30)]
-name: String
+    #[validate(min_length = 3, max_length = 30)]
+    name: String
 
-#[validate(non_empty)]
-tags: Vec<String>
+    #[validate(non_empty)]
+    tags: Vec<String>
 
----
+------------------------------------------------------------
 
 String validators
 
+- starts_with = "..."
+- ends_with = "..."
+- includes = "..."
+- alphanumeric
+- email
+- pattern = "..."
+
+Example:
+
+    #[validate(email)]
+    email: String
+
+    #[validate(pattern = r"^[a-zA-Z0-9_]+$")]
+    username: String
+
+------------------------------------------------------------
+
+Numeric validators
+
+- min = N
+- max = N
+- min_exclusive
+- max_exclusive
+- positive
+- negative
+- non_negative
+- non_positive
+
+Examples:
+
+    #[validate(min = 0, max = 100)]
+    score: i32
+
+    #[validate(min = 0, min_exclusive)]
+    value: i64
+
+------------------------------------------------------------
+
+Integer-only validators
+
+- multiple_of = N
+
+Example:
+
+    #[validate(multiple_of = 5)]
+    step: i32
+
+------------------------------------------------------------
+
+Optional-field validators
+
+- required
+
+Example:
+
+    #[validate(required)]
+    role: Option<Role>
+
+------------------------------------------------------------
+
+Custom validators
+
+Custom validation functions must have the signature:
+
+    fn(&T) -> Result<(), String>
+
+Example:
+
+    fn validate_name(v: &String) -> Result<(), String> {
+        if v == "admin" {
+            return Err("reserved name".into());
+        }
+        Ok(())
+    }
+
+Usage:
+
+    #[validate(custom(validate_name))]
+    name: String
+
+Custom validators:
+
+- run after built-in validators
+- support nested types
+- support Option<T>
+- can be combined with other validators
+
+Example:
+
+    #[validate(min_length = 3, custom(validate_name))]
+    name: String
+
+------------------------------------------------------------
+
+Supported validators summary
+
+Length:
+min_length
+max_length
+non_empty
+
+String:
 starts_with
 ends_with
 includes
 alphanumeric
 email
-pattern = "..."
+pattern
 
----
-
-Numeric validators
-
+Numeric:
 min
 max
 min_exclusive
@@ -282,32 +382,14 @@ negative
 non_negative
 non_positive
 
----
-
-Integer validators
-
+Integer:
 multiple_of
 
----
-
-Optional validators
-
+Optional:
 required
 
----
-
-Custom validators
-
-Function signature:
-
-fn(&T) -> Result<(), String>
-
-Usage:
-
-#[validate(custom(validate_name))]
-name: String
-
-Custom validators can be combined with built‑in validators.
+Custom:
+custom(path)
 
 ### Defaults
 
