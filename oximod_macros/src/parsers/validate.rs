@@ -1,6 +1,6 @@
 use crate::parsers::literals::{litint_strictly_positive, parse_num_lit_expr};
 use crate::validate::ValidateArgs;
-use syn::{Attribute, Expr, Lit};
+use syn::{Attribute, Expr, Lit, Path, parenthesized};
 
 /// Parses the key-value pairs and flags provided to a `#[validate(...)]` attribute into a `ValidateArgs` struc.
 pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
@@ -105,6 +105,21 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
                         "expected integer literal for `multiple_of`",
                     ));
                 }
+            } else if meta.path.is_ident("custom") {
+                if args.custom.is_some() {
+                    return Err(meta.error("duplicate `custom` validator"));
+                }
+
+                let content;
+                parenthesized!(content in meta.input);
+
+                let path: Path = content.parse()?;
+
+                if !content.is_empty() {
+                    return Err(meta.error("`custom` accepts exactly one function path"));
+                }
+
+                args.custom = Some(path);
             } else {
                 return Err(meta.error("unknown attribute key"));
             }

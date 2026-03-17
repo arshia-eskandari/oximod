@@ -132,6 +132,8 @@ pub struct ValidateArgs {
 
     // must be optional
     pub required: bool,
+
+    pub custom: Option<syn::Path>,
 }
 
 impl ValidateArgs {

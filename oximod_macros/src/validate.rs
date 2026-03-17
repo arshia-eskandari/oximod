@@ -6,6 +6,7 @@ pub mod macros;
 use crate::parsers::unwrap_option_type;
 pub use args::{BuiltChecks, LitNum, ValidateArgs};
 use build_checks::{
+    custom_checks::build_custom_check,
     length_types::build_length_checks,
     numbers::{build_integer_checks, build_number_checks, build_signed_number_checks},
     options::build_option_checks,
@@ -152,6 +153,8 @@ pub fn generate_validate_model_tokens(
             &field_name_lit,
         );
     }
+
+    build_custom_check(&mut build_checks, &validate_args, field_ty, opt_inner);
 
     if !build_checks.numeric_checks.is_empty() {
         let numeric_checks = build_checks.numeric_checks;
