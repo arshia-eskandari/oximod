@@ -9,7 +9,7 @@
 //! - Perform an aggregation query on a collection
 
 use futures_util::stream::StreamExt;
-use mongodb::bson::{doc, oid::ObjectId, Bson};
+use mongodb::bson::{Bson, doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};
 

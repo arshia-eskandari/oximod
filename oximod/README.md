@@ -224,23 +224,90 @@ OxiMod is tested with `tokio`, while remaining compatible with MongoDB driver wo
 
 ### Field-level validation
 
-Supported validators include:
+OxiMod supports a flexible validation system through the `#[validate(...)]` attribute.
 
-- `min_length`
-- `max_length`
-- `required`
-- `email`
-- `pattern = "..."`
-- `positive`
-- `negative`
-- `non_negative`
-- `min = N`
-- `max = N`
-- `starts_with`
-- `ends_with`
-- `includes`
-- `alphanumeric`
-- `multiple_of`
+Validators are grouped by the type of field they apply to, and OxiMod performs
+compile-time checks to prevent incompatible validators from being used together.
+
+Validation runs automatically when calling:
+
+- save()
+- save_from(...)
+
+and before any document is written to MongoDB.
+
+---
+
+Length validators
+
+These apply to any type that has a length, including:
+
+String, Vec, HashSet, BTreeSet, HashMap, BTreeMap, arrays, etc.
+
+Supported:
+
+min_length = N
+max_length = N
+non_empty
+
+Example:
+
+#[validate(min_length = 3, max_length = 30)]
+name: String
+
+#[validate(non_empty)]
+tags: Vec<String>
+
+---
+
+String validators
+
+starts_with
+ends_with
+includes
+alphanumeric
+email
+pattern = "..."
+
+---
+
+Numeric validators
+
+min
+max
+min_exclusive
+max_exclusive
+positive
+negative
+non_negative
+non_positive
+
+---
+
+Integer validators
+
+multiple_of
+
+---
+
+Optional validators
+
+required
+
+---
+
+Custom validators
+
+Function signature:
+
+fn(&T) -> Result<(), String>
+
+Usage:
+
+#[validate(custom(validate_name))]
+name: String
+
+Custom validators can be combined with built‑in validators.
 
 ### Defaults
 

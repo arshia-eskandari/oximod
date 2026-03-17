@@ -1,17 +1,21 @@
 pub mod args;
-mod helpers;
-mod macros;
-
-pub use args::{LitNum, ValidateArgs};
+mod build_checks;
+pub mod helpers;
+pub mod macros;
 
 use crate::parsers::unwrap_option_type;
-use helpers::{
-    is_integer, is_numeric, is_signed, is_string, primitive_of, rhs_for_integer_multiple_of,
-    rhs_for_numeric_bound,
+pub use args::{BuiltChecks, LitNum, ValidateArgs};
+use build_checks::{
+    custom_checks::build_custom_check,
+    length_types::build_length_checks,
+    numbers::{build_integer_checks, build_number_checks, build_signed_number_checks},
+    options::build_option_checks,
+    strings::build_string_checks,
 };
-use macros::{is_type_safe, opt_check};
+use helpers::{is_integer, is_length_type, is_numeric, is_signed, is_string, primitive_of};
+use macros::opt_check;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, quote_spanned};
+use quote::{quote, quote_spanned};
 use syn::{Ident, Type};
 
 /// Generates validation `TokenStream`s for a field based on `ValidateArgs`,
@@ -22,474 +26,159 @@ pub fn generate_validate_model_tokens(
     field_ty: &Type,
     validate_args: ValidateArgs,
 ) -> Vec<TokenStream> {
-    let ValidateArgs {
-        min_length: min_length_option,
-        max_length: max_length_option,
-        required,
-        email: email_option,
-        pattern: pattern_option,
-        non_empty: non_empty_option,
-        positive: positive_option,
-        negative: negative_option,
-        non_negative: non_negative_option,
-        min: min_option,
-        max: max_option,
-        starts_with: starts_with_option,
-        ends_with: ends_with_option,
-        includes: includes_option,
-        alphanumeric: alphanumeric_option,
-        multiple_of: multiple_of_option,
-    } = &validate_args;
+    if validate_args.has_type_collision() {
+        return vec![quote_spanned! { field_ident.span() =>
+            compile_error!(
+                "invalid validation rules: cannot apply validations from different type groups to the same field"
+            );
+        }];
+    }
+
+    let mut build_checks = BuiltChecks::default();
     let field_name_lit = syn::LitStr::new(&field_ident.to_string(), field_ident.span());
-
     let opt_inner = unwrap_option_type(field_ty);
-    let is_optional = opt_inner.is_some();
     let inner_ty = opt_inner.unwrap_or(field_ty);
-
-    let mut checks: Vec<TokenStream> = Vec::new();
-
-    let mut compile_errors: Vec<TokenStream> = Vec::new();
-    let mut field_rules_val: Vec<TokenStream> = Vec::new();
-    let mut field_rules_direct: Vec<TokenStream> = Vec::new();
-    let mut min_rhs_ts: Option<TokenStream> = None;
-    let mut max_rhs_ts: Option<TokenStream> = None;
-    let mut numeric_checks: Vec<TokenStream> = Vec::new();
-
-    let is_str = is_string(inner_ty);
     let prim = primitive_of(inner_ty);
-    let is_num = is_numeric(&prim);
+    let is_str = is_string(inner_ty);
 
-    if matches!(required, Some(true)) {
-        if !is_optional {
-            compile_errors.push(quote_spanned! { field_ident.span() =>
+    if validate_args.must_be_number() && !is_numeric(&prim) {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
                 compile_error!(
                     concat!(
                         "Field '", stringify!(#field_ident),
-                        "' cannot use #[validate(required)] because it is not Option<T>"
+                        "' uses numeric validation rules, but its type is not numeric"
                     )
                 );
             });
-        } else {
-            field_rules_direct.push(quote! {
-                if self.#field_ident.is_none() {
-                    return Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
-                            format!("Field '{}' is required", #field_name_lit)
-                        )
-                    );
-                }
-            });
-        }
-    }
-
-    if let Some(min_length) = min_length_option
-        && is_type_safe!(
-            is_str,
-            checks,
+    } else {
+        build_number_checks(
+            &mut build_checks,
+            &validate_args,
+            prim,
             field_ident,
-            "`#[validate(min_length)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if val.len() < (#min_length as usize) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be at least {} characters long",
-                            #field_name_lit,
-                            #min_length
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(max_length) = max_length_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(max_length)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if val.len() > (#max_length as usize) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be at most {} characters long",
-                            #field_name_lit,
-                            #max_length
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if matches!(email_option, Some(true))
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(email)]` can only be applied to string fields"
-        )
-    {
-        let re_ident = format_ident!("__oximod_email_re_{}_{}", struct_ident, field_ident);
-        let email_pat = syn::LitStr::new(
-            r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
-            field_ident.span(),
+            &field_name_lit,
         );
+    }
 
-        field_rules_val.push(quote! {
-            #[allow(non_upper_case_globals)]
-            static #re_ident: ::std::sync::OnceLock<::oximod::_regex::Regex> =
-                ::std::sync::OnceLock::new();
-
-            let __re = #re_ident.get_or_init(|| ::oximod::_regex::Regex::new(#email_pat).unwrap());
-
-            if !__re.is_match(val) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be a valid email address",
-                            #field_name_lit
-                        )
+    if validate_args.must_be_signed_number() && !is_signed(&prim) {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses signed-number validation rules, but its type is not a signed numeric type"
                     )
                 );
-            }
-        });
-    }
-
-    if let Some(pattern) = pattern_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(pattern)]` can only be applied to string fields"
-        )
-    {
-        match ::regex::Regex::new(pattern) {
-            Err(e) => {
-                let msg = format!(
-                    "Invalid regex pattern in validation for '{}': {}",
-                    field_ident, e
-                );
-                compile_errors.push(quote_spanned! { field_ident.span() =>
-                    compile_error!(#msg);
-                });
-            }
-            _ => {
-                let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
-
-                let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
-
-                field_rules_val.push(quote! {
-                    #[allow(non_upper_case_globals)]
-                    static #re_ident: ::std::sync::OnceLock<::oximod::_regex::Regex> =
-                        ::std::sync::OnceLock::new();
-
-                    let regex = #re_ident
-                        .get_or_init(|| ::oximod::_regex::Regex::new(#pattern_lit).unwrap());
-
-                    if !regex.is_match(val) {
-                        return Err(
-                            ::oximod::_error::oximod_error::OxiModError::validation(
-                                format!(
-                                    "Field '{}' does not match the required pattern",
-                                    #field_name_lit
-                                )
-                            )
-                        );
-                    }
-                });
-            }
-        }
-    }
-
-    if let Some(true) = non_empty_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(non_empty)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if val.trim().is_empty() {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!("Field '{}' must be non-empty", #field_name_lit)
-                    )
-                );
-            }
-        });
-    }
-
-    if matches!(positive_option, Some(true))
-        && is_type_safe!(
-            is_num && is_signed(prim),
-            checks,
-            field_ident,
-            "`#[validate(positive)]` can only be applied to integer fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if *val <= 0 {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!("Field '{}' must be positive", #field_name_lit)
-                    )
-                );
-            }
-        });
-    }
-
-    if matches!(negative_option, Some(true))
-        && is_type_safe!(
-            is_num && is_signed(prim),
-            checks,
-            field_ident,
-            "`#[validate(negative)]` can only be applied to integer fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if *val >= 0 {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!("Field '{}' must be negative", #field_name_lit)
-                    )
-                );
-            }
-        });
-    }
-
-    if matches!(non_negative_option, Some(true))
-        && is_type_safe!(
-            is_num && is_signed(prim),
-            checks,
-            field_ident,
-            "`#[validate(non_negative)]` can only be applied to integer fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if *val < 0 {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!("Field '{}' must be non-negative", #field_name_lit)
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(start) = starts_with_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(starts_with)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if !val.starts_with(#start) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must start with '{}'",
-                            #field_name_lit,
-                            #start
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(end) = ends_with_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(ends_with)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if !val.ends_with(#end) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must end with '{}'",
-                            #field_name_lit,
-                            #end,
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(substr) = includes_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(includes)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if !val.contains(#substr) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must include '{}'",
-                            #field_name_lit,
-                            #substr,
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(true) = alphanumeric_option
-        && is_type_safe!(
-            is_str,
-            checks,
-            field_ident,
-            "`#[validate(alphanumeric)]` can only be applied to string fields"
-        )
-    {
-        field_rules_val.push(quote! {
-            if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must contain only alphanumeric characters",
-                            #field_name_lit,
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(min) = min_option
-        && is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(min)]` can only be applied to numeric fields"
-        )
-        && let Some(rhs) = rhs_for_numeric_bound(prim, min, field_ident, &mut compile_errors)
-    {
-        min_rhs_ts = Some(rhs);
-    }
-
-    if let Some(max) = max_option
-        && is_type_safe!(
-            is_num,
-            checks,
-            field_ident,
-            "`#[validate(max)]` can only be applied to numeric fields"
-        )
-        && let Some(rhs) = rhs_for_numeric_bound(prim, max, field_ident, &mut compile_errors)
-    {
-        max_rhs_ts = Some(rhs);
-    }
-
-    if let Some(min_rhs) = &min_rhs_ts {
-        numeric_checks.push(quote! {
-            if v < #min_rhs {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be at least {}",
-                            #field_name_lit,
-                            #min_rhs,
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(max_rhs) = &max_rhs_ts {
-        numeric_checks.push(quote! {
-            if v > #max_rhs {
-                return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be at most {}",
-                            #field_name_lit,
-                            #max_rhs
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    if let Some(multiple) = multiple_of_option
-        && is_type_safe!(
-            is_num && is_integer(prim),
-            checks,
-            field_ident,
-            "`#[validate(multiple_of)]` can only be applied to integer fields"
-        )
-        && let Some((rhs, pow2_mask)) =
-            rhs_for_integer_multiple_of(prim, multiple, field_ident, &mut compile_errors)
-    {
-        if let Some(mask_lit) = pow2_mask {
-            numeric_checks.push(quote! {
-                if (v & #mask_lit) != 0 {
-                    return Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
-                            format!(
-                                "Field '{}' must be a multiple of {}",
-                                #field_name_lit,
-                                #rhs,
-                            )
-                        )
-                    );
-                }
             });
-        } else {
-            numeric_checks.push(quote! {
-                if (v % #rhs) != 0 {
-                    return Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
-                            format!(
-                                "Field '{}' must be a multiple of {}",
-                                #field_name_lit,
-                                #rhs,
-                            )
-                        )
-                    );
-                }
-            });
-        }
+    } else {
+        build_signed_number_checks(&mut build_checks, &validate_args, &field_name_lit);
     }
 
-    if !numeric_checks.is_empty() {
-        field_rules_val.push(quote! {
+    if validate_args.must_be_integer() && !is_integer(&prim) {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses integer-only validation rules, but its type is not an integer"
+                    )
+                );
+            });
+    } else {
+        build_integer_checks(
+            &mut build_checks,
+            &validate_args,
+            prim,
+            field_ident,
+            &field_name_lit,
+        );
+    }
+
+    if validate_args.must_be_string() && !is_str {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses string validation rules, but its type is not String or &str"
+                    )
+                );
+            });
+    } else {
+        build_string_checks(
+            &mut build_checks,
+            &validate_args,
+            field_ident,
+            &field_name_lit,
+            struct_ident,
+        );
+    }
+
+    if validate_args.must_be_length_type() && !is_length_type(inner_ty) {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses length validation rules, but its type does not support length"
+                    )
+                );
+            });
+    } else {
+        build_length_checks(&mut build_checks, &validate_args, &field_name_lit, is_str);
+    }
+
+    if validate_args.must_be_optional() && opt_inner.is_none() {
+        build_checks
+            .compile_errors
+            .push(quote_spanned! { field_ident.span() =>
+                compile_error!(
+                    concat!(
+                        "Field '", stringify!(#field_ident),
+                        "' uses option validation rules, but its type is not Option<T>"
+                    )
+                );
+            });
+    } else {
+        build_option_checks(
+            &mut build_checks,
+            &validate_args,
+            field_ident,
+            &field_name_lit,
+        );
+    }
+
+    build_custom_check(&mut build_checks, &validate_args, field_ty, opt_inner);
+
+    if !build_checks.numeric_checks.is_empty() {
+        let numeric_checks = build_checks.numeric_checks;
+        build_checks.field_rules_val.push(quote! {
             let v = *val;
             #(#numeric_checks)*
         });
     }
-    checks.extend(compile_errors);
+    build_checks.checks.extend(build_checks.compile_errors);
 
-    if !field_rules_direct.is_empty() {
-        checks.push(quote! { { #(#field_rules_direct)* } });
+    if !build_checks.field_rules_direct.is_empty() {
+        let field_rules_direct = build_checks.field_rules_direct;
+        build_checks
+            .checks
+            .push(quote! { { #(#field_rules_direct)* } });
     }
 
-    if !field_rules_val.is_empty() {
-        let grouped = opt_check!(is_optional, field_ident, {
+    if !build_checks.field_rules_val.is_empty() {
+        let field_rules_val = build_checks.field_rules_val;
+        let grouped = opt_check!(opt_inner.is_some(), field_ident, {
             #(#field_rules_val)*
         });
-        checks.push(grouped);
+        build_checks.checks.push(grouped);
     }
 
-    checks
+    build_checks.checks
 }
