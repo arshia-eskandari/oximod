@@ -268,6 +268,31 @@ Examples:
 ## Example
 
 ```rust
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{Model, OxiClient};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[db("my_app_db")]
+#[collection("users")]
+struct User {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    _id: Option<ObjectId>,
+
+    #[index(unique, name = "email_idx")]
+    #[validate(email)]
+    email: String,
+
+    #[validate(min_length = 3, max_length = 32)]
+    name: String,
+
+    #[validate(non_negative)]
+    age: i32,
+
+    #[default(false)]
+    active: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize global client
