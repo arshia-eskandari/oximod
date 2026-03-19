@@ -268,19 +268,49 @@ Examples:
 ## Example
 
 ```rust
-#[derive(Model)]
-#[db("app")]
-#[collection("users")]
-struct User {
-    #[index(unique)]
-    #[validate(email)]
-    email: String,
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize global client
+    dotenv::dotenv().ok();
+    let uri = std::env::var("MONGODB_URI")?;
+    OxiClient::init_global(uri).await?;
 
-    #[validate(min_length = 3)]
-    name: String,
+    // Clear collection
+    User::clear().await?;
 
-    #[default(false)]
-    active: bool,
+    // Build model using builder API
+    let user = User::new()
+        .email("alice@example.com")
+        .name("Alice")
+        .age(30)
+        .active(true);
+
+    // Save document
+    let id = user.save().await?;
+    println!("Inserted user: {}", id);
+
+    // Find by id
+    if let Some(found) = User::find_by_id(id).await? {
+        println!("Found user: {}", found.name);
+    }
+
+    // Count documents
+    let count = User::count(doc! {}).await?;
+    println!("Total users: {}", count);
+
+    // Use MongoDB driver directly
+    let collection = User::get_collection()?;
+
+    collection
+        .update_one(
+            doc! { "_id": id },
+            doc! { "$set": { "active": false } },
+        )
+        .await?;
+
+    println!("User updated");
+
+    Ok(())
 }
 ```
 
