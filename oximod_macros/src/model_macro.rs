@@ -18,25 +18,22 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str) -> TokenSt
                 ::oximod::_mongodb::bson::oid::ObjectId,
                 ::oximod::_error::oximod_error::OxiModError
             > {
-                self.validate()?;
-                let collection = Self::get_collection_from(client)?;
-                Self::_create_indexes(&collection).await?;
+                use ::oximod::Hooks;
+                self.pre_save().await?;
+                let id = self.__oximod_insert_with_client(client).await?;
+                self.post_save().await?;
+                Ok(id)
+            }
 
-                let result = collection.insert_one(self).await.map_err(|e|
-                    ::oximod::_error::oximod_error::OxiModError::connection(
-                        "Failed to insert document into MongoDB collection",
-                        e,
-                    )
-                )?;
-
-                match result.inserted_id.as_object_id() {
-                    Some(id) => Ok(id),
-                    None => Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
-                            "MongoDB returned a non-ObjectId inserted_id"
-                        )
-                    )
-                }
+            async fn save_from_mut(&mut self, client: &::oximod::_mongodb::Client) -> Result<
+                ::oximod::_mongodb::bson::oid::ObjectId,
+                ::oximod::_error::oximod_error::OxiModError
+            > {
+                use ::oximod::Hooks;
+                self.pre_save_mut().await?;
+                let id = self.__oximod_insert_with_client(client).await?;
+                self.post_save_mut().await?;
+                Ok(id)
             }
 
             async fn clear_from(client: &::oximod::_mongodb::Client) -> Result<

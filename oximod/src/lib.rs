@@ -1,6 +1,7 @@
 // --- public API ---
 pub use oximod_core::feature::conn::client::OxiClient;
-pub use oximod_core::feature::model::Model as ModelTrait;
+pub use oximod_core::feature::hooks::Hooks;
+pub use oximod_core::feature::model::Model;
 pub use oximod_macros::Model;
 
 // --- Internal API ---
@@ -18,7 +19,5 @@ pub use async_trait as _async_trait;
 pub use futures_util as _futures_util;
 #[doc(hidden)]
 pub use mongodb as _mongodb;
-#[doc(hidden)]
-pub use oximod_core::feature::model::Model;
 #[doc(hidden)]
 pub use regex as _regex; // removes the need of importing the trait

@@ -3,10 +3,12 @@ mod helpers;
 mod index;
 #[macro_use]
 mod parsers;
+mod hooks_macro;
 mod model_macro;
 mod validate;
 
 use helpers::{FieldTokenStreams, ModelAttrs, collect_model_attrs, generate_field_tokens};
+use hooks_macro::generate_hooks_token;
 use model_macro::generate_model_token;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -79,6 +81,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         Err(e) => return e.into(),
     };
 
+    let hooks_token = generate_hooks_token(name);
     let model_token = generate_model_token(name, &db, &collection);
 
     let expanded = quote! {
@@ -122,6 +125,34 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                     .await
             }
 
+            async fn __oximod_insert_with_client(
+                &self,
+                client: &::oximod::_mongodb::Client,
+            ) -> Result<
+                    ::oximod::_mongodb::bson::oid::ObjectId,
+                    ::oximod::_error::oximod_error::OxiModError,
+            > {
+                self.validate()?;
+                let collection = Self::get_collection_from(client)?;
+                Self::_create_indexes(&collection).await?;
+
+                let result = collection.insert_one(self).await.map_err(|e|
+                    ::oximod::_error::oximod_error::OxiModError::connection(
+                        "Failed to insert document into MongoDB collection",
+                        e,
+                    )
+                )?;
+
+                match result.inserted_id.as_object_id() {
+                    Some(id) => Ok(id),
+                    None => Err(
+                        ::oximod::_error::oximod_error::OxiModError::validation(
+                            "MongoDB returned a non-ObjectId inserted_id"
+                        )
+                    )
+                }
+            }
+
             #[inline]
             pub fn new() -> Self {
                 #name {
@@ -139,6 +170,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             fn default() -> Self { Self::new() }
         }
 
+        #hooks_token
         #model_token
 
     };
