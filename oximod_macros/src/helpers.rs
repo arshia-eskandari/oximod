@@ -24,6 +24,7 @@ pub struct ModelAttrs {
     pub index_max_retries: u32,
     pub index_max_init_seconds: u8,
     pub document_id_setter_ident: String,
+    pub hooks: bool,
 }
 
 /// Collects and validates top-level model attributes, returning core model
@@ -34,6 +35,7 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
     let mut index_max_retries: u32 = 3;
     let mut index_max_init_seconds: u8 = 30;
     let mut document_id_setter_ident: String = "id".to_string();
+    let mut hooks = false;
 
     for attr in attrs {
         let path = attr.path();
@@ -60,6 +62,14 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
                 attr,
                 Some("Invalid `document_id_setter_ident` attribute"),
             )?;
+        } else if path.is_ident("hooks") {
+            hooks = true;
+        } else {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "Unsupported attribute for #[derive(Model)]",
+            )
+            .to_compile_error());
         }
     }
 
@@ -78,6 +88,7 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
         index_max_retries,
         index_max_init_seconds,
         document_id_setter_ident,
+        hooks,
     })
 }
 

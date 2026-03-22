@@ -1,6 +1,5 @@
 use crate::error::oximod_error::OxiModError;
 use crate::feature::conn::client::OxiClient;
-use crate::feature::hooks::Hooks;
 use async_trait;
 use mongodb::Client;
 use mongodb::{
@@ -101,7 +100,7 @@ use serde::de::DeserializeOwned;
 #[async_trait::async_trait]
 pub trait Model
 where
-    Self: DeserializeOwned + Hooks,
+    Self: DeserializeOwned + Send + Sync + Sized,
 {
     /// Returns the typed MongoDB collection for this model using an explicit client.
     ///
@@ -251,13 +250,7 @@ where
     async fn find_by_id_from(
         id: ObjectId,
         client: &mongodb::Client,
-    ) -> Result<Option<Self>, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        collection
-            .find_one(doc! { "_id": id })
-            .await
-            .map_err(|e| OxiModError::database("Failed to find document by _id", e))
-    }
+    ) -> Result<Option<Self>, OxiModError>;
 
     /// Deletes a document by its `_id` using an explicit client.
     ///
@@ -285,13 +278,7 @@ where
     async fn delete_by_id_from(
         id: ObjectId,
         client: &mongodb::Client,
-    ) -> Result<DeleteResult, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        collection
-            .delete_one(doc! { "_id": id })
-            .await
-            .map_err(|e| OxiModError::database("Failed to delete document by _id", e))
-    }
+    ) -> Result<DeleteResult, OxiModError>;
 
     /// Updates a document by its `_id` using an explicit client.
     ///
@@ -327,13 +314,7 @@ where
         id: ObjectId,
         update: Document,
         client: &mongodb::Client,
-    ) -> Result<UpdateResult, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        collection
-            .update_one(doc! { "_id": id }, update)
-            .await
-            .map_err(|e| OxiModError::database("Failed to update document by _id", e))
-    }
+    ) -> Result<UpdateResult, OxiModError>;
 
     /// Checks whether any document matching `filter` exists using an explicit client.
     ///
