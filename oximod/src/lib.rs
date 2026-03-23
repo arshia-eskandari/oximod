@@ -19,7 +19,7 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust
+//! ```rust,no_run
 //! use mongodb::bson::{doc, oid::ObjectId};
 //! use oximod::{Model, OxiClient};
 //! use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     OxiClient::init_global("mongodb://localhost:27017").await?;
+//!     OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
 //!
 //!     User::clear().await?;
 //!
@@ -96,44 +96,42 @@ pub use oximod_core::error::oximod_error::OxiModError;
 ///
 /// Global usage:
 ///
-/// ```rust
-/// # use oximod::OxiClient;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// # tokio_test::block_on(async {
-/// OxiClient::init_global("mongodb://localhost:27017").await?;
-/// # Ok(())
-/// # })
-/// # }
+/// ```rust,no_run
+/// use oximod::OxiClient;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
+///     Ok(())
+/// }
 /// ```
 ///
 /// Explicit usage:
 ///
-/// ```rust
-/// # use mongodb::bson::oid::ObjectId;
-/// # use oximod::{Model, OxiClient};
-/// # use serde::{Deserialize, Serialize};
-/// #
-/// # #[derive(Debug, Serialize, Deserialize, Model)]
-/// # #[db("app")]
-/// # #[collection("users")]
-/// # struct User {
-/// #     #[serde(skip_serializing_if = "Option::is_none")]
-/// #     _id: Option<ObjectId>,
-/// #     name: String,
-/// # }
-/// #
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// # tokio_test::block_on(async {
-/// let client = OxiClient::new("mongodb://localhost:27017").await?;
-/// let user = User::new().name("Alice");
-/// user.save_from(&client).await?;
-/// # Ok(())
-/// # })
-/// # }
-/// ```
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{Model, OxiClient};
+/// use serde::{Deserialize, Serialize};
 ///
-/// Explicit clients are especially useful for tests, multi-tenant
-/// applications, dependency injection, and custom connection management.
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+/// }
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
+///
+///     let user = User::new().name("Alice");
+///     let _id = user.save().await?;
+///
+///     Ok(())
+/// }
+/// ```
 pub use oximod_core::feature::conn::client::OxiClient;
 
 /// Trait for defining lifecycle hooks on OxiMod models.
@@ -168,8 +166,9 @@ pub use oximod_core::feature::model::Model;
 ///
 /// ```rust
 /// use oximod::Model;
+/// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Model)]
+/// #[derive(Debug, Serialize, Deserialize, Model)]
 /// #[db("app")]
 /// #[collection("users")]
 /// struct User {
