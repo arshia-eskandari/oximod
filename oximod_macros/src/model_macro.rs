@@ -92,6 +92,13 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
         post_update,
     } = generate_hook_tokens(hooks);
 
+    // this avoid cloning update when hooks are disabled
+    let update_token = if hooks {
+        quote! { update.clone() }
+    } else {
+        quote! { update }
+    };
+
     quote! {
         #[::oximod::_async_trait::async_trait]
         impl ::oximod::_feature::model::Model for #name {
@@ -134,7 +141,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                 #pre_find
                 let collection = Self::get_collection_from(client)?;
                 let result = collection
-                    .find_one(::oximod::_mongodb::bson::doc! { "_id": id })
+                    .find_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() })
                     .await
                     .map_err(|e|
                         ::oximod::_error::oximod_error::OxiModError::database("Failed to find document by _id", e)
@@ -153,7 +160,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                 #pre_delete
                 let collection = Self::get_collection_from(client)?;
                 let result = collection
-                    .delete_one(::oximod::_mongodb::bson::doc! { "_id": id })
+                    .delete_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() })
                     .await
                     .map_err(|e|
                         ::oximod::_error::oximod_error::OxiModError::database("Failed to delete document by _id", e)
@@ -173,7 +180,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                 #pre_update
                 let collection = Self::get_collection_from(client)?;
                 let result = collection
-                    .update_one(::oximod::_mongodb::bson::doc! { "_id": id }, update)
+                    .update_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() }, #update_token)
                     .await
                     .map_err(|e|
                         ::oximod::_error::oximod_error::OxiModError::database("Failed to update document by _id", e)
