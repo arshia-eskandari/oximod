@@ -24,6 +24,7 @@ use syn::{DeriveInput, Ident, parse_macro_input};
         document_id_setter_ident,
         index_max_retries,
         index_max_init_seconds,
+        hooks
     )
 )]
 /// Procedural macro to derive the `Model` trait for mongodb schema support.
@@ -64,6 +65,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         index_max_retries,
         index_max_init_seconds,
         document_id_setter_ident,
+        hooks,
     } = match collect_model_attrs(&input.attrs) {
         Ok(vals) => vals,
         Err(e) => return e.into(),
@@ -79,7 +81,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         Err(e) => return e.into(),
     };
 
-    let model_token = generate_model_token(name, &db, &collection);
+    let model_token = generate_model_token(name, &db, &collection, hooks);
 
     let expanded = quote! {
         static #index_once_async_ident: ::oximod::_helpers::once_async::OnceAsync =
@@ -120,6 +122,34 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                         Ok(())
                     })
                     .await
+            }
+
+            async fn __oximod_insert_with_client(
+                &self,
+                client: &::oximod::_mongodb::Client,
+            ) -> Result<
+                    ::oximod::_mongodb::bson::oid::ObjectId,
+                    ::oximod::_error::oximod_error::OxiModError,
+            > {
+                self.validate()?;
+                let collection = Self::get_collection_from(client)?;
+                Self::_create_indexes(&collection).await?;
+
+                let result = collection.insert_one(self).await.map_err(|e|
+                    ::oximod::_error::oximod_error::OxiModError::connection(
+                        "Failed to insert document into MongoDB collection",
+                        e,
+                    )
+                )?;
+
+                match result.inserted_id.as_object_id() {
+                    Some(id) => Ok(id),
+                    None => Err(
+                        ::oximod::_error::oximod_error::OxiModError::validation(
+                            "MongoDB returned a non-ObjectId inserted_id"
+                        )
+                    )
+                }
             }
 
             #[inline]

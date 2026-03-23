@@ -3,11 +3,13 @@
 //! Run with: `cargo run --example hook_usage`
 //!
 //! This demonstrates how to:
-//! - Use a pre-save hook using an `impl` block
-//! - Log or modify state before a document is saved
+//! - Implement the `Hooks` trait on a model
+//! - Use immutable save hooks with `save()`
+//! - Use mutable save hooks with `save_mut()`
+//! - Use update and delete hooks
 
-use mongodb::bson::{oid::ObjectId, DateTime};
-use oximod::{Model, OxiClient};
+use mongodb::bson::{DateTime, doc, oid::ObjectId};
+use oximod::{Hooks, Model, OxiClient};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Model)]
@@ -19,13 +21,68 @@ struct Log {
 
     message: String,
     timestamp: i64,
+    normalized: bool,
 }
 
-// Pre-save hook implementation
-impl Log {
-    fn print_message(self) -> Self {
-        println!("📋 Log message: {}", self.message);
-        self
+#[async_trait::async_trait]
+impl Hooks for Log {
+    async fn pre_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!(
+            "🔎 pre_save: validating immutable save for '{}'",
+            self.message
+        );
+        Ok(())
+    }
+
+    async fn post_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!(
+            "✅ post_save: immutable save completed for '{}'",
+            self.message
+        );
+        Ok(())
+    }
+
+    async fn pre_save_mut(&mut self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        self.message = self.message.trim().to_string();
+        self.normalized = true;
+
+        println!("🛠️ pre_save_mut: normalized message to '{}'", self.message);
+
+        Ok(())
+    }
+
+    async fn post_save_mut(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!(
+            "✅ post_save_mut: mutable save completed for '{}' (normalized = {})",
+            self.message, self.normalized
+        );
+        Ok(())
+    }
+
+    async fn pre_update(
+        id: ObjectId,
+        update: &mongodb::bson::Document,
+    ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!("✏️ pre_update: updating document {} with {:?}", id, update);
+        Ok(())
+    }
+
+    async fn post_update(
+        id: ObjectId,
+        update: &mongodb::bson::Document,
+    ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!("✅ post_update: updated document {} with {:?}", id, update);
+        Ok(())
+    }
+
+    async fn pre_delete(id: ObjectId) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!("🗑️ pre_delete: deleting document {}", id);
+        Ok(())
+    }
+
+    async fn post_delete(id: ObjectId) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!("✅ post_delete: deleted document {}", id);
+        Ok(())
     }
 }
 
@@ -35,17 +92,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mongodb_uri = std::env::var("MONGODB_URI")?;
     OxiClient::init_global(mongodb_uri).await?;
 
-    // Clear any previous entries
     Log::clear().await?;
 
-    println!("📥 Inserting log entry...");
-    let log = Log::default()
+    println!("📥 Inserting log entry with immutable save...");
+    let immutable_log = Log::default()
         .message("System started")
         .timestamp(DateTime::now().timestamp_millis())
-        .print_message()
-        .save()
-        .await?;
-    println!("✅ Saved log with _id: {}", log);
+        .normalized(false);
+
+    let immutable_id = immutable_log.save().await?;
+    println!("✅ Saved immutable log with _id: {}", immutable_id);
+
+    println!();
+    println!("📥 Inserting log entry with mutable save...");
+    let mut mutable_log = Log::default()
+        .message("   Background worker started   ")
+        .timestamp(DateTime::now().timestamp_millis())
+        .normalized(false);
+
+    let mutable_id = mutable_log.save_mut().await?;
+    println!("✅ Saved mutable log with _id: {}", mutable_id);
+    println!(
+        "📋 In-memory state after save_mut -> message: '{}', normalized: {}",
+        mutable_log.message, mutable_log.normalized
+    );
+
+    println!();
+    println!("✏️ Updating mutable log...");
+    Log::update_by_id(
+        mutable_id,
+        doc! {
+            "$set": {
+                "message": "Worker ready"
+            }
+        },
+    )
+    .await?;
+
+    println!();
+    println!("🗑️ Deleting immutable log...");
+    Log::delete_by_id(immutable_id).await?;
 
     Ok(())
 }

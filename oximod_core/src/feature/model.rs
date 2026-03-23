@@ -100,7 +100,7 @@ use serde::de::DeserializeOwned;
 #[async_trait::async_trait]
 pub trait Model
 where
-    Self: Send + Sync + Sized + DeserializeOwned,
+    Self: DeserializeOwned + Send + Sync + Sized,
 {
     /// Returns the typed MongoDB collection for this model using an explicit client.
     ///
@@ -170,6 +170,35 @@ where
     /// or insertion fails.
     async fn save_from(&self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
 
+    /// Persists this model instance using an explicit MongoDB client with mutable access.
+    ///
+    /// Implementations are expected to serialize and insert `self` into the model's
+    /// configured collection, returning the inserted document's [`ObjectId`].
+    ///
+    /// This method is the explicit-client counterpart to [`Model::save_mut`].
+    ///
+    /// Unlike [`Model::save_from`], this method allows mutable access to the model
+    /// before persistence. This enables lifecycle hooks such as
+    /// [`Hooks::pre_save_mut`] and [`Hooks::post_save_mut`] to modify or observe
+    /// the model during the save workflow.
+    ///
+    /// This is useful when the save operation needs to perform normalization
+    /// or other in-place changes before validation and insertion.
+    ///
+    /// # Parameters
+    ///
+    /// - `client`: The MongoDB client to use for the save operation.
+    ///
+    /// # Returns
+    ///
+    /// The inserted document's [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if validation, serialization, collection access,
+    /// hook execution, or insertion fails.
+    async fn save_from_mut(&mut self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
+
     /// Deletes all documents in this model's collection using an explicit client.
     ///
     /// This method removes every document in the collection associated with the model.
@@ -221,13 +250,7 @@ where
     async fn find_by_id_from(
         id: ObjectId,
         client: &mongodb::Client,
-    ) -> Result<Option<Self>, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        collection
-            .find_one(doc! { "_id": id })
-            .await
-            .map_err(|e| OxiModError::database("Failed to find document by _id", e))
-    }
+    ) -> Result<Option<Self>, OxiModError>;
 
     /// Deletes a document by its `_id` using an explicit client.
     ///
@@ -255,13 +278,7 @@ where
     async fn delete_by_id_from(
         id: ObjectId,
         client: &mongodb::Client,
-    ) -> Result<DeleteResult, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        collection
-            .delete_one(doc! { "_id": id })
-            .await
-            .map_err(|e| OxiModError::database("Failed to delete document by _id", e))
-    }
+    ) -> Result<DeleteResult, OxiModError>;
 
     /// Updates a document by its `_id` using an explicit client.
     ///
@@ -297,13 +314,7 @@ where
         id: ObjectId,
         update: Document,
         client: &mongodb::Client,
-    ) -> Result<UpdateResult, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        collection
-            .update_one(doc! { "_id": id }, update)
-            .await
-            .map_err(|e| OxiModError::database("Failed to update document by _id", e))
-    }
+    ) -> Result<UpdateResult, OxiModError>;
 
     /// Checks whether any document matching `filter` exists using an explicit client.
     ///
@@ -418,6 +429,39 @@ where
         let client_arc = OxiClient::global()?;
         let client: &Client = client_arc.as_ref();
         self.save_from(client).await
+    }
+
+    /// Persists this model instance using the global [`OxiClient`] with mutable access.
+    ///
+    /// This method retrieves the global client via [`OxiClient::global`] and
+    /// delegates to [`Model::save_from_mut`].
+    ///
+    /// Unlike [`Model::save`], this method allows mutable access to the model
+    /// before persistence. This enables lifecycle hooks such as
+    /// [`Hooks::pre_save_mut`] and [`Hooks::post_save_mut`] to modify or observe
+    /// the model during the save workflow.
+    ///
+    /// This is useful when the save operation needs to perform normalization
+    /// or other in-place changes before validation and insertion.
+    ///
+    /// # Returns
+    ///
+    /// The inserted document's [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the global client has not been initialized,
+    /// - hook execution fails,
+    /// - validation fails,
+    /// - serialization fails,
+    /// - collection resolution fails,
+    /// - or insertion fails.
+    async fn save_mut(&mut self) -> Result<ObjectId, OxiModError> {
+        let client_arc = OxiClient::global()?;
+        let client: &Client = client_arc.as_ref();
+        self.save_from_mut(client).await
     }
 
     /// Deletes all documents in this model's collection using the global [`OxiClient`].

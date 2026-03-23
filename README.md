@@ -24,6 +24,7 @@ Inspired by ODM-style workflows, OxiMod provides:
 - index declarations  
 - typed model helpers  
 - global and explicit-client workflows  
+- optional lifecycle hooks  
 
 At the same time, it preserves MongoDB’s native power by exposing:
 
@@ -47,6 +48,7 @@ It focuses on areas that benefit from schema-awareness:
 - validation  
 - defaults  
 - index setup  
+- optional lifecycle hooks  
 
 For everything else, use the MongoDB driver directly:
 
@@ -86,6 +88,7 @@ let user = User::new()
 | Method | Description |
 |------|------------|
 | `save()` | Insert document |
+| `save_mut()` | Insert document with mutable hooks |
 | `clear()` | Remove all documents |
 | `get_collection()` | Typed collection |
 | `get_document_collection()` | Raw collection |
@@ -156,6 +159,7 @@ let collection = User::get_document_collection()?;
 | `#[document_id_setter_ident("name")]` | Rename `_id` setter |
 | `#[index_max_retries(N)]` | Retry count |
 | `#[index_max_init_seconds(N)]` | Timeout |
+| `#[hooks]` | Enable lifecycle hooks |
 
 ---
 
@@ -262,6 +266,72 @@ Examples:
 - `#[default("Guest".to_string())]`
 - `#[default(42)]`
 - `#[default(false)]`
+
+---
+
+## Hooks
+
+```rust
+#[hooks]
+```
+
+### Save Hooks
+
+| Hook | Description |
+|----------|------------|
+| `pre_save` | Runs before `save()` |
+| `post_save` | Runs after `save()` |
+| `pre_save_mut` | Runs before `save_mut()` |
+| `post_save_mut` | Runs after `save_mut()` |
+
+### Query Hooks
+
+| Hook | Description |
+|----------|------------|
+| `pre_find` | Runs before `find_by_id()` |
+| `post_find` | Runs after `find_by_id()` |
+
+### Mutation Hooks
+
+| Hook | Description |
+|----------|------------|
+| `pre_update` | Runs before `update_by_id()` |
+| `post_update` | Runs after `update_by_id()` |
+| `pre_delete` | Runs before `delete_by_id()` |
+| `post_delete` | Runs after `delete_by_id()` |
+
+Hooks are optional and are enabled at the struct level with `#[hooks]`.
+
+Hooks are implemented by implementing the `Hooks` trait for the model.
+
+```rust
+use oximod::{Hooks, Model};
+
+#[derive(Model)]
+#[db("app")]
+#[collection("logs")]
+#[hooks]
+struct Log {
+    message: String,
+}
+
+#[async_trait::async_trait]
+impl Hooks for Log {
+    async fn pre_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        println!("Saving log");
+        Ok(())
+    }
+}
+```
+
+Hooks are useful for:
+
+- normalization
+- logging
+- validation beyond schema rules
+- audit trails
+- business rules
+- event emission
 
 ---
 
