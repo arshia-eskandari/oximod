@@ -11,7 +11,7 @@ pub fn build_length_checks(
         build_checks.field_rules_val.push(quote! {
             if val.len() < (#min_length as usize) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must have a length of at least {}",
                             #field_name_lit,
@@ -27,7 +27,7 @@ pub fn build_length_checks(
         build_checks.field_rules_val.push(quote! {
             if val.len() > (#max_length as usize) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must have a length of at most {}",
                             #field_name_lit,
@@ -48,7 +48,7 @@ pub fn build_length_checks(
         build_checks.field_rules_val.push(quote! {
             if #condition {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!("Field '{}' must be non-empty", #field_name_lit)
                     )
                 );

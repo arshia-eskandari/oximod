@@ -26,7 +26,7 @@ pub fn build_custom_check(
             let __oximod_val: &#validated_ty = val;
 
             __oximod_check_validator::<#validated_ty, _>(#custom_path, __oximod_val)
-                .map_err(|e| ::oximod::_error::oximod_error::OxiModError::validation(e.to_string()))?;
+                .map_err(|e| ::oximod::OxiModError::validation(e.to_string()))?;
         }
     });
 }

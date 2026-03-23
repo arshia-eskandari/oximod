@@ -317,7 +317,7 @@ struct Log {
 
 #[async_trait::async_trait]
 impl Hooks for Log {
-    async fn pre_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
         println!("Saving log");
         Ok(())
     }
