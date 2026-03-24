@@ -410,7 +410,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-For more examples, feel free to check out out [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
+For more examples, feel free to check out the [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
 
 ---
 
