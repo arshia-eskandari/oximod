@@ -25,7 +25,7 @@ pub fn build_string_checks(
 
             if !__re.is_match(val) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must be a valid email address",
                             #field_name_lit
@@ -64,7 +64,7 @@ pub fn build_string_checks(
 
                     if !regex.is_match(val) {
                         return Err(
-                            ::oximod::_error::oximod_error::OxiModError::validation(
+                            ::oximod::OxiModError::validation(
                                 format!(
                                     "Field '{}' does not match the required pattern",
                                     #field_name_lit
@@ -81,7 +81,7 @@ pub fn build_string_checks(
         build_checks.field_rules_val.push(quote! {
             if !val.starts_with(#start) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must start with '{}'",
                             #field_name_lit,
@@ -97,7 +97,7 @@ pub fn build_string_checks(
         build_checks.field_rules_val.push(quote! {
             if !val.ends_with(#end) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must end with '{}'",
                             #field_name_lit,
@@ -113,7 +113,7 @@ pub fn build_string_checks(
         build_checks.field_rules_val.push(quote! {
             if !val.contains(#substr) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must include '{}'",
                             #field_name_lit,
@@ -129,7 +129,7 @@ pub fn build_string_checks(
         build_checks.field_rules_val.push(quote! {
             if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must contain only alphanumeric characters",
                             #field_name_lit,

@@ -50,12 +50,12 @@ async fn test_save_runs_pre_and_post_save_hooks() -> TestResult {
 
     #[async_trait::async_trait]
     impl Hooks for Log {
-        async fn pre_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
             PRE_SAVE_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        async fn post_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn post_save(&self) -> Result<(), oximod::OxiModError> {
             POST_SAVE_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -92,14 +92,14 @@ async fn test_save_mut_runs_mut_hooks_and_mutates_state() -> TestResult {
 
     #[async_trait::async_trait]
     impl Hooks for Log {
-        async fn pre_save_mut(&mut self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn pre_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
             PRE_SAVE_MUT_CALLS.fetch_add(1, Ordering::SeqCst);
             self.message = self.message.trim().to_string();
             self.normalized = true;
             Ok(())
         }
 
-        async fn post_save_mut(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn post_save_mut(&self) -> Result<(), oximod::OxiModError> {
             POST_SAVE_MUT_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -144,15 +144,13 @@ async fn test_find_by_id_runs_pre_and_post_find_hooks() -> TestResult {
 
     #[async_trait::async_trait]
     impl Hooks for Log {
-        async fn pre_find(id: ObjectId) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn pre_find(id: ObjectId) -> Result<(), oximod::OxiModError> {
             assert_ne!(id, ObjectId::default());
             PRE_FIND_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        async fn post_find(
-            result: &Option<Self>,
-        ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn post_find(result: &Option<Self>) -> Result<(), oximod::OxiModError> {
             assert!(result.is_some());
             POST_FIND_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -192,7 +190,7 @@ async fn test_update_by_id_runs_pre_and_post_update_hooks() -> TestResult {
         async fn pre_update(
             id: ObjectId,
             update: &mongodb::bson::Document,
-        ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        ) -> Result<(), oximod::OxiModError> {
             assert_ne!(id, ObjectId::default());
             assert!(update.contains_key("$set"));
             PRE_UPDATE_CALLS.fetch_add(1, Ordering::SeqCst);
@@ -202,7 +200,7 @@ async fn test_update_by_id_runs_pre_and_post_update_hooks() -> TestResult {
         async fn post_update(
             id: ObjectId,
             update: &mongodb::bson::Document,
-        ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        ) -> Result<(), oximod::OxiModError> {
             assert_ne!(id, ObjectId::default());
             assert!(update.contains_key("$set"));
             POST_UPDATE_CALLS.fetch_add(1, Ordering::SeqCst);
@@ -252,15 +250,13 @@ async fn test_delete_by_id_runs_pre_and_post_delete_hooks() -> TestResult {
 
     #[async_trait::async_trait]
     impl Hooks for Log {
-        async fn pre_delete(id: ObjectId) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn pre_delete(id: ObjectId) -> Result<(), oximod::OxiModError> {
             assert_ne!(id, ObjectId::default());
             PRE_DELETE_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        async fn post_delete(
-            id: ObjectId,
-        ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+        async fn post_delete(id: ObjectId) -> Result<(), oximod::OxiModError> {
             assert_ne!(id, ObjectId::default());
             POST_DELETE_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -299,8 +295,8 @@ async fn test_pre_save_hook_error_aborts_save() -> TestResult {
 
     #[async_trait::async_trait]
     impl Hooks for Log {
-        async fn pre_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
-            Err(oximod::_error::oximod_error::OxiModError::validation(
+        async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
+            Err(oximod::OxiModError::validation(
                 "pre_save rejected the operation",
             ))
         }

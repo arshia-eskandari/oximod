@@ -26,7 +26,7 @@ struct Log {
 
 #[async_trait::async_trait]
 impl Hooks for Log {
-    async fn pre_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
         println!(
             "🔎 pre_save: validating immutable save for '{}'",
             self.message
@@ -34,7 +34,7 @@ impl Hooks for Log {
         Ok(())
     }
 
-    async fn post_save(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn post_save(&self) -> Result<(), oximod::OxiModError> {
         println!(
             "✅ post_save: immutable save completed for '{}'",
             self.message
@@ -42,7 +42,7 @@ impl Hooks for Log {
         Ok(())
     }
 
-    async fn pre_save_mut(&mut self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn pre_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
         self.message = self.message.trim().to_string();
         self.normalized = true;
 
@@ -51,7 +51,7 @@ impl Hooks for Log {
         Ok(())
     }
 
-    async fn post_save_mut(&self) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn post_save_mut(&self) -> Result<(), oximod::OxiModError> {
         println!(
             "✅ post_save_mut: mutable save completed for '{}' (normalized = {})",
             self.message, self.normalized
@@ -62,7 +62,7 @@ impl Hooks for Log {
     async fn pre_update(
         id: ObjectId,
         update: &mongodb::bson::Document,
-    ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    ) -> Result<(), oximod::OxiModError> {
         println!("✏️ pre_update: updating document {} with {:?}", id, update);
         Ok(())
     }
@@ -70,17 +70,17 @@ impl Hooks for Log {
     async fn post_update(
         id: ObjectId,
         update: &mongodb::bson::Document,
-    ) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    ) -> Result<(), oximod::OxiModError> {
         println!("✅ post_update: updated document {} with {:?}", id, update);
         Ok(())
     }
 
-    async fn pre_delete(id: ObjectId) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn pre_delete(id: ObjectId) -> Result<(), oximod::OxiModError> {
         println!("🗑️ pre_delete: deleting document {}", id);
         Ok(())
     }
 
-    async fn post_delete(id: ObjectId) -> Result<(), oximod::_error::oximod_error::OxiModError> {
+    async fn post_delete(id: ObjectId) -> Result<(), oximod::OxiModError> {
         println!("✅ post_delete: deleted document {}", id);
         Ok(())
     }

@@ -9,10 +9,10 @@ use mongodb::{
 };
 use serde::de::DeserializeOwned;
 
-/// Core asynchronous model interface for OxiMod-backed MongoDB documents.
+/// Core async model interface for OxiMod-backed MongoDB documents.
 ///
 /// This trait is typically implemented automatically via `#[derive(Model)]`.
-/// It provides a minimal, typed API for:
+/// Provides a minimal typed API for:
 ///
 /// - accessing a model's MongoDB collection,
 /// - saving a model instance,
@@ -30,7 +30,7 @@ use serde::de::DeserializeOwned;
 /// builder-style ergonomics, and validation, while still exposing the underlying
 /// MongoDB driver patterns when needed.
 ///
-/// In practice, this means:
+/// In practice:
 ///
 /// - use [`Model::save`] and [`Model::clear`] for common persistence operations,
 /// - use helpers like [`Model::find_by_id`], [`Model::delete_by_id`],
@@ -77,7 +77,11 @@ use serde::de::DeserializeOwned;
 /// This trait is generally not implemented manually. Instead, derive it:
 ///
 /// ```ignore
-/// #[derive(Model, Serialize, Deserialize)]
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::Model;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
 /// #[db("app_db")]
 /// #[collection("users")]
 /// struct User {
@@ -179,7 +183,7 @@ where
     ///
     /// Unlike [`Model::save_from`], this method allows mutable access to the model
     /// before persistence. This enables lifecycle hooks such as
-    /// [`Hooks::pre_save_mut`] and [`Hooks::post_save_mut`] to modify or observe
+    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and [`crate::feature::hooks::Hooks::post_save_mut`] to modify or observe
     /// the model during the save workflow.
     ///
     /// This is useful when the save operation needs to perform normalization
@@ -438,7 +442,7 @@ where
     ///
     /// Unlike [`Model::save`], this method allows mutable access to the model
     /// before persistence. This enables lifecycle hooks such as
-    /// [`Hooks::pre_save_mut`] and [`Hooks::post_save_mut`] to modify or observe
+    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and [`crate::feature::hooks::Hooks::post_save_mut`] to modify or observe
     /// the model during the save workflow.
     ///
     /// This is useful when the save operation needs to perform normalization

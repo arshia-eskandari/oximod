@@ -113,6 +113,8 @@ pub fn parse_index_args(attr: &Attribute) -> syn::Result<IndexArgs> {
                     ));
                 }
                 args.geo_2dsphere_index_version = Some(version);
+            } else {
+                return Err(meta.error("unknown attribute key"));
             }
 
             Ok(())

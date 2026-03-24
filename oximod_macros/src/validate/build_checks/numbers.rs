@@ -46,7 +46,7 @@ pub fn build_number_checks(
         build_checks.numeric_checks.push(quote! {
             if v #op #min_rhs {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must be {} {}",
                             #field_name_lit,
@@ -68,7 +68,7 @@ pub fn build_number_checks(
         build_checks.numeric_checks.push(quote! {
             if v #op #max_rhs {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!(
                             "Field '{}' must be {} {}",
                             #field_name_lit,
@@ -91,7 +91,7 @@ pub fn build_signed_number_checks(
         build_checks.field_rules_val.push(quote! {
             if *val <= 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!("Field '{}' must be positive", #field_name_lit)
                     )
                 );
@@ -103,7 +103,7 @@ pub fn build_signed_number_checks(
         build_checks.field_rules_val.push(quote! {
             if *val >= 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!("Field '{}' must be negative", #field_name_lit)
                     )
                 );
@@ -115,7 +115,7 @@ pub fn build_signed_number_checks(
         build_checks.field_rules_val.push(quote! {
             if *val < 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!("Field '{}' must be non-negative", #field_name_lit)
                     )
                 );
@@ -127,7 +127,7 @@ pub fn build_signed_number_checks(
         build_checks.field_rules_val.push(quote! {
             if *val > 0 {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!("Field '{}' must be non-positive", #field_name_lit)
                     )
                 );
@@ -155,7 +155,7 @@ pub fn build_integer_checks(
             build_checks.numeric_checks.push(quote! {
                 if (v & #mask_lit) != 0 {
                     return Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
+                        ::oximod::OxiModError::validation(
                             format!(
                                 "Field '{}' must be a multiple of {}",
                                 #field_name_lit,
@@ -169,7 +169,7 @@ pub fn build_integer_checks(
             build_checks.numeric_checks.push(quote! {
                 if (v % #rhs) != 0 {
                     return Err(
-                        ::oximod::_error::oximod_error::OxiModError::validation(
+                        ::oximod::OxiModError::validation(
                             format!(
                                 "Field '{}' must be a multiple of {}",
                                 #field_name_lit,

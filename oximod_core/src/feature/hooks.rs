@@ -2,16 +2,17 @@ use crate::error::oximod_error::OxiModError;
 use async_trait::async_trait;
 use mongodb::bson::{Document, oid::ObjectId};
 
-/// Lifecycle hook interface for OxiMod-backed MongoDB models.
+/// Lifecycle hook interface for OxiMod models.
 ///
-/// This trait is intended to complement [`Model`] by providing optional
-/// lifecycle extension points around model-aware operations.
+/// This trait provides optional lifecycle extension points for
+/// model-aware operations such as saving, updating, deleting,
+/// and fetching documents.
 ///
-/// Hooks are designed to stay within OxiMod's schema-aware boundary.
-/// They apply to model operations such as saving, updating, deleting,
-/// and optionally finding documents by `_id`.
+/// Hooks are designed to operate within OxiMod's schema-aware layer
+/// and are only triggered for model APIs. They do not apply to raw
+/// MongoDB collection access methods.
 ///
-/// Hooks do **not** apply to raw collection access methods such as:
+/// The following methods do NOT trigger hooks:
 ///
 /// - `Model::get_collection`
 /// - `Model::get_collection_from`
@@ -20,39 +21,36 @@ use mongodb::bson::{Document, oid::ObjectId};
 ///
 /// This preserves OxiMod's design philosophy:
 ///
-/// > provide ergonomic, model-aware workflows without interfering with
-/// > direct MongoDB driver usage.
+/// > provide ergonomic, model-aware workflows without interfering
+/// > with direct MongoDB driver usage.
 ///
 /// # Default behavior
 ///
-/// All hook methods have default no-op implementations that return `Ok(())`.
-/// This means implementors may override only the hooks they care about.
+/// All hook methods have default no-op implementations returning `Ok(())`.
+/// Implementors only need to override the hooks they want.
 ///
 /// # Error handling
 ///
 /// Each hook returns `Result<(), OxiModError>`.
 ///
-/// This allows hooks to:
-///
-/// - block an operation before it executes,
-/// - perform validation or normalization,
-/// - run side effects and surface failures consistently.
-///
-/// For pre-hooks, returning an error prevents the corresponding operation
-/// from continuing.
-///
-/// For post-hooks, returning an error indicates that the underlying database
-/// operation may already have succeeded, but post-processing failed.
+/// - Returning an error from a pre-hook aborts the operation.
+/// - Returning an error from a post-hook indicates that the database
+///   operation may have succeeded but post-processing failed.
 ///
 /// # Intended usage
 ///
-/// This trait is generally expected to be implemented automatically alongside
-/// `#[derive(Model)]`, with users overriding hook methods as needed.
+/// This trait is typically used together with `#[derive(Model)]`,
+/// with users overriding specific hooks as needed.
 ///
 /// ```ignore
-/// #[derive(Model, Serialize, Deserialize)]
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{Hooks, Model, OxiModError};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
 /// #[db("app_db")]
 /// #[collection("users")]
+/// #[hooks]
 /// struct User {
 ///     #[serde(skip_serializing_if = "Option::is_none")]
 ///     _id: Option<ObjectId>,
@@ -62,7 +60,7 @@ use mongodb::bson::{Document, oid::ObjectId};
 ///
 /// #[async_trait::async_trait]
 /// impl Hooks for User {
-///     async fn pre_save(&mut self) -> Result<(), OxiModError> {
+///     async fn pre_save_mut(&mut self) -> Result<(), OxiModError> {
 ///         self.email = self.email.trim().to_lowercase();
 ///         Ok(())
 ///     }
@@ -76,15 +74,15 @@ use mongodb::bson::{Document, oid::ObjectId};
 ///
 /// This keeps the feature:
 ///
-/// - predictable,
-/// - maintainable,
-/// - aligned with OxiMod's lightweight philosophy.
+/// - predictable
+/// - maintainable
+/// - aligned with OxiMod's lightweight design
 #[async_trait]
 pub trait Hooks
 where
     Self: Send + Sync + Sized,
 {
-    /// Runs before this model instance is saved using [`Model::save`].
+    /// Runs before this model instance is saved using [`crate::feature::model::Model::save`].
     ///
     /// This hook is invoked when the model is saved through the immutable
     /// save workflow. It allows validation, logging, or other side effects
@@ -98,7 +96,7 @@ where
     /// - triggering external side effects.
     ///
     /// If you need to mutate the model before saving, use [`Hooks::pre_save_mut`]
-    /// together with [`Model::save_mut`] instead.
+    /// together with [`crate::feature::model::Model::save_mut`] instead.
     ///
     /// # Returns
     ///
@@ -111,7 +109,7 @@ where
         Ok(())
     }
 
-    /// Runs before this model instance is saved using [`Model::save_mut`].
+    /// Runs before this model instance is saved using [`crate::feature::model::Model::save_mut`].
     ///
     /// This hook is invoked when the model is saved through the mutable
     /// save workflow. It allows modifying the model before validation
@@ -136,7 +134,7 @@ where
         Ok(())
     }
 
-    /// Runs after this model instance has been saved using [`Model::save`].
+    /// Runs after this model instance has been saved using [`crate::feature::model::Model::save`].
     ///
     /// This hook is invoked after the immutable save workflow completes.
     ///
@@ -161,7 +159,7 @@ where
         Ok(())
     }
 
-    /// Runs after this model instance has been saved using [`Model::save_mut`].
+    /// Runs after this model instance has been saved using [`crate::feature::model::Model::save_mut`].
     ///
     /// This hook is invoked after the mutable save workflow completes.
     ///
@@ -193,7 +191,7 @@ where
     /// Runs before a document is updated by its `_id`.
     ///
     /// This hook is invoked for model-aware update operations such as
-    /// `Model::update_by_id` and `Model::update_by_id_from`.
+    /// `crate::feature::model::Model::update_by_id` and `crate::feature::model::Model::update_by_id_from`.
     ///
     /// # Parameters
     ///
@@ -238,7 +236,7 @@ where
     /// Runs before a document is deleted by its `_id`.
     ///
     /// This hook is invoked for model-aware delete operations such as
-    /// `Model::delete_by_id` and `Model::delete_by_id_from`.
+    /// `crate::feature::model::Model::delete_by_id` and `crate::feature::model::Model::delete_by_id_from`.
     ///
     /// # Parameters
     ///
@@ -281,7 +279,7 @@ where
     /// Runs before a document is fetched by its `_id`.
     ///
     /// This is an optional read hook for model-aware find operations such as
-    /// `Model::find_by_id` and `Model::find_by_id_from`.
+    /// `crate::feature::model::Model::find_by_id` and `crate::feature::model::Model::find_by_id_from`.
     ///
     /// # Parameters
     ///

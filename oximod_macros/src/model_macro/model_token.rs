@@ -29,7 +29,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
 
             fn get_collection_from(client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::Collection<Self>,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 let db = client.database(#db);
                 Ok(db.collection::<Self>(#collection))
@@ -37,7 +37,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
 
             async fn save_from(&self, client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 #pre_save
                 let id = self.__oximod_insert_with_client(client).await?;
@@ -47,7 +47,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
 
             async fn save_from_mut(&mut self, client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 #pre_save_mut
                 let id = self.__oximod_insert_with_client(client).await?;
@@ -60,7 +60,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
                 Option<Self>,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 #pre_find
                 let collection = Self::get_collection_from(client)?;
@@ -68,7 +68,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                     .find_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() })
                     .await
                     .map_err(|e|
-                        ::oximod::_error::oximod_error::OxiModError::database("Failed to find document by _id", e)
+                        ::oximod::OxiModError::database("Failed to find document by _id", e)
                     )?;
                 #post_find
                 Ok(result)
@@ -79,7 +79,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
                 ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 #pre_delete
                 let collection = Self::get_collection_from(client)?;
@@ -87,7 +87,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                     .delete_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() })
                     .await
                     .map_err(|e|
-                        ::oximod::_error::oximod_error::OxiModError::database("Failed to delete document by _id", e)
+                        ::oximod::OxiModError::database("Failed to delete document by _id", e)
                     )?;
                 #post_delete
                 Ok(result)
@@ -99,7 +99,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
                 ::oximod::_mongodb::results::UpdateResult,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 #pre_update
                 let collection = Self::get_collection_from(client)?;
@@ -107,7 +107,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                     .update_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() }, #update_token)
                     .await
                     .map_err(|e|
-                        ::oximod::_error::oximod_error::OxiModError::database("Failed to update document by _id", e)
+                        ::oximod::OxiModError::database("Failed to update document by _id", e)
                     )?;
                 #post_update
                 Ok(result)
@@ -115,7 +115,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
 
             async fn clear_from(client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::_error::oximod_error::OxiModError
+                ::oximod::OxiModError
             > {
                 let collection = Self::get_collection_from(client)?;
 
@@ -123,7 +123,7 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
                     .delete_many(::oximod::_mongodb::bson::doc! {})
                     .await
                     .map_err(|e|
-                        ::oximod::_error::oximod_error::OxiModError::database(
+                        ::oximod::OxiModError::database(
                             "Failed to execute MongoDB delete_many operation",
                             e,
                         )

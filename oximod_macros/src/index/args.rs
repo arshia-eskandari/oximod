@@ -101,22 +101,22 @@
 ///
 /// # Example
 ///
-/// ```rust
+/// ```text
 /// #[index(unique, sparse, name = "email_idx", background, order = -1)]
 /// email: String,
 /// ```
 ///
-/// ```rust
+/// ```text
 /// #[index(text, weight = 10, default_language = "english")]
 /// title: String,
 /// ```
 ///
-/// ```rust
+/// ```text
 /// #[index(unique, case_insensitive)]
 /// email: String,
 /// ```
 ///
-/// ```rust
+/// ```text
 /// #[index(geo_2dsphere)]
 /// location: GeoJsonPoint,
 /// ```

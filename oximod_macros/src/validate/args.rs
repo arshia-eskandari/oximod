@@ -110,7 +110,7 @@ pub enum LitNum {
 ///
 /// The function must have the signature:
 ///
-/// ```rust
+/// ```text
 /// fn(&T) -> Result<(), String>
 /// ```
 ///
@@ -129,7 +129,7 @@ pub enum LitNum {
 ///
 /// Usage:
 ///
-/// ```rust
+/// ```text
 /// #[validate(custom(validate_name))]
 /// name: String
 /// ```
@@ -138,7 +138,7 @@ pub enum LitNum {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```ignore
 /// #[derive(Model)]
 /// struct User {
 ///     #[validate(

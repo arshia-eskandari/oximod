@@ -12,7 +12,7 @@ pub fn build_option_checks(
         build_checks.field_rules_direct.push(quote! {
             if self.#field_ident.is_none() {
                 return Err(
-                    ::oximod::_error::oximod_error::OxiModError::validation(
+                    ::oximod::OxiModError::validation(
                         format!("Field '{}' is required", #field_name_lit)
                     )
                 );
