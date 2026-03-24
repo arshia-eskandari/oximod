@@ -82,7 +82,7 @@ pub trait Hooks
 where
     Self: Send + Sync + Sized,
 {
-    /// Runs before this model instance is saved using [`Model::save`].
+    /// Runs before this model instance is saved using [`crate::feature::model::Model::save`].
     ///
     /// This hook is invoked when the model is saved through the immutable
     /// save workflow. It allows validation, logging, or other side effects
@@ -96,7 +96,7 @@ where
     /// - triggering external side effects.
     ///
     /// If you need to mutate the model before saving, use [`Hooks::pre_save_mut`]
-    /// together with [`Model::save_mut`] instead.
+    /// together with [`crate::feature::model::Model::save_mut`] instead.
     ///
     /// # Returns
     ///
@@ -109,7 +109,7 @@ where
         Ok(())
     }
 
-    /// Runs before this model instance is saved using [`Model::save_mut`].
+    /// Runs before this model instance is saved using [`crate::feature::model::Model::save_mut`].
     ///
     /// This hook is invoked when the model is saved through the mutable
     /// save workflow. It allows modifying the model before validation
@@ -134,7 +134,7 @@ where
         Ok(())
     }
 
-    /// Runs after this model instance has been saved using [`Model::save`].
+    /// Runs after this model instance has been saved using [`crate::feature::model::Model::save`].
     ///
     /// This hook is invoked after the immutable save workflow completes.
     ///
@@ -159,7 +159,7 @@ where
         Ok(())
     }
 
-    /// Runs after this model instance has been saved using [`Model::save_mut`].
+    /// Runs after this model instance has been saved using [`crate::feature::model::Model::save_mut`].
     ///
     /// This hook is invoked after the mutable save workflow completes.
     ///
@@ -191,7 +191,7 @@ where
     /// Runs before a document is updated by its `_id`.
     ///
     /// This hook is invoked for model-aware update operations such as
-    /// `Model::update_by_id` and `Model::update_by_id_from`.
+    /// `crate::feature::model::Model::update_by_id` and `crate::feature::model::Model::update_by_id_from`.
     ///
     /// # Parameters
     ///
@@ -236,7 +236,7 @@ where
     /// Runs before a document is deleted by its `_id`.
     ///
     /// This hook is invoked for model-aware delete operations such as
-    /// `Model::delete_by_id` and `Model::delete_by_id_from`.
+    /// `crate::feature::model::Model::delete_by_id` and `crate::feature::model::Model::delete_by_id_from`.
     ///
     /// # Parameters
     ///
@@ -279,7 +279,7 @@ where
     /// Runs before a document is fetched by its `_id`.
     ///
     /// This is an optional read hook for model-aware find operations such as
-    /// `Model::find_by_id` and `Model::find_by_id_from`.
+    /// `crate::feature::model::Model::find_by_id` and `crate::feature::model::Model::find_by_id_from`.
     ///
     /// # Parameters
     ///

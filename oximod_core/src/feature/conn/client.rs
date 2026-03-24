@@ -25,7 +25,7 @@ impl OxiClient {
     /// * `url` — MongoDB connection string (for example `"mongodb://localhost:27017"`).
     ///
     /// # Errors
-    /// Returns [`OxiModError::ConnectionError`] if the client cannot be created.
+    /// Returns [`crate::error::oximod_error::OxiModError::Connection`] if the client cannot be created.
     pub async fn new(url: String) -> Result<Self, OxiModError> {
         let client = Self::connect(url).await?;
         Ok(OxiClient {
@@ -50,7 +50,7 @@ impl OxiClient {
     /// or switching the connection used by this instance.
     ///
     /// # Errors
-    /// Returns [`OxiModError::ConnectionError`] if the client cannot connect.
+    /// Returns [`crate::error::oximod_error::OxiModError::Connection`] if the client cannot connect.
     pub async fn init_client(&mut self, mongo_uri: String) -> Result<(), OxiModError> {
         let client = Self::connect(mongo_uri).await?;
         self.inner = Some(client);
@@ -79,8 +79,8 @@ impl OxiClient {
     /// [`OxiClient`] is provided.
     ///
     /// # Errors
-    /// - [`OxiModError::ConnectionError`] if the client cannot connect
-    /// - [`OxiModError::GlobalClientInitError`] if already initialized
+    /// - [`crate::error::oximod_error::OxiModError::Connection`] if the client cannot connect
+    /// - [`crate::error::oximod_error::OxiModError::GlobalClientInit`] if already initialized
     pub async fn init_global(mongo_uri: String) -> Result<(), OxiModError> {
         let client = Self::connect(mongo_uri).await?;
 
@@ -96,7 +96,7 @@ impl OxiClient {
     /// [`OxiClient::init_global`] must be called before using this.
     ///
     /// # Errors
-    /// Returns [`OxiModError::GlobalClientMissing`] if no global client exists.
+    /// Returns [`crate::error::oximod_error::OxiModError::GlobalClientMissing`] if no global client exists.
     pub fn global() -> Result<Arc<Client>, OxiModError> {
         CLIENT.get().cloned().ok_or_else(|| {
             OxiModError::global_client_missing("Global MongoDB client has not been initialized")
