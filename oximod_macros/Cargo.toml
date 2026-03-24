@@ -1,6 +1,6 @@
 [package]
 name = "oximod_macros"
-version = "0.1.15"
+version = "0.2.0"
 edition = "2024"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "Procedural macros for the OxiMod MongoDB ODM."
@@ -19,7 +19,7 @@ quote = "1.0.44"
 proc-macro2 = "1.0.106"
 mongodb = "3.5.1"
 thiserror = "2.0.18"
-oximod_core = { version = "0.1.13", path = "../oximod_core" }
+oximod_core = { version = "0.2.0", path = "../oximod_core" }
 futures-util = "0.3.32"
 
 [dependencies.regex]
