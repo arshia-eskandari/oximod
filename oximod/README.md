@@ -234,6 +234,7 @@ let collection = User::get_document_collection()?;
 | `positive` | > 0 |
 | `negative` | < 0 |
 | `non_negative` | ≥ 0 |
+| `non_positive` | ≤ 0 |
 
 ### Integer
 
@@ -408,6 +409,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+For more examples, feel free to check out out [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
 
 ---
 
