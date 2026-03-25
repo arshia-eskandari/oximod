@@ -397,3 +397,199 @@ async fn test_non_positive_fails_non_optional() -> TestResult {
     assert!(format!("{:?}", result).contains("non-positive"));
     Ok(())
 }
+
+// Run test: cargo nextest run test_positive_passes_f64
+#[tokio::test]
+async fn test_positive_passes_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_positive_pass_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(positive)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(42.5);
+    let result = doc.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}
+
+// Run test: cargo nextest run test_positive_fails_f64
+#[tokio::test]
+async fn test_positive_fails_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_positive_fail_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(positive)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(0.0);
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("positive"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_negative_passes_f64
+#[tokio::test]
+async fn test_negative_passes_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_negative_pass_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(negative)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(-42.5);
+    let result = doc.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}
+
+// Run test: cargo nextest run test_negative_fails_f64
+#[tokio::test]
+async fn test_negative_fails_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_negative_fail_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(negative)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(1.0);
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("negative"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_negative_passes_f64
+#[tokio::test]
+async fn test_non_negative_passes_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_non_negative_pass_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(non_negative)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(0.0);
+    let result = doc.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_negative_fails_f64
+#[tokio::test]
+async fn test_non_negative_fails_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_non_negative_fail_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(non_negative)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(-1.0);
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("non-negative"));
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_positive_passes_f64
+#[tokio::test]
+async fn test_non_positive_passes_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_non_positive_pass_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(non_positive)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(0.0);
+    let result = doc.save().await?;
+    assert_ne!(result, ObjectId::default());
+    Ok(())
+}
+
+// Run test: cargo nextest run test_non_positive_fails_f64
+#[tokio::test]
+async fn test_non_positive_fails_f64() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("validate_non_positive_fail_f64")]
+    struct NumericValidation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(non_positive)]
+        value: f64,
+    }
+
+    NumericValidation::clear().await?;
+
+    let doc = NumericValidation::default().value(1.0);
+    let result = doc.save().await;
+    assert!(result.is_err());
+    assert!(format!("{:?}", result).contains("non-positive"));
+    Ok(())
+}

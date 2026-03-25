@@ -86,10 +86,17 @@ pub fn build_signed_number_checks(
     build_checks: &mut BuiltChecks,
     validate_args: &ValidateArgs,
     field_name_lit: &syn::LitStr,
+    is_integer: bool,
 ) {
+    let zero = if is_integer {
+        quote! { 0 }
+    } else {
+        quote! { 0.0 }
+    };
+
     if validate_args.positive {
         build_checks.field_rules_val.push(quote! {
-            if *val <= 0 {
+            if *val <= #zero {
                 return Err(
                     ::oximod::OxiModError::validation(
                         format!("Field '{}' must be positive", #field_name_lit)
@@ -101,7 +108,7 @@ pub fn build_signed_number_checks(
 
     if validate_args.negative {
         build_checks.field_rules_val.push(quote! {
-            if *val >= 0 {
+            if *val >= #zero {
                 return Err(
                     ::oximod::OxiModError::validation(
                         format!("Field '{}' must be negative", #field_name_lit)
@@ -113,7 +120,7 @@ pub fn build_signed_number_checks(
 
     if validate_args.non_negative {
         build_checks.field_rules_val.push(quote! {
-            if *val < 0 {
+            if *val < #zero {
                 return Err(
                     ::oximod::OxiModError::validation(
                         format!("Field '{}' must be non-negative", #field_name_lit)
@@ -125,7 +132,7 @@ pub fn build_signed_number_checks(
 
     if validate_args.non_positive {
         build_checks.field_rules_val.push(quote! {
-            if *val > 0 {
+            if *val > #zero {
                 return Err(
                     ::oximod::OxiModError::validation(
                         format!("Field '{}' must be non-positive", #field_name_lit)

@@ -69,7 +69,12 @@ pub fn generate_validate_model_tokens(
                 );
             });
     } else {
-        build_signed_number_checks(&mut build_checks, &validate_args, &field_name_lit);
+        build_signed_number_checks(
+            &mut build_checks,
+            &validate_args,
+            &field_name_lit,
+            is_integer(&prim),
+        );
     }
 
     if validate_args.must_be_integer() && !is_integer(&prim) {
