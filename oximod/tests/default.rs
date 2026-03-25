@@ -18,7 +18,7 @@ async fn saves_with_default_string_and_number() -> TestResult {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
 
-        #[default("Anonymous".to_string())]
+        #[default("Anonymous")]
         name: String,
 
         #[default(0)]
@@ -51,7 +51,7 @@ async fn override_default_values() -> TestResult {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
 
-        #[default("Guest".to_string())]
+        #[default("Guest")]
         user: String,
 
         #[default(1)]
