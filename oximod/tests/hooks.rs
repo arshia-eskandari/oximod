@@ -315,3 +315,96 @@ async fn test_pre_save_hook_error_aborts_save() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run test_pre_save_custom_error_aborts_save
+#[tokio::test]
+async fn test_pre_save_custom_error_aborts_save() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("hooks_test_pre_save_custom_error_aborts_save")]
+    #[hooks]
+    struct Log {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        message: String,
+    }
+
+    #[async_trait::async_trait]
+    impl Hooks for Log {
+        async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
+            Err(oximod::OxiModError::custom(
+                "pre_save rejected the operation with a custom error",
+            ))
+        }
+    }
+
+    Log::clear().await?;
+
+    let log = Log::default().message("should fail");
+    let err = log.save().await;
+
+    assert!(err.is_err());
+    assert!(format!("{:?}", err).contains("pre_save rejected the operation with a custom error"));
+
+    let count = Log::count(doc! {}).await?;
+    assert_eq!(count, 0);
+
+    Ok(())
+}
+
+// Run test: cargo nextest run test_pre_update_custom_error_aborts_update
+#[tokio::test]
+async fn test_pre_update_custom_error_aborts_update() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("hooks_test_pre_update_custom_error_aborts_update")]
+    #[hooks]
+    struct Log {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        message: String,
+    }
+
+    #[async_trait::async_trait]
+    impl Hooks for Log {
+        async fn pre_update(
+            id: ObjectId,
+            update: &mongodb::bson::Document,
+        ) -> Result<(), oximod::OxiModError> {
+            assert_ne!(id, ObjectId::default());
+            assert!(update.contains_key("$set"));
+
+            Err(oximod::OxiModError::custom(
+                "pre_update rejected the operation with a custom error",
+            ))
+        }
+    }
+
+    Log::clear().await?;
+
+    let id = Log::default().message("before").save().await?;
+
+    let result = Log::update_by_id(
+        id,
+        doc! {
+            "$set": {
+                "message": "after"
+            }
+        },
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert!(
+        format!("{:?}", result).contains("pre_update rejected the operation with a custom error")
+    );
+
+    let found = Log::find_by_id(id).await?.expect("log should exist");
+    assert_eq!(found.message, "before");
+
+    Ok(())
+}

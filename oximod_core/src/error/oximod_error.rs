@@ -32,7 +32,7 @@ pub enum OxiModError {
     Connection {
         /// Human-readable context describing *what* was being attempted.
         msg: String,
-        /// The underlying driver or IO error.
+        /// The underlying error.
         #[source]
         source: BoxError,
     },
@@ -67,7 +67,7 @@ pub enum OxiModError {
     Serialization {
         /// Human-readable context describing the serialization step that failed.
         msg: String,
-        /// The underlying BSON/serde error.
+        /// The underlying error.
         #[source]
         source: BoxError,
     },
@@ -82,7 +82,7 @@ pub enum OxiModError {
     Aggregation {
         /// Human-readable context describing the aggregation step that failed.
         msg: String,
-        /// The underlying MongoDB error.
+        /// The underlying error.
         #[source]
         source: BoxError,
     },
@@ -98,7 +98,7 @@ pub enum OxiModError {
     Index {
         /// Human-readable context describing the index operation that failed.
         msg: String,
-        /// The underlying MongoDB error.
+        /// The underlying error.
         #[source]
         source: BoxError,
     },
@@ -119,11 +119,41 @@ pub enum OxiModError {
         msg: String,
     },
 
+    /// Error returned when a database operation fails.
+    ///
+    /// This variant is used when an operation involving MongoDB fails,
+    /// such as insert, update, delete, find, aggregation, or other
+    /// driver-level calls.
+    ///
+    /// The underlying error produced by the MongoDB driver or runtime
+    /// is stored as the source.
     #[error("Database operation failed: {msg}")]
     Database {
+        /// A human-readable description of the database error.
         msg: String,
+        /// The underlying error.
         #[source]
         source: BoxError,
+    },
+
+    /// Error returned from user-defined logic.
+    ///
+    /// This variant is intended for errors originating from user code,
+    /// such as hooks, custom validators, or other application-specific
+    /// logic executed during model operations.
+    ///
+    /// Unlike other variants, which represent errors produced internally
+    /// by OxiMod, this variant allows users to return domain-specific
+    /// failures while still using the `OxiModError` type.
+    ///
+    /// A source error may optionally be attached.
+    #[error("Custom error: {msg}")]
+    Custom {
+        /// A human-readable description of the error.
+        msg: String,
+        /// The underlying error.
+        #[source]
+        source: Option<BoxError>,
     },
 }
 
@@ -180,6 +210,22 @@ impl OxiModError {
         Self::Database {
             msg: msg.into(),
             source: source.into(),
+        }
+    }
+
+    /// Creates a custom error without a source.
+    pub fn custom(msg: impl Into<String>) -> Self {
+        Self::Custom {
+            msg: msg.into(),
+            source: None,
+        }
+    }
+
+    /// Creates a custom error with an underlying source error.
+    pub fn custom_with_source(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::Custom {
+            msg: msg.into(),
+            source: Some(source.into()),
         }
     }
 }
