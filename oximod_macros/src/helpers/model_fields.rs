@@ -83,7 +83,7 @@ pub fn generate_field_tokens(
                         syn::Error::new_spanned(attr, format!("Invalid #[default]: {err}"))
                             .to_compile_error()
                     })?;
-                    init_expr = quote! { #default_expr };
+                    init_expr = quote! { (#default_expr).into() };
                 }
             }
 
