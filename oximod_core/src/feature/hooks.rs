@@ -163,19 +163,26 @@ where
     ///
     /// This hook is invoked after the mutable save workflow completes.
     ///
-    /// This variant is useful when the save operation was performed with
-    /// mutable access to the model and post-processing needs to observe
-    /// the possibly modified state.
+    /// This variant allows mutation of the model instance. Any changes made
+    /// to `self` will affect the in-memory state of the model after the save
+    /// operation.
+    ///
+    /// This is useful when post-processing needs to update derived fields,
+    /// normalize values further, or attach additional runtime metadata based
+    /// on the persisted data.
     ///
     /// Typical uses:
     ///
     /// - logging normalized values,
     /// - emitting events based on updated fields,
+    /// - updating derived or cached fields,
     /// - triggering follow-up actions that depend on mutations done in
     ///   [`Hooks::pre_save_mut`].
     ///
     /// Note that by the time this hook runs, the underlying database
-    /// operation has already completed.
+    /// operation has already completed. Mutations performed in this hook
+    /// are **not automatically persisted** to the database unless the model
+    /// is explicitly saved again.
     ///
     /// # Returns
     ///
@@ -184,7 +191,7 @@ where
     /// # Errors
     ///
     /// Returns [`OxiModError`] if post-save processing fails.
-    async fn post_save_mut(&self) -> Result<(), OxiModError> {
+    async fn post_save_mut(&mut self) -> Result<(), OxiModError> {
         Ok(())
     }
 

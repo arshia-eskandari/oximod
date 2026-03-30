@@ -51,7 +51,7 @@ impl Hooks for Log {
         Ok(())
     }
 
-    async fn post_save_mut(&self) -> Result<(), oximod::OxiModError> {
+    async fn post_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
         println!(
             "✅ post_save_mut: mutable save completed for '{}' (normalized = {})",
             self.message, self.normalized

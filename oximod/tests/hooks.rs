@@ -99,7 +99,7 @@ async fn test_save_mut_runs_mut_hooks_and_mutates_state() -> TestResult {
             Ok(())
         }
 
-        async fn post_save_mut(&self) -> Result<(), oximod::OxiModError> {
+        async fn post_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
             POST_SAVE_MUT_CALLS.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
