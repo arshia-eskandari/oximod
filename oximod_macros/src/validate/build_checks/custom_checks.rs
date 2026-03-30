@@ -16,16 +16,9 @@ pub fn build_custom_check(
 
     build_checks.field_rules_val.push(quote! {
         {
-            fn __oximod_check_validator<T, E>(
-                f: fn(&T) -> ::std::result::Result<(), E>,
-                value: &T,
-            ) -> ::std::result::Result<(), E> {
-                f(value)
-            }
-
             let __oximod_val: &#validated_ty = val;
 
-            __oximod_check_validator::<#validated_ty, _>(#custom_path, __oximod_val)
+            #custom_path(__oximod_val)
                 .map_err(|e| ::oximod::OxiModError::validation(e.to_string()))?;
         }
     });

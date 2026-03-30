@@ -18,7 +18,7 @@ pub enum Role {
 mod validators {
     use super::{Cow, HashMap, HashSet, Role};
 
-    pub fn validate_name(value: &String) -> Result<(), String> {
+    pub fn validate_name(value: &str) -> Result<(), String> {
         if value.trim().is_empty() {
             return Err("name cannot be blank".into());
         }
@@ -54,7 +54,7 @@ mod validators {
         Ok(())
     }
 
-    pub fn validate_tags(value: &Vec<String>) -> Result<(), String> {
+    pub fn validate_tags(value: &[String]) -> Result<(), String> {
         if value.is_empty() {
             return Err("tags cannot be empty".into());
         }
@@ -81,7 +81,7 @@ mod validators {
         }
     }
 
-    pub fn validate_nested_scores(value: &Vec<Vec<i32>>) -> Result<(), String> {
+    pub fn validate_nested_scores(value: &[Vec<i32>]) -> Result<(), String> {
         if value.is_empty() {
             return Err("scores cannot be empty".into());
         }
