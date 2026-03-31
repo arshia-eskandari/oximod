@@ -53,7 +53,6 @@ This ensures:
 | `get_collection()` | `fn get_collection() -> Result<Collection<Self>, OxiModError>` | Returns the typed `mongodb::Collection<Self>` for performing advanced or custom queries. |
 | `get_document_collection()` | `fn get_document_collection() -> Result<Collection<Document>, OxiModError>` | Returns the raw `mongodb::Collection<Document>` for working directly with BSON when full flexibility is needed. |
 
----
 
 ### Identity Helpers
 
@@ -63,7 +62,6 @@ This ensures:
 | `update_by_id()` | `async fn update_by_id(id: ObjectId, update: Document) -> Result<UpdateResult, OxiModError>` | Updates a document by `_id` using a MongoDB update document (e.g., `$set`). Returns an `UpdateResult` describing the operation. |
 | `delete_by_id()` | `async fn delete_by_id(id: ObjectId) -> Result<DeleteResult, OxiModError>` | Deletes a document by `_id`. Returns a `DeleteResult` indicating whether a document was removed. |
 
----
 
 ### Utilities
 
@@ -73,6 +71,7 @@ This ensures:
 | `count()` | `async fn count(filter: Document) -> Result<u64, OxiModError>` | Counts the number of documents matching the given filter and returns the total. |
 
 ---
+
 ## Builder API
 
 OxiMod generates builder-style setter methods for models, making it easier to construct documents in a fluent and readable way.
@@ -127,6 +126,7 @@ The builder API provides a fluent and ergonomic way to construct model instances
   By default, the generated setter for `_id` is `id()`. You can rename it with `#[document_id_setter_ident("id_setter")]` when a custom method name better fits your API.
 
 ---
+
 ## Client Usage
 
 OxiMod supports two client access patterns: a **global client** for simple application-wide usage, and an **explicit client** for cases where you want more control over how connections are managed.
@@ -181,11 +181,10 @@ Used for:
 | Explicit client | Tests, multi-tenant systems, dependency injection, and cases where you want to avoid relying on global state. |
 
 ---
+
 ## Collections
 
 OxiMod provides two ways to access MongoDB collections: **typed collections** for type-safe operations and **raw collections** for full flexibility.
-
----
 
 ### Typed
 
@@ -202,8 +201,6 @@ Returns `mongodb::Collection<Self>`, enabling type-safe queries and automatic (d
 | `get_collection()` | `fn get_collection() -> Result<Collection<Self>, OxiModError>` | Gets the typed collection using the global client. |
 | `get_collection_from()` | `fn get_collection_from(client: &Client) -> Result<Collection<Self>, OxiModError>` | Gets the typed collection using an explicit client. |
 
----
-
 ### Raw
 
 ```rust
@@ -218,8 +215,6 @@ Returns `mongodb::Collection<Document>`, allowing direct interaction with BSON d
 |------|-----------|------------|
 | `get_document_collection()` | `fn get_document_collection() -> Result<Collection<Document>, OxiModError>` | Gets the raw collection using the global client. |
 | `get_document_collection_from()` | `fn get_document_collection_from(client: &Client) -> Result<Collection<Document>, OxiModError>` | Gets the raw collection using an explicit client. |
-
----
 
 ### When to use each
 
