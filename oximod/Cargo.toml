@@ -1,6 +1,6 @@
 [package]
 name = "oximod"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "MongoDB ODM for Rust inspired by Mongoose"
