@@ -38,14 +38,95 @@ This ensures:
 - zero feature lock-in  
 - full MongoDB flexibility  
 - long-term maintainability  
+---
+
+## Example
+
+```rust
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{Hooks, Model, OxiClient, OxiModError};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[db("my_app_db")]
+#[collection("users")]
+#[document_id_setter_ident("id_setter")]
+#[hooks]
+struct User {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    _id: Option<ObjectId>,
+
+    #[index(unique, name = "email_idx", case_insensitive)]
+    #[validate(email)]
+    email: String,
+
+    #[validate(min_length = 3, max_length = 32)]
+    name: String,
+
+    #[validate(non_negative, min = 18)]
+    age: i32,
+
+    #[default(false)]
+    active: bool,
+}
+
+#[async_trait::async_trait]
+impl Hooks for User {
+    async fn pre_save_mut(&mut self) -> Result<(), OxiModError> {
+        self.email = self.email.trim().to_lowercase();
+        self.name = self.name.trim().to_string();
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::dotenv().ok();
+    let uri = std::env::var("MONGODB_URI")?;
+    OxiClient::init_global(uri).await?;
+
+    User::clear().await?;
+
+    // Builder API with Into<T> support and defaults
+    let mut user = User::new()
+        .email("  ALICE@EXAMPLE.COM  ")
+        .name("Alice")
+        .age(30);
+
+    // save_mut() runs mutable hooks before persistence
+    let id = user.save_mut().await?;
+    println!("Inserted user: {}", id);
+
+    let found = User::find_by_id(id).await?;
+    println!("Found user: {found:#?}");
+
+    User::update_by_id(id, doc! { "$set": { "active": true } }).await?;
+
+    let active_exists = User::exists(doc! { "active": true }).await?;
+    let total = User::count(doc! {}).await?;
+    println!("Any active users? {}", active_exists);
+    println!("Total users: {}", total);
+
+    // Access the typed MongoDB collection directly when needed
+    let collection = User::get_collection()?;
+    let active_users = collection.count_documents(doc! { "active": true }).await?;
+    println!("Active users counted via driver: {}", active_users);
+
+    Ok(())
+}
+```
+
+For more examples, feel free to check out the [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
 
 ---
 
 ## Model API
 
+The following methods are automatically generated when deriving the `Model` macro and provide a typed interface for interacting with your MongoDB collection.
+
 ### Core
 
-| Method | Signature | Description |
+| Method/Associated Function | Signature | Description |
 |------|-----------|------------|
 | `save()` | `async fn save(&self) -> Result<ObjectId, OxiModError>` | Inserts the current model instance into the database. Runs validation and non-mutable hooks, and returns the inserted document’s `_id`. |
 | `save_mut()` | `async fn save_mut(&mut self) -> Result<ObjectId, OxiModError>` | Inserts the model while allowing mutable hooks to modify it before persistence. Returns the inserted document’s `_id`. |
@@ -56,7 +137,7 @@ This ensures:
 
 ### Identity Helpers
 
-| Method | Signature | Description |
+| Associated Function | Signature | Description |
 |------|-----------|------------|
 | `find_by_id()` | `async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OxiModError>` | Fetches a document by its `_id`. Returns `Some(model)` if found, otherwise `None`. |
 | `update_by_id()` | `async fn update_by_id(id: ObjectId, update: Document) -> Result<UpdateResult, OxiModError>` | Updates a document by `_id` using a MongoDB update document (e.g., `$set`). Returns an `UpdateResult` describing the operation. |
@@ -65,7 +146,7 @@ This ensures:
 
 ### Utilities
 
-| Method | Signature | Description |
+| Associated Function | Signature | Description |
 |------|-----------|------------|
 | `exists()` | `async fn exists(filter: Document) -> Result<bool, OxiModError>` | Checks if at least one document matches the given filter. Returns `true` if a match exists. |
 | `count()` | `async fn count(filter: Document) -> Result<u64, OxiModError>` | Counts the number of documents matching the given filter and returns the total. |
@@ -164,7 +245,7 @@ Used for:
 
 ### OxiClient API
 
-| Method | Signature | Description |
+| Method/Associated Function | Signature | Description |
 |------|-----------|------------|
 | `new()` | `async fn new(url: String) -> Result<OxiClient, OxiModError>` | Creates a new `OxiClient` instance by connecting to MongoDB using the provided connection string. The resulting client stores a local `mongodb::Client` internally. |
 | `init_client()` | `async fn init_client(&mut self, mongo_uri: String) -> Result<(), OxiModError>` | Initializes or replaces the local MongoDB client stored inside an existing `OxiClient` instance. |
@@ -196,7 +277,7 @@ Returns `mongodb::Collection<Self>`, enabling type-safe queries and automatic (d
 
 #### API
 
-| Method | Signature | Description |
+| Method/Associated Function | Signature | Description |
 |------|-----------|------------|
 | `get_collection()` | `fn get_collection() -> Result<Collection<Self>, OxiModError>` | Gets the typed collection using the global client. |
 | `get_collection_from()` | `fn get_collection_from(client: &Client) -> Result<Collection<Self>, OxiModError>` | Gets the typed collection using an explicit client. |
@@ -211,7 +292,7 @@ Returns `mongodb::Collection<Document>`, allowing direct interaction with BSON d
 
 #### API
 
-| Method | Signature | Description |
+| Associated Function | Signature | Description |
 |------|-----------|------------|
 | `get_document_collection()` | `fn get_document_collection() -> Result<Collection<Document>, OxiModError>` | Gets the raw collection using the global client. |
 | `get_document_collection_from()` | `fn get_document_collection_from(client: &Client) -> Result<Collection<Document>, OxiModError>` | Gets the raw collection using an explicit client. |
@@ -230,14 +311,12 @@ Returns `mongodb::Collection<Document>`, allowing direct interaction with BSON d
 OxiMod uses attributes to configure how your models behave at compile time.  
 Struct-level attributes define how your model maps to MongoDB and how certain features (like indexes and hooks) behave.
 
----
-
-### Struct-Level
+### Struct-level
 
 | Attribute | Description |
 |----------|------------|
-| `#[db("name")]` | Specifies the MongoDB database name where this model will be stored. This is required for resolving the correct database at runtime. |
-| `#[collection("name")]` | Defines the MongoDB collection name associated with the model. All operations (save, query, delete) will target this collection. |
+| `#[db("name")]` | **Required**. Specifies the MongoDB database name where this model will be stored. This is required for resolving the correct database at runtime. |
+| `#[collection("name")]` | **Required**. Defines the MongoDB collection name associated with the model. All operations (save, query, delete) will target this collection. |
 | `#[document_id_setter_ident("id_setter")]` | Renames the generated builder setter for the `_id` field. By default, the setter is `id()`, but this allows you to customize it (e.g., `id_setter()`). |
 | `#[index_max_retries(N)]` | Sets how many times OxiMod will retry index creation during initialization. Useful for handling transient database issues during startup. |
 | `#[index_max_init_seconds(N)]` | Specifies the maximum time (in seconds) allowed for index initialization before timing out. Helps prevent long startup delays. |
@@ -258,9 +337,8 @@ struct User {
     name: String,
 }
 ```
----
 
-### Field-Level
+### Field-level
 
 #### Indexing
 
@@ -297,9 +375,9 @@ These options let you define common index behavior close to the field itself, wi
 
 | Attribute | Description |
 |----------|------------|
-| `version` | Sets the version of a standard index structure when supported by MongoDB. |
-| `text_index_version` | Sets the version of a text index. Only meaningful with `text`. |
-| `geo_2dsphere_index_version` | Sets the version of a 2dsphere index. Only meaningful with `geo_2dsphere`. |
+| `version = N` | Sets the version of a standard index structure when supported by MongoDB. |
+| `text_index_version = N` | Sets the version of a text index. Only meaningful with `text`. |
+| `geo_2dsphere_index_version = N` | Sets the version of a 2dsphere index. Only meaningful with `geo_2dsphere`. |
 | `weight = N` | Assigns a weight to a text-indexed field to influence text search scoring. |
 | `default_language = "..."` | Sets the default language used by a text index. |
 | `language_override = "..."` | Specifies the document field that overrides the default text index language. |
@@ -326,8 +404,6 @@ location: GeoJsonPoint,
 - These options are meant to cover common field-level index needs in a compact way.
 - Specialized index types such as `text`, `hashed`, `wildcard`, `geo_2dsphere`, and `geo_2d` are generally used one at a time per field.
 - Some options only make sense with specific index types. For example, `weight` applies to `text`, while `bits`, `min`, and `max` apply to `geo_2d`.
-
----
 
 #### Validation
 
@@ -431,8 +507,6 @@ struct User {
 }
 ```
 
----
-
 #### Defaults
 
 Use `#[default(...)]` to assign a default value to a field when it is not explicitly set through the builder.
@@ -495,8 +569,6 @@ let user = User::new();
 
 - Defaults reduce boilerplate by eliminating the need to manually initialize common values.
 - They are applied before validation, so validation rules still apply to defaulted values.
-
----
 
 #### Hooks
 
@@ -577,84 +649,6 @@ impl Hooks for Log {
     }
 }
 ```
-
----
-
-## Complete Example
-
-```rust
-use mongodb::bson::{doc, oid::ObjectId};
-use oximod::{Model, OxiClient};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, Model)]
-#[db("my_app_db")]
-#[collection("users")]
-struct User {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    _id: Option<ObjectId>,
-
-    #[index(unique, name = "email_idx")]
-    #[validate(email)]
-    email: String,
-
-    #[validate(min_length = 3, max_length = 32)]
-    name: String,
-
-    #[validate(non_negative)]
-    age: i32,
-
-    #[default(false)]
-    active: bool,
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize global client
-    dotenv::dotenv().ok();
-    let uri = std::env::var("MONGODB_URI")?;
-    OxiClient::init_global(uri).await?;
-
-    // Clear collection
-    User::clear().await?;
-
-    // Build model using builder API
-    let user = User::new()
-        .email("alice@example.com")
-        .name("Alice")
-        .age(30)
-        .active(true);
-
-    // Save document
-    let id = user.save().await?;
-    println!("Inserted user: {}", id);
-
-    // Find by id
-    if let Some(found) = User::find_by_id(id).await? {
-        println!("Found user: {}", found.name);
-    }
-
-    // Count documents
-    let count = User::count(doc! {}).await?;
-    println!("Total users: {}", count);
-
-    // Use MongoDB driver directly
-    let collection = User::get_collection()?;
-
-    collection
-        .update_one(
-            doc! { "_id": id },
-            doc! { "$set": { "active": false } },
-        )
-        .await?;
-
-    println!("User updated");
-
-    Ok(())
-}
-```
-
-For more examples, feel free to check out the [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
 
 ---
 
