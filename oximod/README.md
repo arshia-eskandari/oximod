@@ -131,6 +131,7 @@ The following methods are automatically generated when deriving the `Model` macr
 | `save()` | `async fn save(&self) -> Result<ObjectId, OxiModError>` | Inserts the current model instance into the database. Runs validation and non-mutable hooks, and returns the inserted document’s `_id`. |
 | `save_mut()` | `async fn save_mut(&mut self) -> Result<ObjectId, OxiModError>` | Inserts the model while allowing mutable hooks to modify it before persistence. Returns the inserted document’s `_id`. |
 | `clear()` | `async fn clear() -> Result<DeleteResult, OxiModError>` | Deletes all documents in the model’s collection. Returns a `DeleteResult` indicating how many documents were removed. |
+| `validate()` | `fn validate(&self) -> Result<(), OxiModError>` | Validates the model instance against all defined validation rules. Returns `Ok(())` if valid, or a `Validation` error containing all field violations. |
 | `get_collection()` | `fn get_collection() -> Result<Collection<Self>, OxiModError>` | Returns the typed `mongodb::Collection<Self>` for performing advanced or custom queries. |
 | `get_document_collection()` | `fn get_document_collection() -> Result<Collection<Document>, OxiModError>` | Returns the raw `mongodb::Collection<Document>` for working directly with BSON when full flexibility is needed. |
 

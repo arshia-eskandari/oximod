@@ -81,7 +81,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         Err(e) => return e.into(),
     };
 
-    let model_token = generate_model_token(name, &db, &collection, hooks);
+    let model_token = generate_model_token(name, &db, &collection, hooks, validations);
 
     let expanded = quote! {
         static #index_once_async_ident: ::oximod::_helpers::once_async::OnceAsync =
@@ -91,12 +91,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             );
 
         impl #name {
-            #[inline]
-            fn validate(&self) -> Result<(), ::oximod::OxiModError> {
-                #(#validations)*
-                Ok(())
-            }
-
             #[doc(hidden)]
             #[cold]
             #[inline(never)]
@@ -145,8 +139,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
                 match result.inserted_id.as_object_id() {
                     Some(id) => Ok(id),
                     None => Err(
-                        ::oximod::OxiModError::validation(
-                            "MongoDB returned a non-ObjectId inserted_id"
+                        ::oximod::OxiModError::database(
+                            "MongoDB returned a non-ObjectId inserted_id",
+                            ::std::io::Error::other("inserted_id was not an ObjectId"),
                         )
                     )
                 }

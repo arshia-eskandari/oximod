@@ -11,11 +11,10 @@ pub fn build_option_checks(
     if validate_args.required {
         build_checks.field_rules_direct.push(quote! {
             if self.#field_ident.is_none() {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!("Field '{}' is required", #field_name_lit)
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    "is required",
+                ));
             }
         });
     }
