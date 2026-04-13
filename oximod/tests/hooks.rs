@@ -296,7 +296,7 @@ async fn test_pre_save_hook_error_aborts_save() -> TestResult {
     #[async_trait::async_trait]
     impl Hooks for Log {
         async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
-            Err(oximod::OxiModError::validation(
+            Err(oximod::OxiModError::custom(
                 "pre_save rejected the operation",
             ))
         }

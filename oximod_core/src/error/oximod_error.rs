@@ -8,6 +8,57 @@ use thiserror::Error;
 /// - downstream applications that need error chaining via `source()`
 pub type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 
+/// Represents a validation failure for a specific model field.
+///
+/// Each `ValidationError` contains:
+/// - the name of the field that failed validation
+/// - a human-readable message describing the violation
+///
+/// This type is typically returned as part of
+/// `OxiModError::Validation(Vec<ValidationError>)`.
+#[derive(Debug, Default)]
+pub struct ValidationError {
+    pub field: String,
+    pub message: String,
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.field, self.message)
+    }
+}
+
+impl ValidationError {
+    pub fn new(field: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            field: field.into(),
+            message: message.into(),
+        }
+    }
+}
+
+/// Represents all validation errors for all fields on a model
+#[derive(Debug)]
+pub struct ValidationErrors(pub Vec<ValidationError>);
+
+impl ValidationErrors {
+    pub fn new(validation_errors: impl Into<Vec<ValidationError>>) -> Self {
+        Self(validation_errors.into())
+    }
+}
+
+impl std::fmt::Display for ValidationErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, err) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, "; ")?;
+            }
+            write!(f, "{err}")?;
+        }
+        Ok(())
+    }
+}
+
 /// Represents all possible errors returned by OxiMod during database operations.
 ///
 /// # Design goals
@@ -113,11 +164,8 @@ pub enum OxiModError {
     ///
     /// This variant intentionally has no `source` because validation failures
     /// are domain errors, not driver/system errors.
-    #[error("Validation error: {msg}")]
-    Validation {
-        /// A human-readable description of the violated rule.
-        msg: String,
-    },
+    #[error("Validation errors: {0}")]
+    Validation(ValidationErrors),
 
     /// Error returned when a database operation fails.
     ///
@@ -200,9 +248,14 @@ impl OxiModError {
         }
     }
 
-    /// Create a `Validation` error with a message.
-    pub fn validation(msg: impl Into<String>) -> Self {
-        Self::Validation { msg: msg.into() }
+    /// Creates a validation error for a single field.
+    pub fn validation(field: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::Validation(ValidationErrors(vec![ValidationError::new(field, message)]))
+    }
+
+    /// Creates a validation error containing multiple field failures.
+    pub fn validations(errors: Vec<ValidationError>) -> Self {
+        Self::Validation(ValidationErrors(errors))
     }
 
     /// Create a `Database` error with a message and an underlying source error.
@@ -226,6 +279,20 @@ impl OxiModError {
         Self::Custom {
             msg: msg.into(),
             source: Some(source.into()),
+        }
+    }
+
+    /// Returns all validation errors if this is a `Validation` error.
+    ///
+    /// This provides convenient access to the underlying field-level
+    /// validation failures without requiring pattern matching.
+    ///
+    /// Returns `Some(&[ValidationError])` if the error is of type
+    /// `OxiModError::Validation`, otherwise `None`.
+    pub fn validation_errors(&self) -> Option<&[ValidationError]> {
+        match self {
+            Self::Validation(errors) => Some(&errors.0),
+            _ => None,
         }
     }
 }

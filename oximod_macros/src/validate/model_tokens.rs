@@ -154,7 +154,13 @@ pub fn generate_validate_model_tokens(
         );
     }
 
-    build_custom_check(&mut build_checks, &validate_args, field_ty, opt_inner);
+    build_custom_check(
+        &mut build_checks,
+        &validate_args,
+        field_ty,
+        opt_inner,
+        &field_name_lit,
+    );
 
     if !build_checks.numeric_checks.is_empty() {
         let numeric_checks = build_checks.numeric_checks;

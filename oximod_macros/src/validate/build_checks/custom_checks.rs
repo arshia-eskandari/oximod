@@ -1,12 +1,13 @@
 use super::super::args::{BuiltChecks, ValidateArgs};
 use quote::quote;
-use syn::Type;
+use syn::{LitStr, Type};
 
 pub fn build_custom_check(
     build_checks: &mut BuiltChecks,
     validate_args: &ValidateArgs,
     field_ty: &Type,
     opt_inner: Option<&Type>,
+    field_name_lit: &LitStr,
 ) {
     let Some(custom_path) = &validate_args.custom else {
         return;
@@ -18,8 +19,12 @@ pub fn build_custom_check(
         {
             let __oximod_val: &#validated_ty = val;
 
-            #custom_path(__oximod_val)
-                .map_err(|e| ::oximod::OxiModError::validation(e.to_string()))?;
+            if let Err(e) = #custom_path(__oximod_val) {
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    e.to_string(),
+                ));
+            }
         }
     });
 }

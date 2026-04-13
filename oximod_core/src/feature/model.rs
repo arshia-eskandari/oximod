@@ -624,4 +624,18 @@ where
         let client: &Client = client_arc.as_ref();
         Self::count_from(filter, client).await
     }
+
+    /// Performs validation on a model instance using inline checks and user-defined validators.
+    ///
+    /// # Returns
+    ///
+    /// The unit value () if all validations pass.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - inlines checks fail
+    /// - user-defined validators fail
+    fn validate(&self) -> Result<(), OxiModError>;
 }

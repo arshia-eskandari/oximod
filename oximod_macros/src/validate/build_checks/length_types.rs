@@ -10,15 +10,10 @@ pub fn build_length_checks(
     if let Some(min_length) = validate_args.min_length {
         build_checks.field_rules_val.push(quote! {
             if val.len() < (#min_length as usize) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must have a length of at least {}",
-                            #field_name_lit,
-                            #min_length
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    format!("must have a length of at least {}", #min_length),
+                ));
             }
         });
     }
@@ -26,15 +21,10 @@ pub fn build_length_checks(
     if let Some(max_length) = validate_args.max_length {
         build_checks.field_rules_val.push(quote! {
             if val.len() > (#max_length as usize) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must have a length of at most {}",
-                            #field_name_lit,
-                            #max_length
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    format!("must have a length of at most {}", #max_length),
+                ));
             }
         });
     }
@@ -45,13 +35,13 @@ pub fn build_length_checks(
         } else {
             quote! { val.len() == 0 }
         };
+
         build_checks.field_rules_val.push(quote! {
             if #condition {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!("Field '{}' must be non-empty", #field_name_lit)
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    "must be non-empty",
+                ));
             }
         });
     }

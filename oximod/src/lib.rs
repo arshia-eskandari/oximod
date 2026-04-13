@@ -90,6 +90,12 @@
 /// hook execution, client initialization, or MongoDB driver errors.
 pub use oximod_core::error::oximod_error::OxiModError;
 
+/// Represents a validation failure for a specific model field.
+pub use oximod_core::error::oximod_error::ValidationError;
+
+/// Represents one or more validation failures collected during model validation.
+pub use oximod_core::error::oximod_error::ValidationErrors;
+
 /// MongoDB client wrapper used by OxiMod.
 ///
 /// `OxiClient` supports both global and explicit-client workflows.

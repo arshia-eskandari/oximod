@@ -2,7 +2,13 @@ use crate::model_macro::{HookTokens, generate_hook_tokens};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
-pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: bool) -> TokenStream {
+pub fn generate_model_token(
+    name: &Ident,
+    db: &str,
+    collection: &str,
+    hooks: bool,
+    validations: Vec<TokenStream>,
+) -> TokenStream {
     let HookTokens {
         pre_save,
         post_save,
@@ -26,6 +32,18 @@ pub fn generate_model_token(name: &Ident, db: &str, collection: &str, hooks: boo
     quote! {
         #[::oximod::_async_trait::async_trait]
         impl ::oximod::_feature::model::Model for #name {
+            #[inline]
+            fn validate(&self) -> Result<(), ::oximod::OxiModError> {
+                let mut validation_errors = Vec::new();
+
+                #(#validations)*
+
+                if validation_errors.is_empty() {
+                    Ok(())
+                } else {
+                    Err(::oximod::OxiModError::validations(validation_errors))
+                }
+            }
 
             fn get_collection_from(client: &::oximod::_mongodb::Client) -> Result<
                 ::oximod::_mongodb::Collection<Self>,

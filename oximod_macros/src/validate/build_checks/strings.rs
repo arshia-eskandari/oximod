@@ -24,14 +24,10 @@ pub fn build_string_checks(
             let __re = #re_ident.get_or_init(|| ::oximod::_regex::Regex::new(#email_pat).unwrap());
 
             if !__re.is_match(val) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must be a valid email address",
-                            #field_name_lit
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    "must be a valid email address",
+                ));
             }
         });
     }
@@ -51,7 +47,6 @@ pub fn build_string_checks(
             }
             _ => {
                 let pattern_lit = syn::LitStr::new(pattern, field_ident.span());
-
                 let re_ident = format_ident!("__oximod_re_{}_{}", struct_ident, field_ident);
 
                 build_checks.field_rules_val.push(quote! {
@@ -63,14 +58,10 @@ pub fn build_string_checks(
                         .get_or_init(|| ::oximod::_regex::Regex::new(#pattern_lit).unwrap());
 
                     if !regex.is_match(val) {
-                        return Err(
-                            ::oximod::OxiModError::validation(
-                                format!(
-                                    "Field '{}' does not match the required pattern",
-                                    #field_name_lit
-                                )
-                            )
-                        );
+                        validation_errors.push(::oximod::ValidationError::new(
+                            #field_name_lit,
+                            "does not match the required pattern",
+                        ));
                     }
                 });
             }
@@ -80,15 +71,10 @@ pub fn build_string_checks(
     if let Some(start) = &validate_args.starts_with {
         build_checks.field_rules_val.push(quote! {
             if !val.starts_with(#start) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must start with '{}'",
-                            #field_name_lit,
-                            #start
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    format!("must start with '{}'", #start),
+                ));
             }
         });
     }
@@ -96,15 +82,10 @@ pub fn build_string_checks(
     if let Some(end) = &validate_args.ends_with {
         build_checks.field_rules_val.push(quote! {
             if !val.ends_with(#end) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must end with '{}'",
-                            #field_name_lit,
-                            #end,
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    format!("must end with '{}'", #end),
+                ));
             }
         });
     }
@@ -112,15 +93,10 @@ pub fn build_string_checks(
     if let Some(substr) = &validate_args.includes {
         build_checks.field_rules_val.push(quote! {
             if !val.contains(#substr) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must include '{}'",
-                            #field_name_lit,
-                            #substr,
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    format!("must include '{}'", #substr),
+                ));
             }
         });
     }
@@ -128,14 +104,10 @@ pub fn build_string_checks(
     if validate_args.alphanumeric {
         build_checks.field_rules_val.push(quote! {
             if !val.as_bytes().iter().all(|b| b.is_ascii_alphanumeric()) {
-                return Err(
-                    ::oximod::OxiModError::validation(
-                        format!(
-                            "Field '{}' must contain only alphanumeric characters",
-                            #field_name_lit,
-                        )
-                    )
-                );
+                validation_errors.push(::oximod::ValidationError::new(
+                    #field_name_lit,
+                    "must contain only alphanumeric characters",
+                ));
             }
         });
     }
