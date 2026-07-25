@@ -1,0 +1,125 @@
+mod common;
+
+use common::init;
+
+use mongodb::bson::oid::ObjectId;
+use oximod::{_query::Queryable, Model};
+use serde::{Deserialize, Serialize};
+use testresult::TestResult;
+
+// Run test:
+// cargo nextest run typed_query_returns_only_matching_models
+#[tokio::test]
+async fn typed_query_returns_only_matching_models() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_returns_only_matching_models")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+        role: String,
+    }
+
+    User::clear().await?;
+
+    // Confirm that #[derive(Model)] generated the expected typed fields.
+    let fields = <User as Queryable>::fields();
+
+    assert_eq!(fields._id.name(), "_id");
+    assert_eq!(fields.name.name(), "name");
+    assert_eq!(fields.age.name(), "age");
+    assert_eq!(fields.active.name(), "active");
+    assert_eq!(fields.role.name(), "role");
+
+    User::default()
+        .name("User1")
+        .age(24)
+        .active(true)
+        .role("member")
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .age(17)
+        .active(true)
+        .role("admin")
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .age(30)
+        .active(false)
+        .role("admin")
+        .save()
+        .await?;
+
+    User::default()
+        .name("User4")
+        .age(30)
+        .active(true)
+        .role("member")
+        .save()
+        .await?;
+
+    /*
+        MongoDB equivalent:
+
+        {
+            "$and": [
+                { "active": true },
+                { "age": { "$gte": 18 } },
+                {
+                    "$or": [
+                        { "role": "admin" },
+                        { "name": "User1" }
+                    ]
+                }
+            ]
+        }
+
+        Expected results:
+
+        User1:
+        - active
+        - adult
+        - name matches
+
+        User2:
+        - excluded because age is below 18
+
+        User3:
+        - excluded because active is false
+
+        User4:
+        - excluded because neither role nor name matches
+    */
+    let users: Vec<User> = User::query()
+        .filter(|user| {
+            user.active.eq(true)
+                & user.age.gte(18)
+                & (user.role.eq("admin") | user.name.eq("User1"))
+        })
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+
+    let user = &users[0];
+
+    assert!(user._id.is_some());
+    assert_eq!(user.name, "User1");
+    assert_eq!(user.age, 24);
+    assert!(user.active);
+    assert_eq!(user.role, "member");
+
+    User::clear().await?;
+
+    Ok(())
+}

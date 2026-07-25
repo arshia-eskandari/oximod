@@ -202,3 +202,8 @@ pub use oximod_core::helpers as _helpers;
 
 #[doc(hidden)]
 pub use regex as _regex; // removes the need of importing the trait
+
+#[doc(hidden)]
+pub mod _query {
+    pub use oximod_core::query::{Expression, Field, OrderedQueryValue, Query, Queryable};
+}

@@ -4,12 +4,14 @@ mod index;
 #[macro_use]
 mod parsers;
 mod model_macro;
+mod query;
 mod validate;
 
 use helpers::{FieldTokenStreams, ModelAttrs, collect_model_attrs, generate_field_tokens};
 use model_macro::generate_model_token;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
+use query::generate_query_tokens;
 use quote::quote;
 use syn::{DeriveInput, Ident, parse_macro_input};
 
@@ -79,6 +81,11 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     } = match generate_field_tokens(&input, &document_id_setter_ident) {
         Ok(token_streams) => token_streams,
         Err(e) => return e.into(),
+    };
+
+    let query_tokens = match generate_query_tokens(&input) {
+        Ok(tokens) => tokens,
+        Err(error) => return error.into(),
     };
 
     let model_token = generate_model_token(name, &db, &collection, hooks, validations);
@@ -165,6 +172,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
 
         #model_token
+
+        #query_tokens
 
     };
 

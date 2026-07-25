@@ -1,0 +1,279 @@
+use std::marker::PhantomData;
+
+use mongodb::bson::{Bson, DateTime};
+
+use crate::query::expression::{ComparisonOperator, Expression};
+
+#[derive(Debug)]
+pub struct Field<T> {
+    name: &'static str,
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> Copy for Field<T> {}
+
+impl<T> Clone for Field<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Field<T> {
+    #[doc(hidden)]
+    pub const fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            marker: PhantomData,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+}
+
+impl<T> Field<T>
+where
+    T: Into<Bson>,
+{
+    pub fn eq<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Eq, value)
+    }
+
+    pub fn ne<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Ne, value)
+    }
+
+    fn comparison<V>(&self, operator: ComparisonOperator, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        Expression::comparison(self.name, operator, value)
+    }
+}
+
+#[doc(hidden)]
+pub trait OrderedQueryValue {}
+
+impl OrderedQueryValue for i32 {}
+impl OrderedQueryValue for i64 {}
+impl OrderedQueryValue for f64 {}
+impl OrderedQueryValue for String {}
+impl OrderedQueryValue for DateTime {}
+
+impl<T> Field<T>
+where
+    T: OrderedQueryValue + Into<Bson>,
+{
+    pub fn gt<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Gt, value)
+    }
+
+    pub fn gte<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Gte, value)
+    }
+
+    pub fn lt<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Lt, value)
+    }
+
+    pub fn lte<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Lte, value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::doc;
+
+    use super::Field;
+
+    #[test]
+    fn field_exposes_its_mongodb_name() {
+        let field = Field::<String>::new("email");
+
+        assert_eq!(field.name(), "email");
+    }
+
+    #[test]
+    fn equality_builds_an_expression() {
+        let active = Field::<bool>::new("active");
+
+        assert_eq!(
+            active.eq(true).into_document(),
+            doc! {
+                "active": true,
+            }
+        );
+    }
+
+    #[test]
+    fn inequality_builds_an_expression() {
+        let status = Field::<String>::new("status");
+
+        assert_eq!(
+            status.ne("deleted").into_document(),
+            doc! {
+                "status": {
+                    "$ne": "deleted",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_accepts_a_string_slice() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.eq("Arshia").into_document(),
+            doc! {
+                "name": "Arshia",
+            }
+        );
+    }
+
+    #[test]
+    fn greater_than_builds_an_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.gt(18).into_document(),
+            doc! {
+                "age": {
+                    "$gt": 18,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn greater_than_or_equal_builds_an_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.gte(18).into_document(),
+            doc! {
+                "age": {
+                    "$gte": 18,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn less_than_builds_an_expression() {
+        let price = Field::<f64>::new("price");
+
+        assert_eq!(
+            price.lt(99.99).into_document(),
+            doc! {
+                "price": {
+                    "$lt": 99.99,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn less_than_or_equal_builds_an_expression() {
+        let price = Field::<i64>::new("price");
+
+        assert_eq!(
+            price.lte(100).into_document(),
+            doc! {
+                "price": {
+                    "$lte": 100_i64,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn nested_field_paths_are_preserved() {
+        let city = Field::<String>::new("address.city");
+
+        assert_eq!(
+            city.eq("Toronto").into_document(),
+            doc! {
+                "address.city": "Toronto",
+            }
+        );
+    }
+
+    #[test]
+    fn field_expressions_can_be_combined_with_and() {
+        let active = Field::<bool>::new("active");
+        let age = Field::<i32>::new("age");
+
+        let expression = active.eq(true) & age.gte(18);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "active": true,
+                    },
+                    {
+                        "age": {
+                            "$gte": 18,
+                        },
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn field_expressions_can_be_combined_and_nested() {
+        let active = Field::<bool>::new("active");
+        let age = Field::<i32>::new("age");
+        let role = Field::<String>::new("role");
+
+        let expression = active.eq(true) & (age.gte(18) | role.eq("admin"));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "active": true,
+                    },
+                    {
+                        "$or": [
+                            {
+                                "age": {
+                                    "$gte": 18,
+                                },
+                            },
+                            {
+                                "role": "admin",
+                            },
+                        ],
+                    },
+                ],
+            }
+        );
+    }
+}
