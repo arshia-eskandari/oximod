@@ -123,3 +123,85 @@ async fn typed_query_returns_only_matching_models() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_first_returns_matching_model
+#[tokio::test]
+async fn typed_query_first_returns_matching_model() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_first_returns_matching_model")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .age(24)
+        .active(true)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .age(30)
+        .active(false)
+        .save()
+        .await?;
+
+    let user: Option<User> = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .first()
+        .await?;
+
+    let user = user.expect("User1 should be found");
+
+    assert!(user._id.is_some());
+    assert_eq!(user.name, "User1");
+    assert_eq!(user.age, 24);
+    assert!(user.active);
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_first_returns_none_when_no_model_matches
+#[tokio::test]
+async fn typed_query_first_returns_none_when_no_model_matches() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_first_returns_none_when_no_model_matches")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").age(24).save().await?;
+
+    let user: Option<User> = User::query()
+        .filter(|user| user.name.eq("MissingUser"))
+        .first()
+        .await?;
+
+    assert!(user.is_none());
+
+    User::clear().await?;
+
+    Ok(())
+}
