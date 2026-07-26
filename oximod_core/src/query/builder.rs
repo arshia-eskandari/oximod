@@ -1,15 +1,15 @@
-use std::marker::PhantomData;
-
-use mongodb::bson::Document;
-
 use crate::error::oximod_error::OxiModError;
 use crate::feature::model::Model;
 use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
+use crate::query::sort::SortExpression;
+use mongodb::bson::Document;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
 pub struct Query<M> {
     filter: Option<Expression>,
+    sort: Option<SortExpression>,
     limit: Option<u64>,
     skip: Option<u64>,
     marker: PhantomData<fn() -> M>,
@@ -20,6 +20,7 @@ impl<M> Query<M> {
     pub const fn new() -> Self {
         Self {
             filter: None,
+            sort: None,
             limit: None,
             skip: None,
             marker: PhantomData,
@@ -62,6 +63,16 @@ where
         self
     }
 
+    pub fn sort_by<F>(mut self, build: F) -> Self
+    where
+        F: FnOnce(&M::Fields) -> SortExpression,
+    {
+        let fields = M::fields();
+
+        self.sort = Some(build(&fields));
+        self
+    }
+
     pub(crate) fn into_filter_document(self) -> Document {
         self.filter
             .map(Expression::into_document)
@@ -74,12 +85,17 @@ where
     M: Queryable + Model,
 {
     pub async fn first(self) -> Result<Option<M>, OxiModError> {
+        let sort = self.sort;
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
-        collection
-            .find_one(filter)
-            .await
+        let mut find = collection.find_one(filter);
+
+        if let Some(sort) = sort {
+            find = find.sort(sort.into_document());
+        }
+
+        find.await
             .map_err(|error| OxiModError::database("Failed to execute typed query", error))
     }
 
@@ -94,12 +110,18 @@ where
     }
 
     pub async fn all(self) -> Result<Vec<M>, OxiModError> {
+        let sort = self.sort;
         let limit = self.limit;
         let skip = self.skip;
+
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
         let mut find = collection.find(filter);
+
+        if let Some(sort) = sort {
+            find = find.sort(sort.into_document());
+        }
 
         if let Some(skip) = skip {
             find = find.skip(skip);

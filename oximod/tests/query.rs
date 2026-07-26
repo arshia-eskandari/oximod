@@ -350,3 +350,42 @@ async fn typed_query_skip_omits_matching_results() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_sort_by_orders_results_ascending
+
+#[tokio::test]
+async fn typed_query_sort_by_orders_results_ascending() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_sort_by_orders_results_ascending")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").age(30).save().await?;
+
+    User::default().name("User2").age(18).save().await?;
+
+    User::default().name("User3").age(24).save().await?;
+
+    let users: Vec<User> = User::query().sort_by(|user| user.age.asc()).all().await?;
+
+    let names = users
+        .iter()
+        .map(|user| user.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["User2", "User3", "User1",]);
+
+    User::clear().await?;
+
+    Ok(())
+}

@@ -1,8 +1,7 @@
-use std::marker::PhantomData;
-
-use mongodb::bson::{Bson, DateTime};
-
 use crate::query::expression::{ComparisonOperator, Expression};
+use crate::query::sort::SortExpression;
+use mongodb::bson::{Bson, DateTime};
+use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Field<T> {
@@ -29,6 +28,14 @@ impl<T> Field<T> {
 
     pub fn name(&self) -> &'static str {
         self.name
+    }
+
+    pub fn asc(&self) -> SortExpression {
+        SortExpression::ascending(self.name)
+    }
+
+    pub fn desc(&self) -> SortExpression {
+        SortExpression::descending(self.name)
     }
 }
 
@@ -273,6 +280,30 @@ mod tests {
                         ],
                     },
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_ascending_sort_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.asc().into_document(),
+            doc! {
+                "age": 1,
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_descending_sort_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.desc().into_document(),
+            doc! {
+                "age": -1,
             }
         );
     }
