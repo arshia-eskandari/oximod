@@ -205,3 +205,62 @@ async fn typed_query_first_returns_none_when_no_model_matches() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_count_returns_number_of_matching_models
+#[tokio::test]
+async fn typed_query_count_returns_number_of_matching_models() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_count_returns_number_of_matching_models")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .age(24)
+        .active(true)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .age(30)
+        .active(true)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .age(17)
+        .active(true)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User4")
+        .age(35)
+        .active(false)
+        .save()
+        .await?;
+
+    let count: u64 = User::query()
+        .filter(|user| user.active.eq(true) & user.age.gte(18))
+        .count()
+        .await?;
+
+    assert_eq!(count, 2);
+
+    User::clear().await?;
+
+    Ok(())
+}

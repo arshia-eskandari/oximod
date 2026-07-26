@@ -69,6 +69,16 @@ where
             .map_err(|error| OxiModError::database("Failed to execute typed query", error))
     }
 
+    pub async fn count(self) -> Result<u64, OxiModError> {
+        let filter = self.into_filter_document();
+        let collection = M::get_collection()?;
+
+        collection
+            .count_documents(filter)
+            .await
+            .map_err(|error| OxiModError::database("Failed to count typed query results", error))
+    }
+
     pub async fn all(self) -> Result<Vec<M>, OxiModError> {
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
