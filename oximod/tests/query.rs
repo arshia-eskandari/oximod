@@ -304,3 +304,49 @@ async fn typed_query_limit_restricts_number_of_results() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_skip_omits_matching_results
+#[tokio::test]
+async fn typed_query_skip_omits_matching_results() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_skip_omits_matching_results")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").active(true).save().await?;
+
+    User::default().name("User2").active(true).save().await?;
+
+    User::default().name("User3").active(true).save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.active.eq(true))
+        .skip(1)
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+
+    let names = users
+        .iter()
+        .map(|user| user.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(!names.contains(&"User1"));
+    assert!(names.contains(&"User2"));
+    assert!(names.contains(&"User3"));
+
+    User::clear().await?;
+
+    Ok(())
+}

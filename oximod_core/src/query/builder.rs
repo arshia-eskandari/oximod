@@ -11,6 +11,7 @@ use crate::query::queryable::Queryable;
 pub struct Query<M> {
     filter: Option<Expression>,
     limit: Option<u64>,
+    skip: Option<u64>,
     marker: PhantomData<fn() -> M>,
 }
 
@@ -20,6 +21,7 @@ impl<M> Query<M> {
         Self {
             filter: None,
             limit: None,
+            skip: None,
             marker: PhantomData,
         }
     }
@@ -52,6 +54,11 @@ where
 
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
+        self
+    }
+
+    pub fn skip(mut self, skip: u64) -> Self {
+        self.skip = Some(skip);
         self
     }
 
@@ -88,10 +95,15 @@ where
 
     pub async fn all(self) -> Result<Vec<M>, OxiModError> {
         let limit = self.limit;
+        let skip = self.skip;
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
         let mut find = collection.find(filter);
+
+        if let Some(skip) = skip {
+            find = find.skip(skip);
+        }
 
         if let Some(limit) = limit {
             let limit = i64::try_from(limit).map_err(|error| {
