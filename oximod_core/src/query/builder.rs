@@ -10,6 +10,7 @@ use crate::query::queryable::Queryable;
 #[derive(Debug, Clone)]
 pub struct Query<M> {
     filter: Option<Expression>,
+    limit: Option<u64>,
     marker: PhantomData<fn() -> M>,
 }
 
@@ -18,6 +19,7 @@ impl<M> Query<M> {
     pub const fn new() -> Self {
         Self {
             filter: None,
+            limit: None,
             marker: PhantomData,
         }
     }
@@ -45,6 +47,11 @@ where
             None => expression,
         });
 
+        self
+    }
+
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.limit = Some(limit);
         self
     }
 
@@ -80,11 +87,24 @@ where
     }
 
     pub async fn all(self) -> Result<Vec<M>, OxiModError> {
+        let limit = self.limit;
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
-        let mut cursor = collection
-            .find(filter)
+        let mut find = collection.find(filter);
+
+        if let Some(limit) = limit {
+            let limit = i64::try_from(limit).map_err(|error| {
+                OxiModError::custom_with_source(
+                    "Query limit exceeds MongoDB's supported range",
+                    error,
+                )
+            })?;
+
+            find = find.limit(limit);
+        }
+
+        let mut cursor = find
             .await
             .map_err(|error| OxiModError::database("Failed to execute typed query", error))?;
 

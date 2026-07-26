@@ -264,3 +264,43 @@ async fn typed_query_count_returns_number_of_matching_models() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_limit_restricts_number_of_results
+#[tokio::test]
+async fn typed_query_limit_restricts_number_of_results() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_limit_restricts_number_of_results")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").active(true).save().await?;
+
+    User::default().name("User2").active(true).save().await?;
+
+    User::default().name("User3").active(true).save().await?;
+
+    User::default().name("User4").active(false).save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.active.eq(true))
+        .limit(2)
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+    assert!(users.iter().all(|user| user.active));
+
+    User::clear().await?;
+
+    Ok(())
+}
