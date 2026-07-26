@@ -430,3 +430,47 @@ async fn typed_query_then_sort_by_orders_equal_values() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_page_returns_requested_page
+
+#[tokio::test]
+async fn typed_query_page_returns_requested_page() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_page_returns_requested_page")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User5").age(50).save().await?;
+
+    User::default().name("User2").age(20).save().await?;
+
+    User::default().name("User4").age(40).save().await?;
+
+    User::default().name("User1").age(10).save().await?;
+
+    User::default().name("User3").age(30).save().await?;
+
+    let users: Vec<User> = User::query()
+        .sort_by(|user| user.age.asc())
+        .page(2, 2)
+        .all()
+        .await?;
+
+    let ages = users.iter().map(|user| user.age).collect::<Vec<_>>();
+
+    assert_eq!(ages, vec![30, 40]);
+
+    User::clear().await?;
+
+    Ok(())
+}

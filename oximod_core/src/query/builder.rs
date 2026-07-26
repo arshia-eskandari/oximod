@@ -63,6 +63,20 @@ where
         self
     }
 
+    pub fn page(mut self, page: u64, page_size: u64) -> Self {
+        assert!(page > 0, "page must be at least 1");
+        assert!(page_size > 0, "page size must be at least 1");
+
+        let skip = (page - 1)
+            .checked_mul(page_size)
+            .expect("pagination offset exceeds the supported range");
+
+        self.skip = Some(skip);
+        self.limit = Some(page_size);
+
+        self
+    }
+
     pub fn sort_by<F>(mut self, build: F) -> Self
     where
         F: FnOnce(&M::Fields) -> SortExpression,
@@ -378,5 +392,33 @@ mod tests {
                 "role": -1,
             }
         );
+    }
+
+    #[test]
+    fn page_sets_skip_and_limit() {
+        let query = User::query().page(3, 10);
+
+        assert_eq!(query.skip, Some(20));
+        assert_eq!(query.limit, Some(10));
+    }
+
+    #[test]
+    fn first_page_skips_no_results() {
+        let query = User::query().page(1, 10);
+
+        assert_eq!(query.skip, Some(0));
+        assert_eq!(query.limit, Some(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "page must be at least 1")]
+    fn page_rejects_zero_page_number() {
+        let _query = User::query().page(0, 10);
+    }
+
+    #[test]
+    #[should_panic(expected = "page size must be at least 1")]
+    fn page_rejects_zero_page_size() {
+        let _query = User::query().page(1, 0);
     }
 }
