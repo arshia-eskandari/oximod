@@ -331,20 +331,17 @@ async fn typed_query_skip_omits_matching_results() -> TestResult {
 
     let users: Vec<User> = User::query()
         .filter(|user| user.active.eq(true))
+        .sort_by(|user| user.name.asc())
         .skip(1)
         .all()
         .await?;
-
-    assert_eq!(users.len(), 2);
 
     let names = users
         .iter()
         .map(|user| user.name.as_str())
         .collect::<Vec<_>>();
 
-    assert!(!names.contains(&"User1"));
-    assert!(names.contains(&"User2"));
-    assert!(names.contains(&"User3"));
+    assert_eq!(names, vec!["User2", "User3"]);
 
     User::clear().await?;
 
