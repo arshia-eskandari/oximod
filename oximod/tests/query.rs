@@ -433,7 +433,6 @@ async fn typed_query_then_sort_by_orders_equal_values() -> TestResult {
 
 // Run test:
 // cargo nextest run typed_query_page_returns_requested_page
-
 #[tokio::test]
 async fn typed_query_page_returns_requested_page() -> TestResult {
     init().await?;
@@ -469,6 +468,53 @@ async fn typed_query_page_returns_requested_page() -> TestResult {
     let ages = users.iter().map(|user| user.age).collect::<Vec<_>>();
 
     assert_eq!(ages, vec![30, 40]);
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_in_values_matches_any_value
+
+#[tokio::test]
+async fn typed_query_in_values_matches_any_value() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_in_values_matches_any_value")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        role: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").role("admin").save().await?;
+
+    User::default()
+        .name("User2")
+        .role("moderator")
+        .save()
+        .await?;
+
+    User::default().name("User3").role("member").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.role.in_values(["admin", "moderator"]))
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    let names = users
+        .iter()
+        .map(|user| user.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["User1", "User2"]);
 
     User::clear().await?;
 

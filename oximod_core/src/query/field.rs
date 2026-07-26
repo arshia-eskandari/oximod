@@ -65,6 +65,22 @@ where
 
         Expression::comparison(self.name, operator, value)
     }
+
+    pub fn in_values<I, V>(&self, values: I) -> Expression
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<T>,
+    {
+        let values = values
+            .into_iter()
+            .map(|value| {
+                let value: T = value.into();
+                value.into()
+            })
+            .collect::<Vec<Bson>>();
+
+        Expression::comparison(self.name, ComparisonOperator::In, Bson::Array(values))
+    }
 }
 
 #[doc(hidden)]
@@ -304,6 +320,25 @@ mod tests {
             age.desc().into_document(),
             doc! {
                 "age": -1,
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_in_expression() {
+        let role = Field::<String>::new("role");
+
+        let expression = role.in_values(["admin", "moderator"]);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "role": {
+                    "$in": [
+                        "admin",
+                        "moderator",
+                    ],
+                },
             }
         );
     }

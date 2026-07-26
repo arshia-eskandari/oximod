@@ -25,6 +25,7 @@ pub(crate) enum ComparisonOperator {
     Gte,
     Lt,
     Lte,
+    In,
 }
 
 impl ComparisonOperator {
@@ -36,6 +37,7 @@ impl ComparisonOperator {
             Self::Gte => Some("$gte"),
             Self::Lt => Some("$lt"),
             Self::Lte => Some("$lte"),
+            Self::In => Some("$in"),
         }
     }
 }
@@ -677,6 +679,30 @@ mod tests {
                 .expect("role condition should be a document"),
             &doc! {
                 "role": "admin",
+            }
+        );
+    }
+
+    #[test]
+    fn in_expression_converts_to_in_operator() {
+        let expression = comparison(
+            "role",
+            ComparisonOperator::In,
+            Bson::Array(vec![
+                Bson::String("admin".to_owned()),
+                Bson::String("moderator".to_owned()),
+            ]),
+        );
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "role": {
+                    "$in": [
+                        "admin",
+                        "moderator",
+                    ],
+                },
             }
         );
     }
