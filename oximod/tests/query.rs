@@ -386,3 +386,47 @@ async fn typed_query_sort_by_orders_results_ascending() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_then_sort_by_orders_equal_values
+#[tokio::test]
+async fn typed_query_then_sort_by_orders_equal_values() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_then_sort_by_orders_equal_values")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User3").age(24).save().await?;
+
+    User::default().name("User1").age(18).save().await?;
+
+    User::default().name("User2").age(24).save().await?;
+
+    User::default().name("User4").age(30).save().await?;
+
+    let users: Vec<User> = User::query()
+        .sort_by(|user| user.age.asc())
+        .then_sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    let names = users
+        .iter()
+        .map(|user| user.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["User1", "User2", "User3", "User4",]);
+
+    User::clear().await?;
+
+    Ok(())
+}

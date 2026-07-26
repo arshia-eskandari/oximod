@@ -1,8 +1,13 @@
 use mongodb::bson::Document;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortExpression {
-    field: &'static str,
+    fields: Vec<SortField>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SortField {
+    name: &'static str,
     direction: SortDirection,
 }
 
@@ -13,24 +18,34 @@ enum SortDirection {
 }
 
 impl SortExpression {
-    pub(crate) const fn ascending(field: &'static str) -> Self {
+    pub(crate) fn ascending(field: &'static str) -> Self {
         Self {
-            field,
-            direction: SortDirection::Ascending,
+            fields: vec![SortField {
+                name: field,
+                direction: SortDirection::Ascending,
+            }],
         }
     }
 
-    pub(crate) const fn descending(field: &'static str) -> Self {
+    pub(crate) fn descending(field: &'static str) -> Self {
         Self {
-            field,
-            direction: SortDirection::Descending,
+            fields: vec![SortField {
+                name: field,
+                direction: SortDirection::Descending,
+            }],
         }
+    }
+
+    pub(crate) fn extend(&mut self, other: Self) {
+        self.fields.extend(other.fields);
     }
 
     pub(crate) fn into_document(self) -> Document {
         let mut document = Document::new();
 
-        document.insert(self.field, self.direction.mongo_value());
+        for field in self.fields {
+            document.insert(field.name, field.direction.mongo_value());
+        }
 
         document
     }
@@ -83,6 +98,39 @@ mod tests {
             sort.into_document(),
             doc! {
                 "address.city": 1,
+            }
+        );
+    }
+
+    #[test]
+    fn sort_expressions_can_be_combined() {
+        let mut sort = SortExpression::ascending("age");
+
+        sort.extend(SortExpression::descending("name"));
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "age": 1,
+                "name": -1,
+            }
+        );
+    }
+
+    #[test]
+    fn combined_sort_preserves_insertion_order() {
+        let mut sort = SortExpression::ascending("role");
+
+        sort.extend(SortExpression::descending("age"));
+
+        sort.extend(SortExpression::ascending("name"));
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "role": 1,
+                "age": -1,
+                "name": 1,
             }
         );
     }

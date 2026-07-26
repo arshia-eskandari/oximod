@@ -73,6 +73,21 @@ where
         self
     }
 
+    pub fn then_sort_by<F>(mut self, build: F) -> Self
+    where
+        F: FnOnce(&M::Fields) -> SortExpression,
+    {
+        let fields = M::fields();
+        let next_sort = build(&fields);
+
+        match &mut self.sort {
+            Some(existing) => existing.extend(next_sort),
+            None => self.sort = Some(next_sort),
+        }
+
+        self
+    }
+
     pub(crate) fn into_filter_document(self) -> Document {
         self.filter
             .map(Expression::into_document)
@@ -84,8 +99,8 @@ impl<M> Query<M>
 where
     M: Queryable + Model,
 {
-    pub async fn first(self) -> Result<Option<M>, OxiModError> {
-        let sort = self.sort;
+    pub async fn first(mut self) -> Result<Option<M>, OxiModError> {
+        let sort = self.sort.take();
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
@@ -109,10 +124,10 @@ where
             .map_err(|error| OxiModError::database("Failed to count typed query results", error))
     }
 
-    pub async fn all(self) -> Result<Vec<M>, OxiModError> {
-        let sort = self.sort;
-        let limit = self.limit;
-        let skip = self.skip;
+    pub async fn all(mut self) -> Result<Vec<M>, OxiModError> {
+        let sort = self.sort.take();
+        let limit = self.limit.take();
+        let skip = self.skip.take();
 
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
@@ -344,6 +359,23 @@ mod tests {
                         ],
                     },
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn then_sort_by_combines_multiple_sort_fields() {
+        let query = User::query()
+            .sort_by(|user| user.age.asc())
+            .then_sort_by(|user| user.role.desc());
+
+        let sort = query.sort.expect("query should contain sorting");
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "age": 1,
+                "role": -1,
             }
         );
     }
