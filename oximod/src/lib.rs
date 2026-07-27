@@ -269,6 +269,170 @@ pub use oximod_macros::Model;
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Filtering
+///
+/// Equality comparisons are available for fields whose values can be
+/// represented as BSON:
+///
+/// ```rust,ignore
+/// user.name.eq("Alice")
+/// user.name.ne("Bob")
+/// ```
+///
+/// Ordered fields support:
+///
+/// ```rust,ignore
+/// user.age.gt(18)
+/// user.age.gte(18)
+/// user.age.lt(65)
+/// user.age.lte(65)
+/// ```
+///
+/// Multiple values can be matched or excluded with:
+///
+/// ```rust,ignore
+/// user.role.in_values(["admin", "manager"])
+/// user.role.not_in_values(["banned", "suspended"])
+/// ```
+///
+/// # Logical expressions
+///
+/// Expressions can be combined with `&` for AND and `|` for OR:
+///
+/// ```rust,ignore
+/// user.active.eq(true) & user.age.gte(18)
+/// ```
+///
+/// ```rust,ignore
+/// user.role.eq("admin") | user.role.eq("manager")
+/// ```
+///
+/// Parentheses can be used to create nested expressions:
+///
+/// ```rust,ignore
+/// user.active.eq(true)
+///     & (
+///         user.role.eq("admin")
+///             | user.role.eq("manager")
+///     )
+/// ```
+///
+/// Rust does not allow overloading the `&&` and `||` operators, so typed
+/// query expressions use `&` and `|`.
+///
+/// # Sorting
+///
+/// Sort by one field:
+///
+/// ```rust,ignore
+/// User::query()
+///     .sort_by(|user| user.age.desc())
+/// ```
+///
+/// Add secondary sort fields with `then_sort_by`:
+///
+/// ```rust,ignore
+/// User::query()
+///     .sort_by(|user| user.age.desc())
+///     .then_sort_by(|user| user.name.asc())
+/// ```
+///
+/// # Limits and pagination
+///
+/// ```rust,ignore
+/// User::query()
+///     .skip(20)
+///     .limit(10)
+/// ```
+///
+/// Pagination is one-based:
+///
+/// ```rust,ignore
+/// User::query()
+///     .page(2, 10)
+/// ```
+///
+/// Invalid pagination configuration is returned as a
+/// [`QueryError`](crate::QueryError) when the query is executed.
+///
+/// # Null and missing fields
+///
+/// Existence checks are available for every field:
+///
+/// ```rust,ignore
+/// user.nickname.exists()
+/// user.nickname.not_exists()
+/// ```
+///
+/// Optional fields also support strict null checks:
+///
+/// ```rust,ignore
+/// user.nickname.is_null()
+/// user.nickname.is_not_null()
+/// ```
+///
+/// `is_null` matches a field that exists and contains BSON null. It does
+/// not match a field that is missing from the document.
+///
+/// # Regular expressions
+///
+/// String fields support BSON regular-expression queries:
+///
+/// ```rust,ignore
+/// user.name.matches_regex("^Ali")
+/// ```
+///
+/// Typed options can be combined:
+///
+/// ```rust,ignore
+/// use oximod::RegexOption;
+///
+/// user.name.matches_regex_with_options(
+///     "^alice",
+///     [RegexOption::CaseInsensitive],
+/// )
+/// ```
+///
+/// # Array fields
+///
+/// Array fields support element membership:
+///
+/// ```rust,ignore
+/// user.tags.contains("rust")
+/// ```
+///
+/// Match arrays containing every requested value:
+///
+/// ```rust,ignore
+/// user.tags.contains_all(["rust", "mongodb"])
+/// ```
+///
+/// Match an exact array length:
+///
+/// ```rust,ignore
+/// user.tags.has_size(2)
+/// ```
+///
+/// # Execution
+///
+/// Retrieve all matching models:
+///
+/// ```rust,ignore
+/// User::query().all().await?
+/// ```
+///
+/// Retrieve the first matching model:
+///
+/// ```rust,ignore
+/// User::query().first().await?
+/// ```
+///
+/// Count matching documents:
+///
+/// ```rust,ignore
+/// User::query().count().await?
+/// ```
 pub use oximod_core::query::Queryable;
 
 /// An option that modifies MongoDB regular-expression matching.
