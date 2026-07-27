@@ -240,12 +240,12 @@ mod tests {
 
     #[test]
     fn equality_preserves_string_values() {
-        let expression = comparison("name", ComparisonOperator::Eq, "Arshia");
+        let expression = comparison("name", ComparisonOperator::Eq, "User1");
 
         assert_eq!(
             expression.into_document(),
             doc! {
-                "name": "Arshia",
+                "name": "User1",
             }
         );
     }
@@ -300,12 +300,12 @@ mod tests {
 
     #[test]
     fn expression_supports_nested_field_paths() {
-        let expression = comparison("address.city", ComparisonOperator::Eq, "Toronto");
+        let expression = comparison("address.city", ComparisonOperator::Eq, "City1");
 
         assert_eq!(
             expression.into_document(),
             doc! {
-                "address.city": "Toronto",
+                "address.city": "City1",
             }
         );
     }
@@ -730,14 +730,14 @@ mod tests {
 
     #[test]
     fn converting_an_expression_does_not_add_unnecessary_operators() {
-        let expression = comparison("email", ComparisonOperator::Eq, "arshia@example.com");
+        let expression = comparison("email", ComparisonOperator::Eq, "user@example.com");
 
         let document = expression.into_document();
 
         assert_eq!(
             document,
             doc! {
-                "email": "arshia@example.com",
+                "email": "user@example.com",
             }
         );
 

@@ -127,7 +127,7 @@ async fn test_validate_custom_validator_returns_unit_on_success_and_err_on_failu
 
     User::clear().await?;
 
-    let valid_user = User::default().name("Arshia");
+    let valid_user = User::default().name("User1");
     let result = valid_user.validate();
     assert!(matches!(result, Ok(())));
 

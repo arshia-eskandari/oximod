@@ -65,8 +65,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📥 Inserting a valid user...");
     let valid_user = User::new()
-        .username("arshia")
-        .email("arshia@example.com")
+        .username("username")
+        .email("username@example.com")
         .age(25)
         .bio("Rustacean and full-stack dev")
         .sku("SKU-1234")

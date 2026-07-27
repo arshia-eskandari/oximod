@@ -163,7 +163,7 @@ async fn test_custom_string_validation_valid() -> TestResult {
 
     User::clear().await?;
 
-    let user = User::default().name("Arshia");
+    let user = User::default().name("User1");
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());

@@ -185,9 +185,9 @@ mod tests {
         let name = Field::<String>::new("name");
 
         assert_eq!(
-            name.eq("Arshia").into_document(),
+            name.eq("User1").into_document(),
             doc! {
-                "name": "Arshia",
+                "name": "User1",
             }
         );
     }
@@ -253,9 +253,9 @@ mod tests {
         let city = Field::<String>::new("address.city");
 
         assert_eq!(
-            city.eq("Toronto").into_document(),
+            city.eq("City1").into_document(),
             doc! {
-                "address.city": "Toronto",
+                "address.city": "City1",
             }
         );
     }
