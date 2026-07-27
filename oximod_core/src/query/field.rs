@@ -183,6 +183,16 @@ where
     }
 }
 
+impl<T> Field<Vec<T>> {
+    pub fn has_size(&self, size: u32) -> Expression {
+        Expression::comparison(
+            self.name,
+            ComparisonOperator::Size,
+            Bson::Int64(i64::from(size)),
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegexOption {
     CaseInsensitive,
@@ -659,6 +669,20 @@ mod tests {
                         "rust",
                         "mongodb",
                     ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_size_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.has_size(2).into_document(),
+            doc! {
+                "tags": {
+                    "$size": Bson::Int64(2),
                 },
             }
         );

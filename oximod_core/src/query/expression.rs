@@ -29,6 +29,7 @@ pub(crate) enum ComparisonOperator {
     Nin,
     Exists,
     All,
+    Size,
 }
 
 impl ComparisonOperator {
@@ -44,6 +45,7 @@ impl ComparisonOperator {
             Self::Nin => Some("$nin"),
             Self::Exists => Some("$exists"),
             Self::All => Some("$all"),
+            Self::Size => Some("$size"),
         }
     }
 }
@@ -916,6 +918,20 @@ mod tests {
                         "rust",
                         "mongodb",
                     ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn size_expression_converts_to_size_operator() {
+        let expression = Expression::comparison("tags", ComparisonOperator::Size, Bson::Int64(2));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "tags": {
+                    "$size": Bson::Int64(2),
                 },
             }
         );
