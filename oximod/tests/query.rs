@@ -3,7 +3,7 @@ mod common;
 use common::init;
 
 use mongodb::bson::oid::ObjectId;
-use oximod::{Model, OxiModError, QueryError, Queryable};
+use oximod::{Model, OxiModError, QueryError, Queryable, RegexOption};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -761,6 +761,46 @@ async fn typed_query_matches_regex() -> TestResult {
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].name, "User1");
     assert_eq!(users[1].name, "User2");
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_matches_regex_with_options
+#[tokio::test]
+async fn typed_query_matches_regex_with_options() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_matches_regex_with_options")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").save().await?;
+    User::default().name("USER2").save().await?;
+    User::default().name("Admin1").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| {
+            user.name
+                .matches_regex_with_options("^user", [RegexOption::CaseInsensitive])
+        })
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].name, "USER2");
+    assert_eq!(users[1].name, "User1");
 
     User::clear().await?;
 

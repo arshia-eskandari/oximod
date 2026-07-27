@@ -68,6 +68,29 @@ impl Field<String> {
             }),
         )
     }
+
+    pub fn matches_regex_with_options<I>(
+        &self,
+        pattern: impl Into<String>,
+        options: I,
+    ) -> Expression
+    where
+        I: IntoIterator<Item = RegexOption>,
+    {
+        let options = options
+            .into_iter()
+            .map(RegexOption::as_str)
+            .collect::<String>();
+
+        Expression::comparison(
+            self.name,
+            ComparisonOperator::Eq,
+            Bson::RegularExpression(Regex {
+                pattern: pattern.into(),
+                options,
+            }),
+        )
+    }
 }
 
 impl<T> Field<T>
@@ -130,6 +153,25 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegexOption {
+    CaseInsensitive,
+    Multiline,
+    DotMatchesNewLine,
+    IgnoreWhitespace,
+}
+
+impl RegexOption {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::CaseInsensitive => "i",
+            Self::Multiline => "m",
+            Self::DotMatchesNewLine => "s",
+            Self::IgnoreWhitespace => "x",
+        }
+    }
+}
+
 #[doc(hidden)]
 pub trait OrderedQueryValue {}
 
@@ -176,6 +218,7 @@ where
 mod tests {
     use crate::query::Expression;
     use crate::query::field::ComparisonOperator;
+    use crate::query::field::RegexOption;
     use mongodb::bson::{Bson, Regex, doc};
 
     use super::Field;
@@ -538,6 +581,25 @@ mod tests {
                 "name": Bson::RegularExpression(Regex {
                     pattern: "^User".to_owned(),
                     options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_regex_with_options() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.matches_regex_with_options(
+                "^user",
+                [RegexOption::CaseInsensitive, RegexOption::Multiline,],
+            )
+            .into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: "^user".to_owned(),
+                    options: "im".to_owned(),
                 }),
             }
         );

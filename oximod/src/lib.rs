@@ -271,6 +271,50 @@ pub use oximod_macros::Model;
 /// ```
 pub use oximod_core::query::Queryable;
 
+/// An option that modifies MongoDB regular-expression matching.
+///
+/// Multiple options can be combined when calling
+/// `matches_regex_with_options`.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{
+///     Model,
+///     OxiModError,
+///     Queryable,
+///     RegexOption,
+/// };
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+/// }
+///
+/// # async fn run() -> Result<(), OxiModError> {
+/// let users = User::query()
+///     .filter(|user| {
+///         user.name.matches_regex_with_options(
+///             "^alice",
+///             [RegexOption::CaseInsensitive],
+///         )
+///     })
+///     .all()
+///     .await?;
+///
+/// println!("Found {} users", users.len());
+///
+/// # Ok(())
+/// # }
+/// ```
+pub use oximod_core::query::RegexOption;
+
 // --- Internal API ---
 
 #[doc(hidden)]
@@ -293,7 +337,5 @@ pub use regex as _regex; // removes the need of importing the trait
 
 #[doc(hidden)]
 pub mod _query {
-    pub use oximod_core::query::{
-        Expression, Field, OrderedQueryValue, Query, Queryable, SortExpression,
-    };
+    pub use oximod_core::query::{Expression, Field, OrderedQueryValue, Query, SortExpression};
 }
