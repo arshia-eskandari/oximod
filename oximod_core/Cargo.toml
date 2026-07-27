@@ -16,6 +16,11 @@ mongodb = "3.5.1"
 thiserror = "2.0.18"
 serde = "1.0.228"
 
+[dependencies.regex]
+version = "1.12.3"
+default-features = false
+features = ["std"]
+
 [features]
 # enables diagnostics in release builds
 debug-print = []

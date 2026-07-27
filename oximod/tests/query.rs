@@ -969,3 +969,40 @@ async fn typed_query_array_has_size() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_string_starts_with
+#[tokio::test]
+async fn typed_query_string_starts_with() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_string_starts_with")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User.Admin").save().await?;
+
+    User::default().name("UserXAdmin").save().await?;
+
+    User::default().name("Admin.User").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.name.starts_with("User."))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User.Admin");
+
+    User::clear().await?;
+
+    Ok(())
+}

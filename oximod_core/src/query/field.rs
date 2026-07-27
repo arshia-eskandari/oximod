@@ -91,6 +91,12 @@ impl Field<String> {
             }),
         )
     }
+
+    pub fn starts_with(&self, prefix: impl AsRef<str>) -> Expression {
+        let escaped_prefix = regex::escape(prefix.as_ref());
+
+        self.matches_regex(format!("^{escaped_prefix}"))
+    }
 }
 
 impl<T> Field<T>
@@ -684,6 +690,21 @@ mod tests {
                 "tags": {
                     "$size": Bson::Int64(2),
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_literal_starts_with_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.starts_with("User.").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: r"^User\.".to_owned(),
+                    options: String::new(),
+                }),
             }
         );
     }
