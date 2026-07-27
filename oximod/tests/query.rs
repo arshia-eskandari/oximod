@@ -1006,3 +1006,40 @@ async fn typed_query_string_starts_with() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_string_ends_with
+#[tokio::test]
+async fn typed_query_string_ends_with() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_string_ends_with")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("Admin.User").save().await?;
+
+    User::default().name("AdminXUser").save().await?;
+
+    User::default().name("User.Admin").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.name.ends_with(".User"))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "Admin.User");
+
+    User::clear().await?;
+
+    Ok(())
+}

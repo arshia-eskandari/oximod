@@ -97,6 +97,12 @@ impl Field<String> {
 
         self.matches_regex(format!("^{escaped_prefix}"))
     }
+
+    pub fn ends_with(&self, suffix: impl AsRef<str>) -> Expression {
+        let escaped_suffix = regex::escape(suffix.as_ref());
+
+        self.matches_regex(format!("{escaped_suffix}$"))
+    }
 }
 
 impl<T> Field<T>
@@ -703,6 +709,21 @@ mod tests {
             doc! {
                 "name": Bson::RegularExpression(Regex {
                     pattern: r"^User\.".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_literal_ends_with_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.ends_with(".User").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: r"\.User$".to_owned(),
                     options: String::new(),
                 }),
             }
