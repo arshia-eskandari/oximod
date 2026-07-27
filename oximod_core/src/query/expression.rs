@@ -31,6 +31,22 @@ pub(crate) enum ComparisonOperator {
     Exists,
     All,
     Size,
+    ElemMatch,
+}
+
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElementExpression {
+    kind: ElementExpressionKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ElementExpressionKind {
+    Comparison {
+        operator: ComparisonOperator,
+        value: Bson,
+    },
+    And(Vec<ElementExpression>),
 }
 
 impl ComparisonOperator {
@@ -47,8 +63,95 @@ impl ComparisonOperator {
             Self::Exists => Some("$exists"),
             Self::All => Some("$all"),
             Self::Size => Some("$size"),
+            Self::ElemMatch => Some("$elemMatch"),
         }
     }
+}
+
+impl ElementExpression {
+    pub(crate) fn comparison<V>(operator: ComparisonOperator, value: V) -> Self
+    where
+        V: Into<Bson>,
+    {
+        Self {
+            kind: ElementExpressionKind::Comparison {
+                operator,
+                value: value.into(),
+            },
+        }
+    }
+
+    pub(crate) fn into_document(self) -> Document {
+        match self.kind {
+            ElementExpressionKind::Comparison { operator, value } => {
+                element_comparison_into_document(operator, value)
+            }
+
+            ElementExpressionKind::And(expressions) => element_and_into_document(expressions),
+        }
+    }
+
+    fn into_and_children(self) -> Vec<Self> {
+        match self.kind {
+            ElementExpressionKind::And(expressions) => expressions,
+
+            kind => vec![Self { kind }],
+        }
+    }
+}
+
+impl BitAnd for ElementExpression {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let mut expressions = self.into_and_children();
+        expressions.extend(rhs.into_and_children());
+
+        Self {
+            kind: ElementExpressionKind::And(expressions),
+        }
+    }
+}
+
+fn element_comparison_into_document(operator: ComparisonOperator, value: Bson) -> Document {
+    let operator_name = operator.mongo_name().unwrap_or("$eq");
+
+    let mut document = Document::new();
+    document.insert(operator_name, value);
+
+    document
+}
+
+fn element_and_into_document(expressions: Vec<ElementExpression>) -> Document {
+    let documents = expressions
+        .into_iter()
+        .map(ElementExpression::into_document)
+        .collect::<Vec<_>>();
+
+    let mut operator_names = std::collections::HashSet::new();
+
+    let has_duplicate_operator = documents
+        .iter()
+        .flat_map(Document::keys)
+        .any(|operator| !operator_names.insert(operator.to_owned()));
+
+    if has_duplicate_operator {
+        let clauses = documents.into_iter().map(Bson::Document).collect();
+
+        let mut document = Document::new();
+
+        document.insert("$and", Bson::Array(clauses));
+
+        return document;
+    }
+
+    let mut result = Document::new();
+
+    for document in documents {
+        result.extend(document);
+    }
+
+    result
 }
 
 fn not_into_document(expression: Expression) -> Document {
@@ -212,6 +315,7 @@ fn logical_into_document(operator: &'static str, expressions: Vec<Expression>) -
 
 #[cfg(test)]
 mod tests {
+    use crate::query::ElementExpression;
     use mongodb::bson::{Bson, Document, doc, oid::ObjectId};
 
     use super::{ComparisonOperator, Expression};
@@ -1008,6 +1112,20 @@ mod tests {
                         "$gte": 18,
                     },
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn element_and_expression_combines_operators() {
+        let expression = ElementExpression::comparison(ComparisonOperator::Gte, 80)
+            & ElementExpression::comparison(ComparisonOperator::Lt, 90);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$gte": 80,
+                "$lt": 90,
             }
         );
     }

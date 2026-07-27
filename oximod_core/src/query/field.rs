@@ -1,4 +1,4 @@
-use crate::query::expression::{ComparisonOperator, Expression};
+use crate::query::expression::{ComparisonOperator, ElementExpression, Expression};
 use crate::query::sort::SortExpression;
 use mongodb::bson::{Bson, DateTime, Regex};
 use std::marker::PhantomData;
@@ -216,6 +216,20 @@ impl<T> Field<Vec<T>> {
             Bson::Int64(i64::from(size)),
         )
     }
+
+    pub fn elem_match<F>(&self, build: F) -> Expression
+    where
+        F: FnOnce(&ElementField<T>) -> ElementExpression,
+    {
+        let element = ElementField::new();
+        let expression = build(&element);
+
+        Expression::comparison(
+            self.name,
+            ComparisonOperator::ElemMatch,
+            Bson::Document(expression.into_document()),
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -272,6 +286,75 @@ where
     }
 
     pub fn lte<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Lte, value)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct ElementField<T> {
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> Copy for ElementField<T> {}
+
+impl<T> Clone for ElementField<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> ElementField<T> {
+    const fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T> ElementField<T>
+where
+    T: Into<Bson>,
+{
+    fn comparison<V>(&self, operator: ComparisonOperator, value: V) -> ElementExpression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        ElementExpression::comparison(operator, value)
+    }
+}
+
+impl<T> ElementField<T>
+where
+    T: OrderedQueryValue + Into<Bson>,
+{
+    pub fn gt<V>(&self, value: V) -> ElementExpression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Gt, value)
+    }
+
+    pub fn gte<V>(&self, value: V) -> ElementExpression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Gte, value)
+    }
+
+    pub fn lt<V>(&self, value: V) -> ElementExpression
+    where
+        V: Into<T>,
+    {
+        self.comparison(ComparisonOperator::Lt, value)
+    }
+
+    pub fn lte<V>(&self, value: V) -> ElementExpression
     where
         V: Into<T>,
     {
@@ -768,6 +851,25 @@ mod tests {
                 "age": {
                     "$not": {
                         "$gte": 18,
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_elem_match_expression() {
+        let scores = Field::<Vec<i32>>::new("scores");
+
+        assert_eq!(
+            scores
+                .elem_match(|score| { score.gte(80) & score.lt(90) })
+                .into_document(),
+            doc! {
+                "scores": {
+                    "$elemMatch": {
+                        "$gte": 80,
+                        "$lt": 90,
                     },
                 },
             }

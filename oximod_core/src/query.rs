@@ -5,7 +5,7 @@ mod queryable;
 mod sort;
 
 pub use builder::Query;
-pub use expression::Expression;
-pub use field::{Field, OrderedQueryValue, RegexOption};
+pub use expression::{ElementExpression, Expression};
+pub use field::{ElementField, Field, OrderedQueryValue, RegexOption};
 pub use queryable::Queryable;
 pub use sort::SortExpression;

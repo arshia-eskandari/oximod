@@ -1118,3 +1118,53 @@ async fn typed_query_field_not_negates_comparison() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_array_elem_match
+#[tokio::test]
+async fn typed_query_array_elem_match() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_array_elem_match")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        scores: Vec<i32>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .scores(vec![75, 85, 95])
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .scores(vec![70, 95])
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .scores(vec![79, 90])
+        .save()
+        .await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.scores.elem_match(|score| score.gte(80) & score.lt(90)))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}

@@ -501,5 +501,8 @@ pub use regex as _regex; // removes the need of importing the trait
 
 #[doc(hidden)]
 pub mod _query {
-    pub use oximod_core::query::{Expression, Field, OrderedQueryValue, Query, SortExpression};
+    pub use oximod_core::query::{
+        ElementExpression, ElementField, Expression, Field, OrderedQueryValue, Query,
+        SortExpression,
+    };
 }
