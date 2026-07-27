@@ -153,6 +153,20 @@ where
     }
 }
 
+impl<T> Field<Vec<T>>
+where
+    T: Into<Bson>,
+{
+    pub fn contains<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        Expression::comparison(self.name, ComparisonOperator::Eq, value)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegexOption {
     CaseInsensitive,
@@ -601,6 +615,18 @@ mod tests {
                     pattern: "^user".to_owned(),
                     options: "im".to_owned(),
                 }),
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_contains_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.contains("rust").into_document(),
+            doc! {
+                "tags": "rust",
             }
         );
     }
