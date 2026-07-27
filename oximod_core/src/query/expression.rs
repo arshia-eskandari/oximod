@@ -72,14 +72,32 @@ impl Expression {
             ExpressionKind::Or(expressions) => logical_into_document("$or", expressions),
         }
     }
+
+    fn into_and_children(self) -> Vec<Expression> {
+        match self.kind {
+            ExpressionKind::And(expressions) => expressions,
+            kind => vec![Expression { kind }],
+        }
+    }
+
+    fn into_or_children(self) -> Vec<Expression> {
+        match self.kind {
+            ExpressionKind::Or(expressions) => expressions,
+            kind => vec![Expression { kind }],
+        }
+    }
 }
 
 impl BitAnd for Expression {
     type Output = Expression;
 
     fn bitand(self, rhs: Expression) -> Self::Output {
+        let mut expressions = self.into_and_children();
+
+        expressions.extend(rhs.into_and_children());
+
         Expression {
-            kind: ExpressionKind::And(vec![self, rhs]),
+            kind: ExpressionKind::And(expressions),
         }
     }
 }
@@ -88,8 +106,12 @@ impl BitOr for Expression {
     type Output = Expression;
 
     fn bitor(self, rhs: Expression) -> Self::Output {
+        let mut expressions = self.into_or_children();
+
+        expressions.extend(rhs.into_or_children());
+
         Expression {
-            kind: ExpressionKind::Or(vec![self, rhs]),
+            kind: ExpressionKind::Or(expressions),
         }
     }
 }
@@ -268,7 +290,10 @@ mod tests {
         assert_eq!(
             expression.into_document(),
             doc! {
-                "roles": ["admin", "editor"],
+                "roles": [
+                    "admin",
+                    "editor",
+                ],
             }
         );
     }
@@ -430,21 +455,17 @@ mod tests {
                                 },
                             },
                             {
-                                "$or": [
+                                "$and": [
                                     {
-                                        "$and": [
-                                            {
-                                                "role": "admin",
-                                            },
-                                            {
-                                                "verified": true,
-                                            },
-                                        ],
+                                        "role": "admin",
                                     },
                                     {
-                                        "banned": false,
+                                        "verified": true,
                                     },
                                 ],
+                            },
+                            {
+                                "banned": false,
                             },
                         ],
                     },
@@ -454,16 +475,13 @@ mod tests {
     }
 
     #[test]
-    fn chained_and_operations_are_left_associative() {
+    fn chained_and_operations_are_flattened() {
         let first = comparison("active", ComparisonOperator::Eq, true);
 
         let second = comparison("age", ComparisonOperator::Gte, 18);
 
         let third = comparison("verified", ComparisonOperator::Eq, true);
 
-        // Rust interprets this as:
-        //
-        // (first & second) & third
         let expression = first & second & third;
 
         assert_eq!(
@@ -471,16 +489,12 @@ mod tests {
             doc! {
                 "$and": [
                     {
-                        "$and": [
-                            {
-                                "active": true,
-                            },
-                            {
-                                "age": {
-                                    "$gte": 18,
-                                },
-                            },
-                        ],
+                        "active": true,
+                    },
+                    {
+                        "age": {
+                            "$gte": 18,
+                        },
                     },
                     {
                         "verified": true,
@@ -491,16 +505,13 @@ mod tests {
     }
 
     #[test]
-    fn chained_or_operations_are_left_associative() {
+    fn chained_or_operations_are_flattened() {
         let first = comparison("role", ComparisonOperator::Eq, "admin");
 
         let second = comparison("role", ComparisonOperator::Eq, "moderator");
 
         let third = comparison("verified", ComparisonOperator::Eq, true);
 
-        // Rust interprets this as:
-        //
-        // (first | second) | third
         let expression = first | second | third;
 
         assert_eq!(
@@ -508,17 +519,138 @@ mod tests {
             doc! {
                 "$or": [
                     {
-                        "$or": [
-                            {
-                                "role": "admin",
-                            },
-                            {
-                                "role": "moderator",
-                            },
-                        ],
+                        "role": "admin",
+                    },
+                    {
+                        "role": "moderator",
                     },
                     {
                         "verified": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn and_flattens_expression_from_right_hand_side() {
+        let first = comparison("active", ComparisonOperator::Eq, true);
+
+        let second = comparison("age", ComparisonOperator::Gte, 18);
+
+        let third = comparison("verified", ComparisonOperator::Eq, true);
+
+        let expression = first & (second & third);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "active": true,
+                    },
+                    {
+                        "age": {
+                            "$gte": 18,
+                        },
+                    },
+                    {
+                        "verified": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn or_flattens_expression_from_right_hand_side() {
+        let first = comparison("role", ComparisonOperator::Eq, "admin");
+
+        let second = comparison("role", ComparisonOperator::Eq, "moderator");
+
+        let third = comparison("verified", ComparisonOperator::Eq, true);
+
+        let expression = first | (second | third);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$or": [
+                    {
+                        "role": "admin",
+                    },
+                    {
+                        "role": "moderator",
+                    },
+                    {
+                        "verified": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn same_operator_groups_are_flattened_from_both_sides() {
+        let first = comparison("first", ComparisonOperator::Eq, true);
+
+        let second = comparison("second", ComparisonOperator::Eq, true);
+
+        let third = comparison("third", ComparisonOperator::Eq, true);
+
+        let fourth = comparison("fourth", ComparisonOperator::Eq, true);
+
+        let expression = (first & second) & (third & fourth);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "first": true,
+                    },
+                    {
+                        "second": true,
+                    },
+                    {
+                        "third": true,
+                    },
+                    {
+                        "fourth": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn mixed_operator_groups_are_not_flattened() {
+        let active = comparison("active", ComparisonOperator::Eq, true);
+
+        let adult = comparison("age", ComparisonOperator::Gte, 18);
+
+        let admin = comparison("role", ComparisonOperator::Eq, "admin");
+
+        let expression = active & (adult | admin);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "active": true,
+                    },
+                    {
+                        "$or": [
+                            {
+                                "age": {
+                                    "$gte": 18,
+                                },
+                            },
+                            {
+                                "role": "admin",
+                            },
+                        ],
                     },
                 ],
             }
@@ -631,9 +763,9 @@ mod tests {
 
         assert_eq!(conditions.len(), 2);
 
-        assert!(matches!(conditions.first(), Some(Bson::Document(_))));
+        assert!(matches!(conditions.first(), Some(Bson::Document(_)),));
 
-        assert!(matches!(conditions.get(1), Some(Bson::Document(_))));
+        assert!(matches!(conditions.get(1), Some(Bson::Document(_)),));
     }
 
     #[test]

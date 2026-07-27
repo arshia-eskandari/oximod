@@ -353,16 +353,12 @@ mod tests {
             doc! {
                 "$and": [
                     {
-                        "$and": [
-                            {
-                                "active": true,
-                            },
-                            {
-                                "age": {
-                                    "$gte": 18,
-                                },
-                            },
-                        ],
+                        "active": true,
+                    },
+                    {
+                        "age": {
+                            "$gte": 18,
+                        },
                     },
                     {
                         "role": {
