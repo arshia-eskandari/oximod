@@ -26,6 +26,7 @@ pub(crate) enum ComparisonOperator {
     Lt,
     Lte,
     In,
+    Nin,
 }
 
 impl ComparisonOperator {
@@ -38,6 +39,7 @@ impl ComparisonOperator {
             Self::Lt => Some("$lt"),
             Self::Lte => Some("$lte"),
             Self::In => Some("$in"),
+            Self::Nin => Some("$nin"),
         }
     }
 }
@@ -699,6 +701,30 @@ mod tests {
             doc! {
                 "role": {
                     "$in": [
+                        "admin",
+                        "moderator",
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn not_in_expression_converts_to_nin_operator() {
+        let expression = comparison(
+            "role",
+            ComparisonOperator::Nin,
+            Bson::Array(vec![
+                Bson::String("admin".to_owned()),
+                Bson::String("moderator".to_owned()),
+            ]),
+        );
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "role": {
+                    "$nin": [
                         "admin",
                         "moderator",
                     ],

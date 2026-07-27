@@ -81,6 +81,22 @@ where
 
         Expression::comparison(self.name, ComparisonOperator::In, Bson::Array(values))
     }
+
+    pub fn not_in_values<I, V>(&self, values: I) -> Expression
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<T>,
+    {
+        let values = values
+            .into_iter()
+            .map(|value| {
+                let value: T = value.into();
+                value.into()
+            })
+            .collect::<Vec<Bson>>();
+
+        Expression::comparison(self.name, ComparisonOperator::Nin, Bson::Array(values))
+    }
 }
 
 #[doc(hidden)]
@@ -335,6 +351,25 @@ mod tests {
             doc! {
                 "role": {
                     "$in": [
+                        "admin",
+                        "moderator",
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_not_in_expression() {
+        let role = Field::<String>::new("role");
+
+        let expression = role.not_in_values(["admin", "moderator"]);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "role": {
+                    "$nin": [
                         "admin",
                         "moderator",
                     ],

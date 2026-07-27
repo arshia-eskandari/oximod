@@ -520,3 +520,51 @@ async fn typed_query_in_values_matches_any_value() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_not_in_values_excludes_values
+#[tokio::test]
+async fn typed_query_not_in_values_excludes_values() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_not_in_values_excludes_values")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        role: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").role("admin").save().await?;
+
+    User::default()
+        .name("User2")
+        .role("moderator")
+        .save()
+        .await?;
+
+    User::default().name("User3").role("member").save().await?;
+
+    User::default().name("User4").role("guest").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.role.not_in_values(["admin", "moderator"]))
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    let names = users
+        .iter()
+        .map(|user| user.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["User3", "User4"]);
+
+    User::clear().await?;
+
+    Ok(())
+}
