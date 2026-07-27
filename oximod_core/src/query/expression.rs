@@ -28,6 +28,7 @@ pub(crate) enum ComparisonOperator {
     In,
     Nin,
     Exists,
+    All,
 }
 
 impl ComparisonOperator {
@@ -42,6 +43,7 @@ impl ComparisonOperator {
             Self::In => Some("$in"),
             Self::Nin => Some("$nin"),
             Self::Exists => Some("$exists"),
+            Self::All => Some("$all"),
         }
     }
 }
@@ -890,6 +892,30 @@ mod tests {
             doc! {
                 "nickname": {
                     "$exists": false,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn all_expression_converts_to_all_operator() {
+        let expression = Expression::comparison(
+            "tags",
+            ComparisonOperator::All,
+            Bson::Array(vec![
+                Bson::String("rust".to_owned()),
+                Bson::String("mongodb".to_owned()),
+            ]),
+        );
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "tags": {
+                    "$all": [
+                        "rust",
+                        "mongodb",
+                    ],
                 },
             }
         );

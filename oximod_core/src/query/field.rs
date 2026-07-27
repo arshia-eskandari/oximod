@@ -165,6 +165,22 @@ where
 
         Expression::comparison(self.name, ComparisonOperator::Eq, value)
     }
+
+    pub fn contains_all<I, V>(&self, values: I) -> Expression
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<T>,
+    {
+        let values = values
+            .into_iter()
+            .map(|value| {
+                let value: T = value.into();
+                value.into()
+            })
+            .collect::<Vec<Bson>>();
+
+        Expression::comparison(self.name, ComparisonOperator::All, Bson::Array(values))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -627,6 +643,23 @@ mod tests {
             tags.contains("rust").into_document(),
             doc! {
                 "tags": "rust",
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_contains_all_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.contains_all(["rust", "mongodb"]).into_document(),
+            doc! {
+                "tags": {
+                    "$all": [
+                        "rust",
+                        "mongodb",
+                    ],
+                },
             }
         );
     }
