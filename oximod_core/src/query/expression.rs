@@ -1,4 +1,4 @@
-use mongodb::bson::{Bson, Document};
+use mongodb::bson::{Bson, Document, doc};
 use std::ops::{BitAnd, BitOr};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,6 +15,7 @@ pub(crate) enum ExpressionKind {
     },
     And(Vec<Expression>),
     Or(Vec<Expression>),
+    Not(Box<Expression>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +51,55 @@ impl ComparisonOperator {
     }
 }
 
+fn not_into_document(expression: Expression) -> Document {
+    match expression.kind {
+        ExpressionKind::Comparison {
+            field,
+            operator,
+            value,
+        } => {
+            let not_value = match (operator, value) {
+                (ComparisonOperator::Eq, value @ Bson::RegularExpression(_)) => value,
+
+                (ComparisonOperator::Eq, value) => Bson::Document(doc! {
+                    "$eq": value,
+                }),
+
+                (operator, value) => {
+                    let operator_name = operator.mongo_name().expect(
+                        "non-equality comparison must have \
+                             a MongoDB operator",
+                    );
+
+                    let mut operator_document = Document::new();
+
+                    operator_document.insert(operator_name, value);
+
+                    Bson::Document(operator_document)
+                }
+            };
+
+            let mut not_document = Document::new();
+            not_document.insert("$not", not_value);
+
+            let mut document = Document::new();
+            document.insert(field, not_document);
+
+            document
+        }
+
+        kind => {
+            let expression = Expression { kind };
+
+            doc! {
+                "$nor": [
+                    expression.into_document(),
+                ],
+            }
+        }
+    }
+}
+
 impl Expression {
     pub(crate) fn comparison(
         field: impl Into<String>,
@@ -76,6 +126,14 @@ impl Expression {
             ExpressionKind::And(expressions) => logical_into_document("$and", expressions),
 
             ExpressionKind::Or(expressions) => logical_into_document("$or", expressions),
+
+            ExpressionKind::Not(expression) => not_into_document(*expression),
+        }
+    }
+
+    pub(crate) fn not(expression: Expression) -> Self {
+        Self {
+            kind: ExpressionKind::Not(Box::new(expression)),
         }
     }
 
@@ -932,6 +990,23 @@ mod tests {
             doc! {
                 "tags": {
                     "$size": Bson::Int64(2),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn not_expression_negates_field_comparison() {
+        let expression =
+            Expression::not(Expression::comparison("age", ComparisonOperator::Gte, 18));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "age": {
+                    "$not": {
+                        "$gte": 18,
+                    },
                 },
             }
         );

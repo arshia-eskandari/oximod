@@ -45,6 +45,13 @@ impl<T> Field<T> {
     pub fn not_exists(&self) -> Expression {
         Expression::comparison(self.name, ComparisonOperator::Exists, false)
     }
+
+    pub fn not<F>(&self, build: F) -> Expression
+    where
+        F: FnOnce(&Self) -> Expression,
+    {
+        Expression::not(build(self))
+    }
 }
 
 impl<T> Field<Option<T>> {
@@ -747,6 +754,22 @@ mod tests {
                     pattern: r"User\.".to_owned(),
                     options: String::new(),
                 }),
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_not_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.not(|age| age.gte(18)).into_document(),
+            doc! {
+                "age": {
+                    "$not": {
+                        "$gte": 18,
+                    },
+                },
             }
         );
     }
