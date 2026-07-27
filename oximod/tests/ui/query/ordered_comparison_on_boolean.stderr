@@ -1,0 +1,15 @@
+error[E0599]: the method `gt` exists for struct `Field<bool>`, but its trait bounds were not satisfied
+  --> tests/ui/query/ordered_comparison_on_boolean.rs:16:58
+   |
+16 |     let _query = User::query().filter(|user| user.active.gt(true));
+   |                                                          ^^ method cannot be called on `Field<bool>` due to unsatisfied trait bounds
+   |
+  ::: $WORKSPACE/oximod_core/src/query/field.rs
+   |
+   | pub struct Field<T> {
+   | ------------------- doesn't satisfy `Field<bool>: Iterator`
+   |
+   = note: the following trait bounds were not satisfied:
+           `bool: OrderedQueryValue`
+           `Field<bool>: Iterator`
+           which is required by `&mut Field<bool>: Iterator`
