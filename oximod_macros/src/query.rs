@@ -70,7 +70,7 @@ pub fn generate_query_tokens(input: &DeriveInput) -> Result<TokenStream, TokenSt
             }
         }
 
-        impl ::oximod::_query::Queryable for #model_ident {
+        impl ::oximod::Queryable for #model_ident {
             type Fields = #fields_ident;
 
             fn fields() -> Self::Fields {

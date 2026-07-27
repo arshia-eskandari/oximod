@@ -1,4 +1,5 @@
 use crate::error::oximod_error::OxiModError;
+use crate::error::query_error::QueryError;
 use crate::feature::model::Model;
 use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
@@ -12,6 +13,7 @@ pub struct Query<M> {
     sort: Option<SortExpression>,
     limit: Option<u64>,
     skip: Option<u64>,
+    error: Option<QueryError>,
     marker: PhantomData<fn() -> M>,
 }
 
@@ -23,7 +25,21 @@ impl<M> Query<M> {
             sort: None,
             limit: None,
             skip: None,
+            error: None,
             marker: PhantomData,
+        }
+    }
+
+    fn set_error(&mut self, error: QueryError) {
+        if self.error.is_none() {
+            self.error = Some(error);
+        }
+    }
+
+    fn take_error(&mut self) -> Result<(), OxiModError> {
+        match self.error.take() {
+            Some(error) => Err(error.into()),
+            None => Ok(()),
         }
     }
 }
@@ -64,12 +80,21 @@ where
     }
 
     pub fn page(mut self, page: u64, page_size: u64) -> Self {
-        assert!(page > 0, "page must be at least 1");
-        assert!(page_size > 0, "page size must be at least 1");
+        if page == 0 {
+            self.set_error(QueryError::InvalidPageNumber { page });
+            return self;
+        }
 
-        let skip = (page - 1)
-            .checked_mul(page_size)
-            .expect("pagination offset exceeds the supported range");
+        if page_size == 0 {
+            self.set_error(QueryError::InvalidPageSize { page_size });
+            return self;
+        }
+
+        let Some(skip) = (page - 1).checked_mul(page_size) else {
+            self.set_error(QueryError::PaginationOverflow { page, page_size });
+
+            return self;
+        };
 
         self.skip = Some(skip);
         self.limit = Some(page_size);
@@ -114,6 +139,8 @@ where
     M: Queryable + Model,
 {
     pub async fn first(mut self) -> Result<Option<M>, OxiModError> {
+        self.take_error()?;
+
         let sort = self.sort.take();
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
@@ -128,7 +155,9 @@ where
             .map_err(|error| OxiModError::database("Failed to execute typed query", error))
     }
 
-    pub async fn count(self) -> Result<u64, OxiModError> {
+    pub async fn count(mut self) -> Result<u64, OxiModError> {
+        self.take_error()?;
+
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
@@ -139,6 +168,8 @@ where
     }
 
     pub async fn all(mut self) -> Result<Vec<M>, OxiModError> {
+        self.take_error()?;
+
         let sort = self.sort.take();
         let limit = self.limit.take();
         let skip = self.skip.take();
@@ -157,12 +188,7 @@ where
         }
 
         if let Some(limit) = limit {
-            let limit = i64::try_from(limit).map_err(|error| {
-                OxiModError::custom_with_source(
-                    "Query limit exceeds MongoDB's supported range",
-                    error,
-                )
-            })?;
+            let limit = i64::try_from(limit).map_err(|_| QueryError::LimitOutOfRange { limit })?;
 
             find = find.limit(limit);
         }
@@ -194,6 +220,7 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::Query;
+    use crate::error::query_error::QueryError;
     use crate::query::field::Field;
     use crate::query::queryable::Queryable;
 
@@ -411,14 +438,32 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "page must be at least 1")]
-    fn page_rejects_zero_page_number() {
-        let _query = User::query().page(0, 10);
+    fn page_records_invalid_page_number() {
+        let query = User::query().page(0, 10);
+
+        assert_eq!(query.error, Some(QueryError::InvalidPageNumber { page: 0 }),);
     }
 
     #[test]
-    #[should_panic(expected = "page size must be at least 1")]
-    fn page_rejects_zero_page_size() {
-        let _query = User::query().page(1, 0);
+    fn page_records_invalid_page_size() {
+        let query = User::query().page(1, 0);
+
+        assert_eq!(
+            query.error,
+            Some(QueryError::InvalidPageSize { page_size: 0 }),
+        );
+    }
+
+    #[test]
+    fn page_records_pagination_overflow() {
+        let query = User::query().page(u64::MAX, 2);
+
+        assert_eq!(
+            query.error,
+            Some(QueryError::PaginationOverflow {
+                page: u64::MAX,
+                page_size: 2,
+            }),
+        );
     }
 }

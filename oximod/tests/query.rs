@@ -3,7 +3,7 @@ mod common;
 use common::init;
 
 use mongodb::bson::oid::ObjectId;
-use oximod::{_query::Queryable, Model};
+use oximod::{Model, OxiModError, QueryError, Queryable};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -567,4 +567,30 @@ async fn typed_query_not_in_values_excludes_values() -> TestResult {
     User::clear().await?;
 
     Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_page_returns_error_for_zero_page_number
+
+#[tokio::test]
+async fn typed_query_page_returns_error_for_zero_page_number() {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_page_returns_error_for_zero_page_number")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+    }
+
+    let error = User::query()
+        .page(0, 10)
+        .all()
+        .await
+        .expect_err("page zero should return an error");
+
+    assert!(matches!(
+        error,
+        OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
+    ));
 }

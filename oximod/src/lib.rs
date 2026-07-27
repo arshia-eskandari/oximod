@@ -90,6 +90,60 @@
 /// hook execution, client initialization, or MongoDB driver errors.
 pub use oximod_core::error::oximod_error::OxiModError;
 
+/// Represents invalid typed-query configuration.
+///
+/// `QueryError` is used when a query cannot be executed because one or more
+/// builder options are invalid.
+///
+/// Query errors are normally returned through [`OxiModError::Query`].
+/// They can be inspected through pattern matching or with
+/// [`OxiModError::query_error`].
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{
+///     Model,
+///     OxiModError,
+///     QueryError,
+///     Queryable,
+/// };
+/// use serde::{
+///     Deserialize,
+///     Serialize,
+/// };
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+/// }
+///
+/// # async fn run() -> Result<(), OxiModError> {
+/// let result = User::query()
+///     .page(0, 10)
+///     .all()
+///     .await;
+///
+/// match result {
+///     Err(OxiModError::Query(
+///         QueryError::InvalidPageNumber { page },
+///     )) => {
+///         println!("Invalid page number: {page}");
+///     }
+///     Err(error) => return Err(error),
+///     Ok(users) => println!("Found {} users", users.len()),
+/// }
+///
+/// # Ok(())
+/// # }
+/// ```
+pub use oximod_core::error::query_error::QueryError;
+
 /// Represents a validation failure for a specific model field.
 pub use oximod_core::error::oximod_error::ValidationError;
 
@@ -182,6 +236,40 @@ pub use oximod_core::feature::model::Model;
 /// }
 /// ```
 pub use oximod_macros::Model;
+
+/// Trait implemented by models that support OxiMod's typed-query API.
+///
+/// This trait is implemented automatically by [`Model`]. Importing it brings
+/// methods such as [`Queryable::query`] into scope.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{Model, OxiModError, Queryable};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+/// }
+///
+/// # async fn run() -> Result<(), OxiModError> {
+/// let users = User::query()
+///     .filter(|user| user.name.eq("Alice"))
+///     .all()
+///     .await?;
+///
+/// println!("Found {} users", users.len());
+///
+/// # Ok(())
+/// # }
+/// ```
+pub use oximod_core::query::Queryable;
 
 // --- Internal API ---
 

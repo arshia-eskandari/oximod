@@ -1,3 +1,4 @@
+use super::query_error::QueryError;
 use std::error::Error as StdError;
 use thiserror::Error;
 
@@ -203,6 +204,16 @@ pub enum OxiModError {
         #[source]
         source: Option<BoxError>,
     },
+
+    /// The typed query contains invalid configuration.
+    ///
+    /// Examples include:
+    /// - page number zero
+    /// - page size zero
+    /// - pagination offset overflow
+    /// - a limit outside MongoDB's supported range
+    #[error(transparent)]
+    Query(#[from] QueryError),
 }
 
 impl OxiModError {
@@ -294,5 +305,32 @@ impl OxiModError {
             Self::Validation(errors) => Some(&errors.0),
             _ => None,
         }
+    }
+
+    /// Returns the underlying query error when this is an
+    /// `OxiModError::Query` variant.
+    pub fn query_error(&self) -> Option<&QueryError> {
+        match self {
+            Self::Query(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OxiModError;
+    use crate::error::query_error::QueryError;
+
+    #[test]
+    fn query_error_converts_into_oximod_error() {
+        let error: OxiModError = QueryError::InvalidPageNumber { page: 0 }.into();
+
+        assert_eq!(error.to_string(), "page number must be at least 1, got 0");
+
+        assert!(matches!(
+            error.query_error(),
+            Some(QueryError::InvalidPageNumber { page: 0 })
+        ));
     }
 }
