@@ -5,9 +5,9 @@ pub struct SortExpression {
     fields: Vec<SortField>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SortField {
-    name: &'static str,
+    name: String,
     direction: SortDirection,
 }
 
@@ -18,19 +18,19 @@ enum SortDirection {
 }
 
 impl SortExpression {
-    pub(crate) fn ascending(field: &'static str) -> Self {
+    pub(crate) fn ascending(field: impl Into<String>) -> Self {
         Self {
             fields: vec![SortField {
-                name: field,
+                name: field.into(),
                 direction: SortDirection::Ascending,
             }],
         }
     }
 
-    pub(crate) fn descending(field: &'static str) -> Self {
+    pub(crate) fn descending(field: impl Into<String>) -> Self {
         Self {
             fields: vec![SortField {
-                name: field,
+                name: field.into(),
                 direction: SortDirection::Descending,
             }],
         }
@@ -59,7 +59,6 @@ impl SortDirection {
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;

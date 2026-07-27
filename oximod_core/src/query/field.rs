@@ -1,19 +1,20 @@
 use crate::query::expression::{ComparisonOperator, ElementExpression, Expression};
 use crate::query::sort::SortExpression;
 use mongodb::bson::{Bson, DateTime, Regex};
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
 #[derive(Debug)]
 pub struct Field<T> {
-    name: &'static str,
+    name: Cow<'static, str>,
     marker: PhantomData<fn() -> T>,
 }
 
-impl<T> Copy for Field<T> {}
-
 impl<T> Clone for Field<T> {
     fn clone(&self) -> Self {
-        *self
+        Self {
+            name: self.name.clone(),
+            marker: PhantomData,
+        }
     }
 }
 
@@ -21,29 +22,37 @@ impl<T> Field<T> {
     #[doc(hidden)]
     pub const fn new(name: &'static str) -> Self {
         Self {
-            name,
+            name: Cow::Borrowed(name),
             marker: PhantomData,
         }
     }
 
-    pub fn name(&self) -> &'static str {
-        self.name
+    #[doc(hidden)]
+    pub fn from_owned(name: String) -> Self {
+        Self {
+            name: Cow::Owned(name),
+            marker: PhantomData,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
     }
 
     pub fn asc(&self) -> SortExpression {
-        SortExpression::ascending(self.name)
+        SortExpression::ascending(self.name.as_ref())
     }
 
     pub fn desc(&self) -> SortExpression {
-        SortExpression::descending(self.name)
+        SortExpression::descending(self.name.as_ref())
     }
 
     pub fn exists(&self) -> Expression {
-        Expression::comparison(self.name, ComparisonOperator::Exists, true)
+        Expression::comparison(self.name.as_ref(), ComparisonOperator::Exists, true)
     }
 
     pub fn not_exists(&self) -> Expression {
-        Expression::comparison(self.name, ComparisonOperator::Exists, false)
+        Expression::comparison(self.name.as_ref(), ComparisonOperator::Exists, false)
     }
 
     pub fn not<F>(&self, build: F) -> Expression
@@ -56,18 +65,20 @@ impl<T> Field<T> {
 
 impl<T> Field<Option<T>> {
     pub fn is_null(&self) -> Expression {
-        Expression::comparison(self.name, ComparisonOperator::Eq, Bson::Null) & self.exists()
+        Expression::comparison(self.name.as_ref(), ComparisonOperator::Eq, Bson::Null)
+            & self.exists()
     }
 
     pub fn is_not_null(&self) -> Expression {
-        Expression::comparison(self.name, ComparisonOperator::Ne, Bson::Null) & self.exists()
+        Expression::comparison(self.name.as_ref(), ComparisonOperator::Ne, Bson::Null)
+            & self.exists()
     }
 }
 
 impl Field<String> {
     pub fn matches_regex(&self, pattern: impl Into<String>) -> Expression {
         Expression::comparison(
-            self.name,
+            self.name.as_ref(),
             ComparisonOperator::Eq,
             Bson::RegularExpression(Regex {
                 pattern: pattern.into(),
@@ -90,7 +101,7 @@ impl Field<String> {
             .collect::<String>();
 
         Expression::comparison(
-            self.name,
+            self.name.as_ref(),
             ComparisonOperator::Eq,
             Bson::RegularExpression(Regex {
                 pattern: pattern.into(),
@@ -142,7 +153,7 @@ where
     {
         let value: T = value.into();
 
-        Expression::comparison(self.name, operator, value)
+        Expression::comparison(self.name.as_ref(), operator, value)
     }
 
     pub fn in_values<I, V>(&self, values: I) -> Expression
@@ -158,7 +169,11 @@ where
             })
             .collect::<Vec<Bson>>();
 
-        Expression::comparison(self.name, ComparisonOperator::In, Bson::Array(values))
+        Expression::comparison(
+            self.name.as_ref(),
+            ComparisonOperator::In,
+            Bson::Array(values),
+        )
     }
 
     pub fn not_in_values<I, V>(&self, values: I) -> Expression
@@ -174,7 +189,11 @@ where
             })
             .collect::<Vec<Bson>>();
 
-        Expression::comparison(self.name, ComparisonOperator::Nin, Bson::Array(values))
+        Expression::comparison(
+            self.name.as_ref(),
+            ComparisonOperator::Nin,
+            Bson::Array(values),
+        )
     }
 }
 
@@ -188,7 +207,7 @@ where
     {
         let value: T = value.into();
 
-        Expression::comparison(self.name, ComparisonOperator::Eq, value)
+        Expression::comparison(self.name.as_ref(), ComparisonOperator::Eq, value)
     }
 
     pub fn contains_all<I, V>(&self, values: I) -> Expression
@@ -204,14 +223,18 @@ where
             })
             .collect::<Vec<Bson>>();
 
-        Expression::comparison(self.name, ComparisonOperator::All, Bson::Array(values))
+        Expression::comparison(
+            self.name.as_ref(),
+            ComparisonOperator::All,
+            Bson::Array(values),
+        )
     }
 }
 
 impl<T> Field<Vec<T>> {
     pub fn has_size(&self, size: u32) -> Expression {
         Expression::comparison(
-            self.name,
+            self.name.as_ref(),
             ComparisonOperator::Size,
             Bson::Int64(i64::from(size)),
         )
@@ -225,7 +248,7 @@ impl<T> Field<Vec<T>> {
         let expression = build(&element);
 
         Expression::comparison(
-            self.name,
+            self.name.as_ref(),
             ComparisonOperator::ElemMatch,
             Bson::Document(expression.into_document()),
         )
@@ -872,6 +895,20 @@ mod tests {
                         "$lt": 90,
                     },
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn field_supports_an_owned_mongodb_path() {
+        let city = Field::<String>::from_owned("address.city".to_owned());
+
+        assert_eq!(city.name(), "address.city");
+
+        assert_eq!(
+            city.eq("City1").into_document(),
+            doc! {
+                "address.city": "City1",
             }
         );
     }

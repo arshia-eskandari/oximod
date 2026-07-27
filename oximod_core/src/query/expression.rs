@@ -204,11 +204,14 @@ fn not_into_document(expression: Expression) -> Document {
 }
 
 impl Expression {
-    pub(crate) fn comparison(
+    pub(crate) fn comparison<V>(
         field: impl Into<String>,
         operator: ComparisonOperator,
-        value: impl Into<Bson>,
-    ) -> Self {
+        value: V,
+    ) -> Self
+    where
+        V: Into<Bson>,
+    {
         Self {
             kind: ExpressionKind::Comparison {
                 field: field.into(),
