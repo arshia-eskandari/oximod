@@ -642,3 +642,90 @@ async fn typed_query_uses_serde_rename_all() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_exists_matches_present_fields
+#[tokio::test]
+async fn typed_query_exists_matches_present_fields() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_exists_matches_present_fields")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        nickname: Option<String>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .nickname("Ace".to_owned())
+        .save()
+        .await?;
+
+    User::default().name("User2").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.nickname.exists())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+    assert_eq!(users[0].nickname.as_deref(), Some("Ace"));
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_is_null_matches_explicit_null
+
+#[tokio::test]
+async fn typed_query_is_null_matches_explicit_null() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_is_null_matches_explicit_null")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        // No skip_serializing_if: None is stored as explicit BSON null.
+        nickname: Option<String>,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").save().await?;
+
+    User::default()
+        .name("User2")
+        .nickname("Ace".to_owned())
+        .save()
+        .await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.nickname.is_null())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+    assert_eq!(users[0].nickname, None);
+
+    User::clear().await?;
+
+    Ok(())
+}

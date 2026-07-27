@@ -27,6 +27,7 @@ pub(crate) enum ComparisonOperator {
     Lte,
     In,
     Nin,
+    Exists,
 }
 
 impl ComparisonOperator {
@@ -40,6 +41,7 @@ impl ComparisonOperator {
             Self::Lte => Some("$lte"),
             Self::In => Some("$in"),
             Self::Nin => Some("$nin"),
+            Self::Exists => Some("$exists"),
         }
     }
 }
@@ -860,6 +862,34 @@ mod tests {
                         "admin",
                         "moderator",
                     ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn exists_expression_converts_to_exists_operator() {
+        let expression = comparison("nickname", ComparisonOperator::Exists, true);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "nickname": {
+                    "$exists": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn not_exists_expression_converts_to_exists_false() {
+        let expression = comparison("nickname", ComparisonOperator::Exists, false);
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "nickname": {
+                    "$exists": false,
                 },
             }
         );

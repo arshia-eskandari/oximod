@@ -37,6 +37,24 @@ impl<T> Field<T> {
     pub fn desc(&self) -> SortExpression {
         SortExpression::descending(self.name)
     }
+
+    pub fn exists(&self) -> Expression {
+        Expression::comparison(self.name, ComparisonOperator::Exists, true)
+    }
+
+    pub fn not_exists(&self) -> Expression {
+        Expression::comparison(self.name, ComparisonOperator::Exists, false)
+    }
+}
+
+impl<T> Field<Option<T>> {
+    pub fn is_null(&self) -> Expression {
+        Expression::comparison(self.name, ComparisonOperator::Eq, Bson::Null) & self.exists()
+    }
+
+    pub fn is_not_null(&self) -> Expression {
+        Expression::comparison(self.name, ComparisonOperator::Ne, Bson::Null) & self.exists()
+    }
 }
 
 impl<T> Field<T>
@@ -143,7 +161,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
+    use crate::query::Expression;
+    use crate::query::field::ComparisonOperator;
+    use mongodb::bson::{Bson, doc};
 
     use super::Field;
 
@@ -374,6 +394,101 @@ mod tests {
                         "moderator",
                     ],
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_exists_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.exists().into_document(),
+            doc! {
+                "nickname": {
+                    "$exists": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_not_exists_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.not_exists().into_document(),
+            doc! {
+                "nickname": {
+                    "$exists": false,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_strict_null_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.is_null().into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "nickname": null,
+                    },
+                    {
+                        "nickname": {
+                            "$exists": true,
+                        },
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_strict_not_null_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.is_not_null().into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "nickname": {
+                            "$ne": null,
+                        },
+                    },
+                    {
+                        "nickname": {
+                            "$exists": true,
+                        },
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn null_and_exists_expressions_can_be_combined() {
+        let null = Expression::comparison("nickname", ComparisonOperator::Eq, Bson::Null);
+
+        let exists = Expression::comparison("nickname", ComparisonOperator::Exists, true);
+
+        assert_eq!(
+            (null & exists).into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "nickname": null,
+                    },
+                    {
+                        "nickname": {
+                            "$exists": true,
+                        },
+                    },
+                ],
             }
         );
     }
