@@ -594,3 +594,41 @@ async fn typed_query_page_returns_error_for_zero_page_number() {
         OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
     ));
 }
+
+// Run test:
+// cargo nextest run typed_query_uses_serde_renamed_field
+#[tokio::test]
+async fn typed_query_uses_serde_renamed_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_uses_serde_renamed_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[serde(rename = "displayName")]
+        name: String,
+    }
+
+    User::clear().await?;
+
+    let fields = <User as Queryable>::fields();
+
+    assert_eq!(fields.name.name(), "displayName",);
+
+    User::default().name("User1").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}
