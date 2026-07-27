@@ -729,3 +729,40 @@ async fn typed_query_is_null_matches_explicit_null() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_matches_regex
+#[tokio::test]
+async fn typed_query_matches_regex() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_matches_regex")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").save().await?;
+    User::default().name("User2").save().await?;
+    User::default().name("Admin1").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.name.matches_regex("^User"))
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].name, "User1");
+    assert_eq!(users[1].name, "User2");
+
+    User::clear().await?;
+
+    Ok(())
+}

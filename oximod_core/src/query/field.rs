@@ -1,6 +1,6 @@
 use crate::query::expression::{ComparisonOperator, Expression};
 use crate::query::sort::SortExpression;
-use mongodb::bson::{Bson, DateTime};
+use mongodb::bson::{Bson, DateTime, Regex};
 use std::marker::PhantomData;
 
 #[derive(Debug)]
@@ -54,6 +54,19 @@ impl<T> Field<Option<T>> {
 
     pub fn is_not_null(&self) -> Expression {
         Expression::comparison(self.name, ComparisonOperator::Ne, Bson::Null) & self.exists()
+    }
+}
+
+impl Field<String> {
+    pub fn matches_regex(&self, pattern: impl Into<String>) -> Expression {
+        Expression::comparison(
+            self.name,
+            ComparisonOperator::Eq,
+            Bson::RegularExpression(Regex {
+                pattern: pattern.into(),
+                options: String::new(),
+            }),
+        )
     }
 }
 
@@ -163,7 +176,7 @@ where
 mod tests {
     use crate::query::Expression;
     use crate::query::field::ComparisonOperator;
-    use mongodb::bson::{Bson, doc};
+    use mongodb::bson::{Bson, Regex, doc};
 
     use super::Field;
 
@@ -489,6 +502,43 @@ mod tests {
                         },
                     },
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_regex_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.matches_regex("^User").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: "^User".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn regex_expression_is_inserted_directly() {
+        let expression = Expression::comparison(
+            "name",
+            ComparisonOperator::Eq,
+            Bson::RegularExpression(Regex {
+                pattern: "^User".to_owned(),
+                options: String::new(),
+            }),
+        );
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: "^User".to_owned(),
+                    options: String::new(),
+                }),
             }
         );
     }
