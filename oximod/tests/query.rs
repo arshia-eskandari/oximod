@@ -1043,3 +1043,40 @@ async fn typed_query_string_ends_with() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_string_contains_text
+#[tokio::test]
+async fn typed_query_string_contains_text() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_string_contains_text")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+    }
+
+    User::clear().await?;
+
+    User::default().name("Primary.User.Admin").save().await?;
+
+    User::default().name("Primary.UserXAdmin").save().await?;
+
+    User::default().name("Primary.Admin").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.name.contains_text("User."))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "Primary.User.Admin");
+
+    User::clear().await?;
+
+    Ok(())
+}

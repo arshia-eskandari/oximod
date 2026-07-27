@@ -103,6 +103,12 @@ impl Field<String> {
 
         self.matches_regex(format!("{escaped_suffix}$"))
     }
+
+    pub fn contains_text(&self, text: impl AsRef<str>) -> Expression {
+        let escaped_text = regex::escape(text.as_ref());
+
+        self.matches_regex(escaped_text)
+    }
 }
 
 impl<T> Field<T>
@@ -724,6 +730,21 @@ mod tests {
             doc! {
                 "name": Bson::RegularExpression(Regex {
                     pattern: r"\.User$".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_literal_contains_text_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.contains_text("User.").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: r"User\.".to_owned(),
                     options: String::new(),
                 }),
             }
