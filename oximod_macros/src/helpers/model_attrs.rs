@@ -58,6 +58,10 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
             )?;
         } else if path.is_ident("hooks") {
             hooks = true;
+        } else if path.is_ident("serde") {
+            // Serde container attributes, such as `rename_all`, are handled
+            // separately by the generated serialization and query code.
+            continue;
         } else {
             return Err(syn::Error::new_spanned(
                 attr,

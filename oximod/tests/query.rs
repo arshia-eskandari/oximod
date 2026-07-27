@@ -632,3 +632,48 @@ async fn typed_query_uses_serde_renamed_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_uses_serde_rename_all
+#[tokio::test]
+async fn typed_query_uses_serde_rename_all() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    #[db("test")]
+    #[collection("typed_query_uses_serde_rename_all")]
+    pub struct User {
+        #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        display_name: String,
+        account_active: bool,
+    }
+
+    User::clear().await?;
+
+    let fields = <User as Queryable>::fields();
+
+    assert_eq!(fields._id.name(), "_id");
+    assert_eq!(fields.display_name.name(), "displayName");
+    assert_eq!(fields.account_active.name(), "accountActive");
+
+    User::default()
+        .display_name("User1")
+        .account_active(true)
+        .save()
+        .await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.display_name.eq("User1") & user.account_active.eq(true))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].display_name, "User1");
+    assert!(users[0].account_active);
+
+    User::clear().await?;
+
+    Ok(())
+}
