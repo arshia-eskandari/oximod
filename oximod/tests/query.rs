@@ -68,38 +68,6 @@ async fn typed_query_returns_only_matching_models() -> TestResult {
         .save()
         .await?;
 
-    /*
-        MongoDB equivalent:
-
-        {
-            "$and": [
-                { "active": true },
-                { "age": { "$gte": 18 } },
-                {
-                    "$or": [
-                        { "role": "admin" },
-                        { "name": "User1" }
-                    ]
-                }
-            ]
-        }
-
-        Expected results:
-
-        User1:
-        - active
-        - adult
-        - name matches
-
-        User2:
-        - excluded because age is below 18
-
-        User3:
-        - excluded because active is false
-
-        User4:
-        - excluded because neither role nor name matches
-    */
     let users: Vec<User> = User::query()
         .filter(|user| {
             user.active.eq(true)
@@ -350,7 +318,6 @@ async fn typed_query_skip_omits_matching_results() -> TestResult {
 
 // Run test:
 // cargo nextest run typed_query_sort_by_orders_results_ascending
-
 #[tokio::test]
 async fn typed_query_sort_by_orders_results_ascending() -> TestResult {
     init().await?;
@@ -476,7 +443,6 @@ async fn typed_query_page_returns_requested_page() -> TestResult {
 
 // Run test:
 // cargo nextest run typed_query_in_values_matches_any_value
-
 #[tokio::test]
 async fn typed_query_in_values_matches_any_value() -> TestResult {
     init().await?;
@@ -571,7 +537,6 @@ async fn typed_query_not_in_values_excludes_values() -> TestResult {
 
 // Run test:
 // cargo nextest run typed_query_page_returns_error_for_zero_page_number
-
 #[tokio::test]
 async fn typed_query_page_returns_error_for_zero_page_number() {
     #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
