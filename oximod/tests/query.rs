@@ -2099,3 +2099,73 @@ async fn typed_query_increments_numeric_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_updates_all_matching_documents
+#[tokio::test]
+async fn typed_query_updates_all_matching_documents() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_updates_all_matching_documents")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+        login_count: i32,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .active(false)
+        .login_count(1)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .active(false)
+        .login_count(2)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .active(true)
+        .login_count(3)
+        .save()
+        .await?;
+
+    let result = User::query()
+        .filter(|user| user.active.eq(false))
+        .update_all(|user| user.active.set(true) & user.login_count.inc(1))
+        .await?;
+
+    assert_eq!(result.matched_count, 2);
+    assert_eq!(result.modified_count, 2);
+
+    let users: Vec<User> = User::query().sort_by(|user| user.name.asc()).all().await?;
+
+    assert_eq!(users.len(), 3);
+
+    assert_eq!(users[0].name, "User1");
+    assert!(users[0].active);
+    assert_eq!(users[0].login_count, 2);
+
+    assert_eq!(users[1].name, "User2");
+    assert!(users[1].active);
+    assert_eq!(users[1].login_count, 3);
+
+    assert_eq!(users[2].name, "User3");
+    assert!(users[2].active);
+    assert_eq!(users[2].login_count, 3);
+
+    User::clear().await?;
+
+    Ok(())
+}

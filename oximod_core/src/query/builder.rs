@@ -7,7 +7,7 @@ use crate::query::sort::SortExpression;
 use crate::query::update_expression::UpdateExpression;
 use mongodb::bson::Document;
 use mongodb::options::ReturnDocument;
-use mongodb::results::DeleteResult;
+use mongodb::results::{DeleteResult, UpdateResult};
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
@@ -319,6 +319,38 @@ where
                 error,
             )
         })
+    }
+
+    /// Updates all documents matching this query.
+    ///
+    /// Returns the MongoDB update result, including the number of matched
+    /// and modified documents.
+    ///
+    /// Calling this method without a filter updates every document in the
+    /// model's collection.
+    pub async fn update_all<F>(self, build: F) -> Result<UpdateResult, OxiModError>
+    where
+        F: FnOnce(&<M as Queryable>::Fields) -> UpdateExpression,
+    {
+        let Self { filter, error, .. } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        let fields = <M as Queryable>::fields();
+        let update = build(&fields).into_document();
+
+        let filter = filter.map(Expression::into_document).unwrap_or_default();
+
+        let collection = M::get_collection()?;
+
+        collection
+            .update_many(filter, update)
+            .await
+            .map_err(|error| {
+                OxiModError::database("Failed to update documents matching the typed query", error)
+            })
     }
 }
 
