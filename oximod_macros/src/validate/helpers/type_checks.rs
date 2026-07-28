@@ -50,4 +50,3 @@ pub fn is_string(ty: &Type) -> bool {
         _ => false,
     }
 }
-

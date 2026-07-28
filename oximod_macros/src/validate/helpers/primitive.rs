@@ -65,4 +65,3 @@ pub fn primitive_of(ty: &syn::Type) -> PrimitiveNum {
         NonNumeric
     }
 }
-
