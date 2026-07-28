@@ -2008,3 +2008,52 @@ async fn typed_query_updates_multiple_fields_with_set() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_unsets_optional_field
+#[tokio::test]
+async fn typed_query_unsets_optional_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_unsets_optional_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        nickname: Option<String>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .nickname("cool_user".to_owned())
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.nickname.unset())
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert_eq!(updated_user.nickname, None);
+
+    let users_without_nickname: Vec<User> = User::query()
+        .filter(|user| user.nickname.not_exists())
+        .all()
+        .await?;
+
+    assert_eq!(users_without_nickname.len(), 1);
+    assert_eq!(users_without_nickname[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}

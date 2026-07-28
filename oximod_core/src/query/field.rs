@@ -86,6 +86,13 @@ impl<T> Field<Option<T>> {
         Expression::comparison(self.name.as_ref(), ComparisonOperator::Ne, Bson::Null)
             & self.exists()
     }
+
+    /// Creates a typed MongoDB `$unset` update for this optional field.
+    ///
+    /// The field is removed entirely from the stored MongoDB document.
+    pub fn unset(&self) -> UpdateExpression {
+        UpdateExpression::unset(self.name())
+    }
 }
 
 impl<T> Field<T>

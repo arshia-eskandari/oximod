@@ -21,6 +21,19 @@ impl UpdateExpression {
         Self { document }
     }
 
+    pub(crate) fn unset(field: impl Into<String>) -> Self {
+        let mut fields = Document::new();
+
+        // MongoDB ignores the value associated with a field under
+        // `$unset`. An empty string is the conventional representation.
+        fields.insert(field.into(), "");
+
+        let mut document = Document::new();
+        document.insert("$unset", fields);
+
+        Self { document }
+    }
+
     pub(crate) fn into_document(self) -> Document {
         self.document
     }
@@ -60,6 +73,7 @@ impl BitAnd for UpdateExpression {
 
 #[cfg(test)]
 mod tests {
+    use crate::query::Field;
     use mongodb::bson::doc;
 
     use super::UpdateExpression;
@@ -105,6 +119,51 @@ mod tests {
             doc! {
                 "$set": {
                     "age": 21,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn unset_builds_unset_update_document() {
+        let update = UpdateExpression::unset("nickname");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$unset": {
+                    "nickname": "",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_field_builds_unset_update_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.unset().into_document(),
+            doc! {
+                "$unset": {
+                    "nickname": "",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_unset_update_expressions() {
+        let update = UpdateExpression::set("active", false) & UpdateExpression::unset("nickname");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": false,
+                },
+                "$unset": {
+                    "nickname": "",
                 },
             }
         );
