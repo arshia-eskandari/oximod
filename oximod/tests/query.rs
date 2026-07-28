@@ -3,7 +3,10 @@ mod common;
 use common::init;
 
 use mongodb::bson::oid::ObjectId;
-use oximod::{EmbeddedDocument, Model, OxiModError, QueryError, Queryable, RegexOption};
+use oximod::{
+    BulkWriteOperation, EmbeddedDocument, Model, OxiModError, QueryError, QueryModifier, Queryable,
+    RegexOption,
+};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -2832,6 +2835,80 @@ async fn typed_query_errors_propagate_through_write_operations() -> TestResult {
     assert!(matches!(
         update_all_error,
         OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
+    ));
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_bulk_writes_reject_query_modifiers
+#[tokio::test]
+async fn typed_query_bulk_writes_reject_query_modifiers() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_bulk_writes_reject_query_modifiers")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+    }
+
+    let delete_sort_error = User::query()
+        .sort_by(|user| user.name.asc())
+        .delete_all()
+        .await
+        .expect_err("delete_all should reject sorting");
+
+    assert!(matches!(
+        delete_sort_error,
+        OxiModError::Query(QueryError::UnsupportedBulkWriteModifier {
+            operation: BulkWriteOperation::DeleteAll,
+            modifier: QueryModifier::Sort,
+        })
+    ));
+
+    let delete_limit_error = User::query()
+        .limit(1)
+        .delete_all()
+        .await
+        .expect_err("delete_all should reject limits");
+
+    assert!(matches!(
+        delete_limit_error,
+        OxiModError::Query(QueryError::UnsupportedBulkWriteModifier {
+            operation: BulkWriteOperation::DeleteAll,
+            modifier: QueryModifier::Limit,
+        })
+    ));
+
+    let update_skip_error = User::query()
+        .skip(1)
+        .update_all(|user| user.active.set(true))
+        .await
+        .expect_err("update_all should reject offsets");
+
+    assert!(matches!(
+        update_skip_error,
+        OxiModError::Query(QueryError::UnsupportedBulkWriteModifier {
+            operation: BulkWriteOperation::UpdateAll,
+            modifier: QueryModifier::Skip,
+        })
+    ));
+
+    let update_page_error = User::query()
+        .page(2, 10)
+        .update_all(|user| user.active.set(true))
+        .await
+        .expect_err("update_all should reject pagination");
+
+    assert!(matches!(
+        update_page_error,
+        OxiModError::Query(QueryError::UnsupportedBulkWriteModifier {
+            operation: BulkWriteOperation::UpdateAll,
+            modifier: QueryModifier::Pagination,
+        })
     ));
 
     Ok(())

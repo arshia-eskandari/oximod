@@ -144,6 +144,12 @@ pub use oximod_core::error::oximod_error::OxiModError;
 /// ```
 pub use oximod_core::error::query_error::QueryError;
 
+/// A typed-query operation that may modify multiple documents.
+pub use oximod_core::error::query_error::BulkWriteOperation;
+
+/// An unsupported query modifier associated with a typed bulk write.
+pub use oximod_core::error::query_error::QueryModifier;
+
 /// Represents a validation failure for a specific model field.
 pub use oximod_core::error::oximod_error::ValidationError;
 

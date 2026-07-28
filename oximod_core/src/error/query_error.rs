@@ -1,3 +1,4 @@
+use std::fmt;
 use thiserror::Error;
 
 /// Represents errors caused by invalid typed-query configuration.
@@ -18,6 +19,62 @@ pub enum QueryError {
     /// MongoDB represents limits using a signed 64-bit integer.
     #[error("query limit {limit} exceeds MongoDB's supported range")]
     LimitOutOfRange { limit: u64 },
+
+    /// A bulk write was configured with an unsupported query modifier.
+    #[error("{operation} does not support the `{modifier}` query modifier")]
+    UnsupportedBulkWriteModifier {
+        /// The bulk operation being configured.
+        operation: BulkWriteOperation,
+
+        /// The unsupported query modifier.
+        modifier: QueryModifier,
+    },
+}
+
+/// A typed-query operation that may modify multiple documents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BulkWriteOperation {
+    /// Delete all documents matching the query.
+    DeleteAll,
+
+    /// Update all documents matching the query.
+    UpdateAll,
+}
+
+impl fmt::Display for BulkWriteOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DeleteAll => f.write_str("delete_all"),
+            Self::UpdateAll => f.write_str("update_all"),
+        }
+    }
+}
+
+/// A query modifier that is unsupported by bulk write operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryModifier {
+    /// Query sorting.
+    Sort,
+
+    /// Query offset.
+    Skip,
+
+    /// Query result limit.
+    Limit,
+
+    /// One-based query pagination.
+    Pagination,
+}
+
+impl fmt::Display for QueryModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Sort => f.write_str("sort"),
+            Self::Skip => f.write_str("skip"),
+            Self::Limit => f.write_str("limit"),
+            Self::Pagination => f.write_str("pagination"),
+        }
+    }
 }
 
 #[cfg(test)]

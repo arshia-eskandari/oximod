@@ -1,5 +1,5 @@
 use crate::error::oximod_error::OxiModError;
-use crate::error::query_error::QueryError;
+use crate::error::query_error::{BulkWriteOperation, QueryError, QueryModifier};
 use crate::feature::model::Model;
 use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
@@ -18,6 +18,7 @@ pub struct Query<M> {
     skip: Option<u64>,
     error: Option<QueryError>,
     marker: PhantomData<fn() -> M>,
+    pagination: bool,
 }
 
 impl<M> Query<M> {
@@ -30,6 +31,7 @@ impl<M> Query<M> {
             skip: None,
             error: None,
             marker: PhantomData,
+            pagination: false,
         }
     }
 
@@ -44,6 +46,44 @@ impl<M> Query<M> {
             Some(error) => Err(error.into()),
             None => Ok(()),
         }
+    }
+
+    fn validate_bulk_write_modifiers(
+        operation: BulkWriteOperation,
+        pagination: bool,
+        has_sort: bool,
+        has_skip: bool,
+        has_limit: bool,
+    ) -> Result<(), QueryError> {
+        if pagination {
+            return Err(QueryError::UnsupportedBulkWriteModifier {
+                operation,
+                modifier: QueryModifier::Pagination,
+            });
+        }
+
+        if has_sort {
+            return Err(QueryError::UnsupportedBulkWriteModifier {
+                operation,
+                modifier: QueryModifier::Sort,
+            });
+        }
+
+        if has_skip {
+            return Err(QueryError::UnsupportedBulkWriteModifier {
+                operation,
+                modifier: QueryModifier::Skip,
+            });
+        }
+
+        if has_limit {
+            return Err(QueryError::UnsupportedBulkWriteModifier {
+                operation,
+                modifier: QueryModifier::Limit,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -83,6 +123,8 @@ where
     }
 
     pub fn page(mut self, page: u64, page_size: u64) -> Self {
+        self.pagination = true;
+
         if page == 0 {
             self.set_error(QueryError::InvalidPageNumber { page });
             return self;
@@ -255,17 +297,30 @@ where
 
     /// Deletes all documents matching this query.
     ///
-    /// Returns the MongoDB deletion result, including the number of
-    /// documents deleted.
-    ///
-    /// Calling this method without a filter deletes every document in the
-    /// model's collection.
+    /// Sorting, skipping, limiting, and pagination are not supported for
+    /// bulk deletion.
     pub async fn delete_all(self) -> Result<DeleteResult, OxiModError> {
-        let Self { filter, error, .. } = self;
+        let Self {
+            filter,
+            sort,
+            limit,
+            skip,
+            pagination,
+            error,
+            ..
+        } = self;
 
         if let Some(error) = error {
             return Err(error.into());
         }
+
+        Self::validate_bulk_write_modifiers(
+            BulkWriteOperation::DeleteAll,
+            pagination,
+            sort.is_some(),
+            skip.is_some(),
+            limit.is_some(),
+        )?;
 
         let filter = filter.map(Expression::into_document).unwrap_or_default();
 
@@ -323,20 +378,33 @@ where
 
     /// Updates all documents matching this query.
     ///
-    /// Returns the MongoDB update result, including the number of matched
-    /// and modified documents.
-    ///
-    /// Calling this method without a filter updates every document in the
-    /// model's collection.
+    /// Sorting, skipping, limiting, and pagination are not supported for
+    /// bulk updates.
     pub async fn update_all<F>(self, build: F) -> Result<UpdateResult, OxiModError>
     where
         F: FnOnce(&<M as Queryable>::Fields) -> UpdateExpression,
     {
-        let Self { filter, error, .. } = self;
+        let Self {
+            filter,
+            sort,
+            limit,
+            skip,
+            pagination,
+            error,
+            ..
+        } = self;
 
         if let Some(error) = error {
             return Err(error.into());
         }
+
+        Self::validate_bulk_write_modifiers(
+            BulkWriteOperation::UpdateAll,
+            pagination,
+            sort.is_some(),
+            skip.is_some(),
+            limit.is_some(),
+        )?;
 
         let fields = <M as Queryable>::fields();
         let update = build(&fields).into_document();
