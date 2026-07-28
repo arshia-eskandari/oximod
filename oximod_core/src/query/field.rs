@@ -1,3 +1,4 @@
+use super::UpdateExpression;
 use super::embedded_document::EmbeddedDocument;
 use crate::query::expression::{ComparisonOperator, ElementExpression, Expression};
 use crate::query::sort::SortExpression;
@@ -209,6 +210,14 @@ where
             ComparisonOperator::Nin,
             Bson::Array(values),
         )
+    }
+
+    /// Creates a typed MongoDB `$set` update for this field.
+    pub fn set<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::set(self.name(), value.into())
     }
 }
 
@@ -1096,6 +1105,20 @@ mod tests {
                     pattern: r"cool\.".to_owned(),
                     options: String::new(),
                 }),
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_set_update_expression() {
+        let active = Field::<bool>::new("active");
+
+        assert_eq!(
+            active.set(true).into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
             }
         );
     }

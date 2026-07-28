@@ -1913,3 +1913,56 @@ async fn typed_query_deletes_all_matching_documents() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_updates_one_field_with_set
+#[tokio::test]
+async fn typed_query_updates_one_field_with_set() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_updates_one_field_with_set")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").active(false).save().await?;
+
+    User::default().name("User2").active(false).save().await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.active.set(true))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert!(updated_user.active);
+
+    let user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .first()
+        .await?
+        .expect("updated user should still exist");
+
+    assert!(user.active);
+
+    let unchanged_user = User::query()
+        .filter(|user| user.name.eq("User2"))
+        .first()
+        .await?
+        .expect("second user should still exist");
+
+    assert!(!unchanged_user.active);
+
+    User::clear().await?;
+
+    Ok(())
+}

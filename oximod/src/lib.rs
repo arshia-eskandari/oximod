@@ -564,6 +564,21 @@ pub use oximod_core::query::Queryable;
 /// ```
 pub use oximod_core::query::RegexOption;
 
+/// A type-safe MongoDB update expression used by typed-query update operations.
+///
+/// Update expressions are normally created through methods on generated typed
+/// fields, such as `.set()`, and passed to [`Queryable::update_one`].
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let updated_user = User::query()
+///     .filter(|user| user.name.eq("User1"))
+///     .update_one(|user| user.active.set(true))
+///     .await?;
+/// ```
+pub use oximod_core::query::UpdateExpression;
+
 /// Trait implemented by embedded documents that support
 /// typed nested-field queries.
 ///

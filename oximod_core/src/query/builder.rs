@@ -4,7 +4,9 @@ use crate::feature::model::Model;
 use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
 use crate::query::sort::SortExpression;
+use crate::query::update_expression::UpdateExpression;
 use mongodb::bson::Document;
+use mongodb::options::ReturnDocument;
 use mongodb::results::DeleteResult;
 use std::marker::PhantomData;
 
@@ -271,6 +273,51 @@ where
 
         collection.delete_many(filter).await.map_err(|error| {
             OxiModError::database("Failed to delete documents matching the typed query", error)
+        })
+    }
+
+    /// Updates and returns the first document matching this query.
+    ///
+    /// When sorting is configured, the first document according to that
+    /// ordering is updated.
+    ///
+    /// The returned value contains the document after the update. Returns
+    /// `None` when no document matches the query.
+    pub async fn update_one<F>(self, build: F) -> Result<Option<M>, OxiModError>
+    where
+        F: FnOnce(&M::Fields) -> UpdateExpression,
+    {
+        let Self {
+            filter,
+            sort,
+            error,
+            ..
+        } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        let fields = M::fields();
+        let update = build(&fields).into_document();
+
+        let filter = filter.map(Expression::into_document).unwrap_or_default();
+
+        let collection = M::get_collection()?;
+
+        let mut operation = collection
+            .find_one_and_update(filter, update)
+            .return_document(ReturnDocument::After);
+
+        if let Some(sort) = sort {
+            operation = operation.sort(sort.into_document());
+        }
+
+        operation.await.map_err(|error| {
+            OxiModError::database(
+                "Failed to update the first document matching the typed query",
+                error,
+            )
         })
     }
 }
