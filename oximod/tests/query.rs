@@ -1871,3 +1871,45 @@ async fn typed_query_deletes_one_matching_document() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_deletes_all_matching_documents
+#[tokio::test]
+async fn typed_query_deletes_all_matching_documents() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_deletes_all_matching_documents")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").active(false).save().await?;
+
+    User::default().name("User2").active(false).save().await?;
+
+    User::default().name("User3").active(true).save().await?;
+
+    let result = User::query()
+        .filter(|user| user.active.eq(false))
+        .delete_all()
+        .await?;
+
+    assert_eq!(result.deleted_count, 2);
+
+    let remaining_users: Vec<User> = User::query().sort_by(|user| user.name.asc()).all().await?;
+
+    assert_eq!(remaining_users.len(), 1);
+    assert_eq!(remaining_users[0].name, "User3");
+
+    User::clear().await?;
+
+    Ok(())
+}

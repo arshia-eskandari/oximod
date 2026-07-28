@@ -5,6 +5,7 @@ use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
 use crate::query::sort::SortExpression;
 use mongodb::bson::Document;
+use mongodb::results::DeleteResult;
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
@@ -247,6 +248,29 @@ where
                 "Failed to delete the first document matching the typed query",
                 error,
             )
+        })
+    }
+
+    /// Deletes all documents matching this query.
+    ///
+    /// Returns the MongoDB deletion result, including the number of
+    /// documents deleted.
+    ///
+    /// Calling this method without a filter deletes every document in the
+    /// model's collection.
+    pub async fn delete_all(self) -> Result<DeleteResult, OxiModError> {
+        let Self { filter, error, .. } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        let filter = filter.map(Expression::into_document).unwrap_or_default();
+
+        let collection = M::get_collection()?;
+
+        collection.delete_many(filter).await.map_err(|error| {
+            OxiModError::database("Failed to delete documents matching the typed query", error)
         })
     }
 }
