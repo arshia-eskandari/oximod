@@ -2691,3 +2691,86 @@ async fn typed_query_updates_serde_renamed_fields() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_updates_multi_level_nested_field
+#[tokio::test]
+async fn typed_query_updates_multi_level_nested_field() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Address {
+        city_name: String,
+        active: bool,
+    }
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Profile {
+        address: Address,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_updates_multi_level_nested_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        profile: Profile,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .profile(Profile {
+            address: Address {
+                city_name: "City1".to_owned(),
+                active: false,
+            },
+        })
+        .save()
+        .await?;
+
+    let fields = <User as Queryable>::fields();
+
+    let paths = fields.profile.nested(|profile| {
+        profile.address.nested(|address| {
+            (
+                address.city_name.name().to_owned(),
+                address.active.name().to_owned(),
+            )
+        })
+    });
+
+    assert_eq!(
+        paths,
+        (
+            "profile.address.cityName".to_owned(),
+            "profile.address.active".to_owned(),
+        )
+    );
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| {
+            user.profile.nested(|profile| {
+                profile
+                    .address
+                    .nested(|address| address.city_name.set("City2") & address.active.set(true))
+            })
+        })
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert_eq!(updated_user.profile.address.city_name, "City2");
+    assert!(updated_user.profile.address.active);
+
+    User::clear().await?;
+
+    Ok(())
+}
