@@ -260,6 +260,15 @@ where
             Bson::Array(values),
         )
     }
+
+    /// Creates a typed MongoDB `$push` update that appends one value
+    /// to this array field.
+    pub fn push<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::push(self.name(), value.into())
+    }
 }
 
 impl<T> Field<Vec<T>> {
@@ -479,6 +488,7 @@ where
 mod tests {
     use crate::query::EmbeddedDocument;
     use crate::query::Expression;
+    use crate::query::UpdateExpression;
     use crate::query::field::ComparisonOperator;
     use crate::query::field::RegexOption;
     use mongodb::bson::{Bson, Regex, doc};
@@ -1173,6 +1183,54 @@ mod tests {
             doc! {
                 "$inc": {
                     "balance": 1.5,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_push_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.push("mongodb").into_document(),
+            doc! {
+                "$push": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_push_update_expressions() {
+        let update =
+            UpdateExpression::push("tags", "mongodb") & UpdateExpression::push("scores", 100);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$push": {
+                    "tags": "mongodb",
+                    "scores": 100,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_push_update_expressions() {
+        let update =
+            UpdateExpression::set("active", true) & UpdateExpression::push("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$push": {
+                    "tags": "mongodb",
                 },
             }
         );

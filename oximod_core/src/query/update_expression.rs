@@ -47,6 +47,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn push(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$push", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -210,6 +220,20 @@ mod tests {
                 },
                 "$inc": {
                     "login_count": 1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn push_builds_push_update_document() {
+        let update = UpdateExpression::push("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$push": {
+                    "tags": "mongodb",
                 },
             }
         );
