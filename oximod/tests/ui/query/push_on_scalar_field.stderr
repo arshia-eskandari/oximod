@@ -1,0 +1,8 @@
+error[E0599]: no method named `push` found for struct `Field<std::string::String>` in the current scope
+  --> tests/ui/query/push_on_scalar_field.rs:16:60
+   |
+16 |     let _query = User::query().update_one(|user| user.name.push("mongodb"));
+   |                                                            ^^^^ method not found in `Field<std::string::String>`
+   |
+   = note: the method was found for
+           - `Field<Vec<T>>`
