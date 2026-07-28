@@ -2468,3 +2468,56 @@ async fn typed_query_adds_multiple_unique_values_to_array() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_sets_nested_document_field
+#[tokio::test]
+async fn typed_query_sets_nested_document_field() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Address {
+        city_name: String,
+        active: bool,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_sets_nested_document_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        address: Address,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .address(Address {
+            city_name: "City1".to_owned(),
+            active: true,
+        })
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| {
+            user.address
+                .nested(|address| address.city_name.set("City2"))
+        })
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert_eq!(updated_user.address.city_name, "City2");
+    assert!(updated_user.address.active);
+
+    User::clear().await?;
+
+    Ok(())
+}
