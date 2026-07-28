@@ -1,0 +1,24 @@
+error[E0599]: the method `nested` exists for struct `Field<std::string::String>`, but its trait bounds were not satisfied
+  --> tests/ui/query/nested_on_scalar_field.rs:16:56
+   |
+16 |     let _query = User::query().filter(|user| user.name.nested(|name| name.eq("User1")));
+   |                                                        ^^^^^^ method cannot be called on `Field<std::string::String>` due to unsatisfied trait bounds
+   |
+  ::: $RUST/alloc/src/string.rs
+   |
+   | pub struct String {
+   | ----------------- doesn't satisfy `std::string::String: oximod::EmbeddedDocument`
+   |
+   = note: the following trait bounds were not satisfied:
+           `std::string::String: oximod::EmbeddedDocument`
+
+error[E0282]: type annotations needed
+  --> tests/ui/query/nested_on_scalar_field.rs:16:64
+   |
+16 |     let _query = User::query().filter(|user| user.name.nested(|name| name.eq("User1")));
+   |                                                                ^^^^  ---- type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+16 |     let _query = User::query().filter(|user| user.name.nested(|name: /* Type */| name.eq("User1")));
+   |                                                                    ++++++++++++
