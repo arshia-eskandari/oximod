@@ -353,6 +353,13 @@ pub trait StringQueryValue {}
 impl StringQueryValue for String {}
 impl StringQueryValue for Option<String> {}
 
+#[doc(hidden)]
+pub trait NumericQueryValue: Into<Bson> {}
+
+impl NumericQueryValue for i32 {}
+impl NumericQueryValue for i64 {}
+impl NumericQueryValue for f64 {}
+
 impl<T> Field<T>
 where
     T: OrderedQueryValue + Into<Bson>,
@@ -452,6 +459,19 @@ where
         V: Into<T>,
     {
         self.comparison(ComparisonOperator::Lte, value)
+    }
+}
+
+impl<T> Field<T>
+where
+    T: NumericQueryValue,
+{
+    /// Creates a typed MongoDB `$inc` update for this numeric field.
+    pub fn inc<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::inc(self.name(), value.into())
     }
 }
 
@@ -1125,6 +1145,34 @@ mod tests {
             doc! {
                 "$set": {
                     "active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn numeric_field_builds_inc_update_expression() {
+        let login_count = Field::<i32>::new("login_count");
+
+        assert_eq!(
+            login_count.inc(2).into_document(),
+            doc! {
+                "$inc": {
+                    "login_count": 2,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn floating_point_field_builds_inc_update_expression() {
+        let balance = Field::<f64>::new("balance");
+
+        assert_eq!(
+            balance.inc(1.5).into_document(),
+            doc! {
+                "$inc": {
+                    "balance": 1.5,
                 },
             }
         );

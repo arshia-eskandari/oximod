@@ -2057,3 +2057,45 @@ async fn typed_query_unsets_optional_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_increments_numeric_field
+#[tokio::test]
+async fn typed_query_increments_numeric_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_increments_numeric_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        login_count: i32,
+        balance: f64,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .login_count(5)
+        .balance(10.5)
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.login_count.inc(2) & user.balance.inc(1.5))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert_eq!(updated_user.login_count, 7);
+    assert_eq!(updated_user.balance, 12.0);
+
+    User::clear().await?;
+
+    Ok(())
+}

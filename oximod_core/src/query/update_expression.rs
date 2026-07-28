@@ -37,6 +37,16 @@ impl UpdateExpression {
     pub(crate) fn into_document(self) -> Document {
         self.document
     }
+
+    pub(crate) fn inc(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$inc", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -164,6 +174,42 @@ mod tests {
                 },
                 "$unset": {
                     "nickname": "",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn inc_builds_inc_update_document() {
+        let update = UpdateExpression::inc("login_count", 2);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$inc": {
+                    "login_count": 2,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_unset_and_inc_update_expressions() {
+        let update = UpdateExpression::set("active", true)
+            & UpdateExpression::unset("nickname")
+            & UpdateExpression::inc("login_count", 1);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$unset": {
+                    "nickname": "",
+                },
+                "$inc": {
+                    "login_count": 1,
                 },
             }
         );
