@@ -433,6 +433,91 @@ pub use oximod_macros::Model;
 /// ```rust,ignore
 /// User::query().count().await?
 /// ```
+///
+/// # Embedded documents
+///
+/// Derive [`EmbeddedDocument`] for nested types and use `.nested()`
+/// to access their generated typed fields.
+///
+/// Use `.elem_match_nested()` to create typed `$elemMatch` queries for
+/// arrays of embedded documents.
+///
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{
+///     EmbeddedDocument,
+///     Model,
+///     Queryable,
+/// };
+/// use serde::{
+///     Deserialize,
+///     Serialize,
+/// };
+///
+/// #[derive(
+///     Debug,
+///     Default,
+///     Serialize,
+///     Deserialize,
+///     EmbeddedDocument,
+/// )]
+/// #[serde(rename_all = "camelCase")]
+/// struct Address {
+///     city_name: String,
+///     active: bool,
+/// }
+///
+/// #[derive(
+///     Debug,
+///     Serialize,
+///     Deserialize,
+///     Model,
+/// )]
+/// #[db("example")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///
+///     name: String,
+///
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     address: Option<Address>,
+///
+///     addresses: Vec<Address>,
+/// }
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let users = User::query()
+///     .filter(|user| {
+///         user.address.nested(|address| {
+///             address.city_name.eq("City1")
+///                 & address.active.eq(true)
+///         })
+///     })
+///     .sort_by(|user| {
+///         user.address.nested(|address| {
+///             address.city_name.asc()
+///         })
+///     })
+///     .all()
+///     .await?;
+///
+/// let users_with_matching_address = User::query()
+///     .filter(|user| {
+///         user.addresses.elem_match_nested(|address| {
+///             address.city_name.eq("City1")
+///                 & address.active.eq(true)
+///         })
+///     })
+///     .all()
+///     .await?;
+///
+/// # let _ = users;
+/// # let _ = users_with_matching_address;
+/// # Ok(())
+/// # }
+/// ```
 pub use oximod_core::query::Queryable;
 
 /// An option that modifies MongoDB regular-expression matching.
