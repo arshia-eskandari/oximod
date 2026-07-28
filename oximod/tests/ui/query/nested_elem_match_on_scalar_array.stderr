@@ -1,0 +1,19 @@
+error[E0599]: the method `elem_match_nested` exists for struct `Field<Vec<i32>>`, but its trait bounds were not satisfied
+  --> tests/ui/query/nested_elem_match_on_scalar_array.rs:16:58
+   |
+16 |     let _query = User::query().filter(|user| user.scores.elem_match_nested(|score| score.gte(80)));
+   |                                                          ^^^^^^^^^^^^^^^^^
+   |
+   = note: the following trait bounds were not satisfied:
+           `i32: oximod::EmbeddedDocument`
+
+error[E0282]: type annotations needed
+  --> tests/ui/query/nested_elem_match_on_scalar_array.rs:16:77
+   |
+16 |     let _query = User::query().filter(|user| user.scores.elem_match_nested(|score| score.gte(80)));
+   |                                                                             ^^^^^  ----- type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+16 |     let _query = User::query().filter(|user| user.scores.elem_match_nested(|score: /* Type */| score.gte(80)));
+   |                                                                                  ++++++++++++
