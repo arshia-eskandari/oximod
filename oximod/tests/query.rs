@@ -1966,3 +1966,45 @@ async fn typed_query_updates_one_field_with_set() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_updates_multiple_fields_with_set
+#[tokio::test]
+async fn typed_query_updates_multiple_fields_with_set() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_updates_multiple_fields_with_set")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+        age: i32,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .active(false)
+        .age(20)
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.name.set("UpdatedUser") & user.active.set(true) & user.age.set(21))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "UpdatedUser");
+    assert!(updated_user.active);
+    assert_eq!(updated_user.age, 21);
+
+    User::clear().await?;
+
+    Ok(())
+}
