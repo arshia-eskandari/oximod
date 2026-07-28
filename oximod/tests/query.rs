@@ -1639,3 +1639,68 @@ async fn typed_query_sorts_by_nested_document_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_nested_elem_match_respects_serde_renames
+#[tokio::test]
+async fn typed_query_nested_elem_match_respects_serde_renames() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Address {
+        city_name: String,
+
+        #[serde(rename = "isActive")]
+        active: bool,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_nested_elem_match_respects_serde_renames")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        addresses: Vec<Address>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .addresses(vec![Address {
+            city_name: "City1".to_owned(),
+            active: true,
+        }])
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .addresses(vec![Address {
+            city_name: "City1".to_owned(),
+            active: false,
+        }])
+        .save()
+        .await?;
+
+    let fields = <User as Queryable>::fields();
+
+    let paths = fields.addresses.elem_match_nested(|address| {
+        assert_eq!(address.city_name.name(), "cityName");
+        assert_eq!(address.active.name(), "isActive");
+
+        address.city_name.eq("City1") & address.active.eq(true)
+    });
+
+    let users: Vec<User> = User::query().filter(|_| paths).all().await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}
