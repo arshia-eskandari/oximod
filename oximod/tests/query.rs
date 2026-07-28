@@ -2637,3 +2637,57 @@ async fn typed_query_increments_nested_numeric_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_updates_serde_renamed_fields
+#[tokio::test]
+async fn typed_query_updates_serde_renamed_fields() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    #[db("test")]
+    #[collection("typed_query_updates_serde_renamed_fields")]
+    pub struct User {
+        #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        display_name: String,
+
+        #[serde(rename = "isActive")]
+        active: bool,
+
+        login_count: i32,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .display_name("User1")
+        .active(false)
+        .login_count(5)
+        .save()
+        .await?;
+
+    let fields = <User as Queryable>::fields();
+
+    assert_eq!(fields.display_name.name(), "displayName");
+    assert_eq!(fields.active.name(), "isActive");
+    assert_eq!(fields.login_count.name(), "loginCount");
+
+    let updated_user = User::query()
+        .filter(|user| user.display_name.eq("User1"))
+        .update_one(|user| {
+            user.display_name.set("UpdatedUser") & user.active.set(true) & user.login_count.inc(2)
+        })
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.display_name, "UpdatedUser");
+    assert!(updated_user.active);
+    assert_eq!(updated_user.login_count, 7);
+
+    User::clear().await?;
+
+    Ok(())
+}
