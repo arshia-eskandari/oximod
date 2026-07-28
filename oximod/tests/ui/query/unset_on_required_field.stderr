@@ -1,0 +1,13 @@
+error[E0599]: no method named `unset` found for struct `Field<std::string::String>` in the current scope
+  --> tests/ui/query/unset_on_required_field.rs:16:60
+   |
+16 |     let _query = User::query().update_one(|user| user.name.unset());
+   |                                                            ^^^^^
+   |
+help: there is a method `set` with a similar name, but with different arguments
+  --> $WORKSPACE/oximod_core/src/query/field.rs
+   |
+   | /     pub fn set<V>(&self, value: V) -> UpdateExpression
+   | |     where
+   | |         V: Into<T>,
+   | |___________________^
