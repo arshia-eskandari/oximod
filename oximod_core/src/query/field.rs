@@ -1,3 +1,4 @@
+use super::embedded_document::EmbeddedDocument;
 use crate::query::expression::{ComparisonOperator, ElementExpression, Expression};
 use crate::query::sort::SortExpression;
 use mongodb::bson::{Bson, DateTime, Regex};
@@ -255,6 +256,20 @@ impl<T> Field<Vec<T>> {
     }
 }
 
+impl<T> Field<T>
+where
+    T: EmbeddedDocument,
+{
+    pub fn nested<R, F>(&self, build: F) -> R
+    where
+        F: FnOnce(&T::Fields) -> R,
+    {
+        let fields = T::fields_with_prefix(self.name());
+
+        build(&fields)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegexOption {
     CaseInsensitive,
@@ -387,6 +402,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::query::EmbeddedDocument;
     use crate::query::Expression;
     use crate::query::field::ComparisonOperator;
     use crate::query::field::RegexOption;
@@ -909,6 +925,46 @@ mod tests {
             city.eq("City1").into_document(),
             doc! {
                 "address.city": "City1",
+            }
+        );
+    }
+
+    #[test]
+    fn nested_field_prefixes_embedded_field_paths() {
+        struct Address;
+
+        struct AddressFields {
+            city: Field<String>,
+            active: Field<bool>,
+        }
+
+        impl EmbeddedDocument for Address {
+            type Fields = AddressFields;
+
+            fn fields_with_prefix(prefix: &str) -> Self::Fields {
+                AddressFields {
+                    city: Field::from_owned(format!("{prefix}.city")),
+                    active: Field::from_owned(format!("{prefix}.active")),
+                }
+            }
+        }
+
+        let address = Field::<Address>::new("address");
+
+        let expression =
+            address.nested(|address| address.city.eq("City1") & address.active.eq(true));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "address.city": "City1",
+                    },
+                    {
+                        "address.active": true,
+                    },
+                ],
             }
         );
     }

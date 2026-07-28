@@ -179,3 +179,12 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     expanded.into()
 }
+
+#[proc_macro_derive(EmbeddedDocument, attributes(serde))]
+pub fn derive_embedded_document(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+
+    match query::generate_embedded_document_tokens(&input) {
+        Ok(tokens) | Err(tokens) => tokens.into(),
+    }
+}

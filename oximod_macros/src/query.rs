@@ -266,6 +266,108 @@ fn generate_query_tokens_inner(input: &DeriveInput) -> syn::Result<TokenStream> 
     })
 }
 
+pub fn generate_embedded_document_tokens(input: &DeriveInput) -> Result<TokenStream, TokenStream> {
+    generate_embedded_document_tokens_inner(input).map_err(|error| error.to_compile_error())
+}
+
+fn generate_embedded_document_tokens_inner(input: &DeriveInput) -> syn::Result<TokenStream> {
+    let document_ident = &input.ident;
+    let visibility = &input.vis;
+    let fields_ident = format_ident!("{}Fields", document_ident);
+
+    let rename_all = container_rename_all(input)?;
+
+    let named_fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+
+            _ => {
+                return Err(syn::Error::new_spanned(
+                    &input.ident,
+                    "embedded documents require a struct \
+                     with named fields",
+                ));
+            }
+        },
+
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &input.ident,
+                "EmbeddedDocument can only be derived \
+                 for structs",
+            ));
+        }
+    };
+
+    let field_declarations = named_fields.iter().map(|field| {
+        let field_ident = field
+            .ident
+            .as_ref()
+            .expect("named fields must have identifiers");
+
+        let field_type = &field.ty;
+
+        quote! {
+            pub #field_ident:
+                ::oximod::_query::Field<#field_type>
+        }
+    });
+
+    let field_initializers = named_fields
+        .iter()
+        .map(|field| {
+            let field_ident = field.ident.as_ref().ok_or_else(|| {
+                syn::Error::new_spanned(
+                    field,
+                    "embedded documents require \
+                         named fields",
+                )
+            })?;
+
+            let serialized_name = serialized_field_name(field, rename_all)?;
+
+            Ok(quote! {
+                #field_ident:
+                    ::oximod::_query::Field::from_owned(
+                        ::std::format!(
+                            "{}.{}",
+                            prefix,
+                            #serialized_name,
+                        )
+                    )
+            })
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        #[doc(hidden)]
+        #visibility struct #fields_ident {
+            #(#field_declarations,)*
+        }
+
+        impl #fields_ident {
+            #[doc(hidden)]
+            fn with_prefix(prefix: &str) -> Self {
+                Self {
+                    #(#field_initializers,)*
+                }
+            }
+        }
+
+        impl ::oximod::EmbeddedDocument
+            for #document_ident
+        {
+            type Fields = #fields_ident;
+
+            fn fields_with_prefix(
+                prefix: &str,
+            ) -> Self::Fields {
+                #fields_ident::with_prefix(prefix)
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use syn::{DeriveInput, Field, parse_quote};

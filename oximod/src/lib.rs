@@ -479,6 +479,17 @@ pub use oximod_core::query::Queryable;
 /// ```
 pub use oximod_core::query::RegexOption;
 
+/// Trait implemented by embedded documents that support
+/// typed nested-field queries.
+///
+/// It is implemented automatically by
+/// `#[derive(EmbeddedDocument)]`.
+pub use oximod_core::query::EmbeddedDocument;
+
+/// Derive macro for embedded documents used in typed
+/// nested-field queries.
+pub use oximod_macros::EmbeddedDocument;
+
 // --- Internal API ---
 
 #[doc(hidden)]
