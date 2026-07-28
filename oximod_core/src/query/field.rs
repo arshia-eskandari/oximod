@@ -278,6 +278,15 @@ where
     {
         UpdateExpression::add_to_set(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$pull` update that removes every
+    /// occurrence of the given value from this array field.
+    pub fn pull<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::pull(self.name(), value.into())
+    }
 }
 
 impl<T> Field<Vec<T>> {
@@ -1287,6 +1296,38 @@ mod tests {
                     "active": true,
                 },
                 "$addToSet": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_pull_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.pull("mongodb").into_document(),
+            doc! {
+                "$pull": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_pull_update_expressions() {
+        let update =
+            UpdateExpression::set("active", false) & UpdateExpression::pull("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": false,
+                },
+                "$pull": {
                     "tags": "mongodb",
                 },
             }

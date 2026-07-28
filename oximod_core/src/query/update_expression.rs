@@ -67,6 +67,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn pull(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$pull", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -257,6 +267,20 @@ mod tests {
             update.into_document(),
             doc! {
                 "$addToSet": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn pull_builds_pull_update_document() {
+        let update = UpdateExpression::pull("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$pull": {
                     "tags": "mongodb",
                 },
             }
