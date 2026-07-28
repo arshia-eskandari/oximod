@@ -2774,3 +2774,65 @@ async fn typed_query_updates_multi_level_nested_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_errors_propagate_through_write_operations
+#[tokio::test]
+async fn typed_query_errors_propagate_through_write_operations() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_errors_propagate_through_write_operations")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+    }
+
+    let delete_one_error = User::query()
+        .page(0, 10)
+        .delete_one()
+        .await
+        .expect_err("delete_one should propagate the query error");
+
+    assert!(matches!(
+        delete_one_error,
+        OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
+    ));
+
+    let delete_all_error = User::query()
+        .page(0, 10)
+        .delete_all()
+        .await
+        .expect_err("delete_all should propagate the query error");
+
+    assert!(matches!(
+        delete_all_error,
+        OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
+    ));
+
+    let update_one_error = User::query()
+        .page(0, 10)
+        .update_one(|user| user.active.set(true))
+        .await
+        .expect_err("update_one should propagate the query error");
+
+    assert!(matches!(
+        update_one_error,
+        OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
+    ));
+
+    let update_all_error = User::query()
+        .page(0, 10)
+        .update_all(|user| user.active.set(true))
+        .await
+        .expect_err("update_all should propagate the query error");
+
+    assert!(matches!(
+        update_all_error,
+        OxiModError::Query(QueryError::InvalidPageNumber { page: 0 })
+    ));
+
+    Ok(())
+}
