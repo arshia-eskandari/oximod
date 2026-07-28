@@ -1475,3 +1475,167 @@ async fn typed_query_embedded_document_array_elem_match() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_supports_multiple_nested_document_levels
+#[tokio::test]
+async fn typed_query_supports_multiple_nested_document_levels() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    pub struct Address {
+        city: String,
+        active: bool,
+    }
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    pub struct Profile {
+        address: Address,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_supports_multiple_nested_document_levels")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        profile: Profile,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .profile(Profile {
+            address: Address {
+                city: "City1".to_owned(),
+                active: true,
+            },
+        })
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .profile(Profile {
+            address: Address {
+                city: "City1".to_owned(),
+                active: false,
+            },
+        })
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .profile(Profile {
+            address: Address {
+                city: "City2".to_owned(),
+                active: true,
+            },
+        })
+        .save()
+        .await?;
+
+    let fields = <User as Queryable>::fields();
+
+    let paths = fields.profile.nested(|profile| {
+        profile.address.nested(|address| {
+            (
+                address.city.name().to_owned(),
+                address.active.name().to_owned(),
+            )
+        })
+    });
+
+    assert_eq!(
+        paths,
+        (
+            "profile.address.city".to_owned(),
+            "profile.address.active".to_owned(),
+        )
+    );
+
+    let users: Vec<User> = User::query()
+        .filter(|user| {
+            user.profile.nested(|profile| {
+                profile
+                    .address
+                    .nested(|address| address.city.eq("City1") & address.active.eq(true))
+            })
+        })
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_sorts_by_nested_document_field
+#[tokio::test]
+async fn typed_query_sorts_by_nested_document_field() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    pub struct Address {
+        city: String,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_sorts_by_nested_document_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        address: Address,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .address(Address {
+            city: "City2".to_owned(),
+        })
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .address(Address {
+            city: "Kitchener".to_owned(),
+        })
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .address(Address {
+            city: "City1".to_owned(),
+        })
+        .save()
+        .await?;
+
+    let users: Vec<User> = User::query()
+        .sort_by(|user| user.address.nested(|address| address.city.asc()))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 3);
+    assert_eq!(users[0].name, "User3");
+    assert_eq!(users[1].name, "User1");
+    assert_eq!(users[2].name, "User2");
+
+    User::clear().await?;
+
+    Ok(())
+}
