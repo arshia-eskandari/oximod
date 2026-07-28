@@ -1825,3 +1825,49 @@ async fn typed_query_optional_nested_document_respects_serde_renames() -> TestRe
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_deletes_one_matching_document
+#[tokio::test]
+async fn typed_query_deletes_one_matching_document() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_deletes_one_matching_document")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").active(false).save().await?;
+
+    User::default().name("User2").active(false).save().await?;
+
+    User::default().name("User3").active(true).save().await?;
+
+    let deleted_user = User::query()
+        .filter(|user| user.active.eq(false))
+        .sort_by(|user| user.name.asc())
+        .delete_one()
+        .await?
+        .expect("one inactive user should be deleted");
+
+    assert_eq!(deleted_user.name, "User1");
+    assert!(!deleted_user.active);
+
+    let remaining_users: Vec<User> = User::query().sort_by(|user| user.name.asc()).all().await?;
+
+    assert_eq!(remaining_users.len(), 2);
+    assert_eq!(remaining_users[0].name, "User2");
+    assert_eq!(remaining_users[1].name, "User3");
+
+    User::clear().await?;
+
+    Ok(())
+}

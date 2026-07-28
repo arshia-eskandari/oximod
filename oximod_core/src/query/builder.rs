@@ -213,6 +213,42 @@ where
 
         Ok(models)
     }
+
+    /// Deletes and returns the first document matching this query.
+    ///
+    /// When sorting is configured, the first document according to that
+    /// ordering is deleted.
+    ///
+    /// Returns `None` when no document matches the query.
+    pub async fn delete_one(self) -> Result<Option<M>, OxiModError> {
+        let Self {
+            filter,
+            sort,
+            error,
+            ..
+        } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        let filter = filter.map(Expression::into_document).unwrap_or_default();
+
+        let collection = M::get_collection()?;
+
+        let mut operation = collection.find_one_and_delete(filter);
+
+        if let Some(sort) = sort {
+            operation = operation.sort(sort.into_document());
+        }
+
+        operation.await.map_err(|error| {
+            OxiModError::database(
+                "Failed to delete the first document matching the typed query",
+                error,
+            )
+        })
+    }
 }
 
 #[cfg(test)]
