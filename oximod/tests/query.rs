@@ -1752,3 +1752,76 @@ async fn typed_query_optional_string_contains_text() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_optional_nested_document_respects_serde_renames
+#[tokio::test]
+async fn typed_query_optional_nested_document_respects_serde_renames() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Address {
+        city_name: String,
+
+        #[serde(rename = "isActive")]
+        active: bool,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_optional_nested_document_respects_serde_renames")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        address: Option<Address>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .address(Address {
+            city_name: "City1".to_owned(),
+            active: true,
+        })
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .address(Address {
+            city_name: "City1".to_owned(),
+            active: false,
+        })
+        .save()
+        .await?;
+
+    User::default().name("User3").save().await?;
+
+    let fields = <User as Queryable>::fields();
+
+    fields.address.nested(|address| {
+        assert_eq!(address.city_name.name(), "address.cityName");
+        assert_eq!(address.active.name(), "address.isActive");
+    });
+
+    let users: Vec<User> = User::query()
+        .filter(|user| {
+            user.address
+                .nested(|address| address.city_name.eq("City1") & address.active.eq(true))
+        })
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}
