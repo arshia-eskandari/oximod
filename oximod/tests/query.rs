@@ -2324,3 +2324,56 @@ async fn typed_query_pulls_value_from_array() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_pops_array_elements
+#[tokio::test]
+async fn typed_query_pops_array_elements() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_pops_array_elements")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        tags: Vec<String>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .tags(vec![
+            "rust".to_owned(),
+            "mongodb".to_owned(),
+            "backend".to_owned(),
+        ])
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.tags.pop_first())
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(
+        updated_user.tags,
+        vec!["mongodb".to_owned(), "backend".to_owned(),]
+    );
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.tags.pop_last())
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.tags, vec!["mongodb".to_owned()]);
+
+    User::clear().await?;
+
+    Ok(())
+}

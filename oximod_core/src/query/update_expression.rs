@@ -77,6 +77,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn pop(field: impl Into<String>, position: i32) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), position);
+
+        let mut document = Document::new();
+        document.insert("$pop", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -282,6 +292,34 @@ mod tests {
             doc! {
                 "$pull": {
                     "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn pop_first_builds_pop_update_document() {
+        let update = UpdateExpression::pop("tags", -1);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$pop": {
+                    "tags": -1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn pop_last_builds_pop_update_document() {
+        let update = UpdateExpression::pop("tags", 1);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$pop": {
+                    "tags": 1,
                 },
             }
         );

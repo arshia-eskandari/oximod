@@ -311,6 +311,18 @@ impl<T> Field<Vec<T>> {
             Bson::Document(expression.into_document()),
         )
     }
+
+    /// Creates a typed MongoDB `$pop` update that removes the first
+    /// element from this array field.
+    pub fn pop_first(&self) -> UpdateExpression {
+        UpdateExpression::pop(self.name(), -1)
+    }
+
+    /// Creates a typed MongoDB `$pop` update that removes the last
+    /// element from this array field.
+    pub fn pop_last(&self) -> UpdateExpression {
+        UpdateExpression::pop(self.name(), 1)
+    }
 }
 
 impl<T> Field<Vec<T>>
@@ -1329,6 +1341,51 @@ mod tests {
                 },
                 "$pull": {
                     "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_pop_first_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.pop_first().into_document(),
+            doc! {
+                "$pop": {
+                    "tags": -1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_pop_last_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.pop_last().into_document(),
+            doc! {
+                "$pop": {
+                    "tags": 1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_pop_update_expressions() {
+        let update = UpdateExpression::set("active", true) & UpdateExpression::pop("tags", -1);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$pop": {
+                    "tags": -1,
                 },
             }
         );
