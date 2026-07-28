@@ -287,6 +287,16 @@ where
     {
         UpdateExpression::pull(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$push` update using `$each` to append
+    /// multiple values to this array field.
+    pub fn push_each<I, V>(&self, values: I) -> UpdateExpression
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<T>,
+    {
+        UpdateExpression::push_each(self.name(), values.into_iter().map(Into::into))
+    }
 }
 
 impl<T> Field<Vec<T>> {
@@ -1386,6 +1396,25 @@ mod tests {
                 },
                 "$pop": {
                     "tags": -1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_push_each_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.push_each(["mongodb", "backend"]).into_document(),
+            doc! {
+                "$push": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                        ],
+                    },
                 },
             }
         );

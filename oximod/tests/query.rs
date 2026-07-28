@@ -2377,3 +2377,48 @@ async fn typed_query_pops_array_elements() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_pushes_multiple_values_to_array
+#[tokio::test]
+async fn typed_query_pushes_multiple_values_to_array() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_pushes_multiple_values_to_array")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        tags: Vec<String>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .tags(vec!["rust".to_owned()])
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.tags.push_each(["mongodb", "backend"]))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(
+        updated_user.tags,
+        vec![
+            "rust".to_owned(),
+            "mongodb".to_owned(),
+            "backend".to_owned(),
+        ]
+    );
+
+    User::clear().await?;
+
+    Ok(())
+}

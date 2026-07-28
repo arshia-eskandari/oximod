@@ -319,6 +319,7 @@ fn logical_into_document(operator: &'static str, expressions: Vec<Expression>) -
 #[cfg(test)]
 mod tests {
     use crate::query::ElementExpression;
+    use crate::query::UpdateExpression;
     use mongodb::bson::{Bson, Document, doc, oid::ObjectId};
 
     use super::{ComparisonOperator, Expression};
@@ -1129,6 +1130,25 @@ mod tests {
             doc! {
                 "$gte": 80,
                 "$lt": 90,
+            }
+        );
+    }
+
+    #[test]
+    fn push_each_builds_push_each_update_document() {
+        let update = UpdateExpression::push_each("tags", ["mongodb", "backend"]);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$push": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                        ],
+                    },
+                },
             }
         );
     }
