@@ -106,6 +106,25 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn add_each_to_set<I>(field: impl Into<String>, values: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<Bson>,
+    {
+        let values = values.into_iter().map(Into::into).collect::<Vec<_>>();
+
+        let mut each = Document::new();
+        each.insert("$each", values);
+
+        let mut fields = Document::new();
+        fields.insert(field.into(), each);
+
+        let mut document = Document::new();
+        document.insert("$addToSet", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {

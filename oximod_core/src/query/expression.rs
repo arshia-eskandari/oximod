@@ -1152,4 +1152,24 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn add_each_to_set_builds_add_to_set_each_update_document() {
+        let update = UpdateExpression::add_each_to_set("tags", ["mongodb", "backend", "systems"]);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                            "systems",
+                        ],
+                    },
+                },
+            }
+        );
+    }
 }

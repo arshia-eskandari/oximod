@@ -297,6 +297,14 @@ where
     {
         UpdateExpression::push_each(self.name(), values.into_iter().map(Into::into))
     }
+
+    pub fn add_each_to_set<I, V>(&self, values: I) -> UpdateExpression
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<T>,
+    {
+        UpdateExpression::add_each_to_set(self.name(), values.into_iter().map(Into::into))
+    }
 }
 
 impl<T> Field<Vec<T>> {
@@ -1413,6 +1421,27 @@ mod tests {
                         "$each": [
                             "mongodb",
                             "backend",
+                        ],
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_add_each_to_set_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.add_each_to_set(["mongodb", "backend", "systems",])
+                .into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                            "systems",
                         ],
                     },
                 },
