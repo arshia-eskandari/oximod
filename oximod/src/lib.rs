@@ -514,6 +514,6 @@ pub use regex as _regex; // removes the need of importing the trait
 pub mod _query {
     pub use oximod_core::query::{
         ElementExpression, ElementField, Expression, Field, OrderedQueryValue, Query,
-        SortExpression,
+        SortExpression, StringQueryValue,
     };
 }

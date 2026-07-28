@@ -8,6 +8,6 @@ mod sort;
 pub use builder::Query;
 pub use embedded_document::EmbeddedDocument;
 pub use expression::{ElementExpression, Expression};
-pub use field::{ElementField, Field, OrderedQueryValue, RegexOption};
+pub use field::{ElementField, Field, OrderedQueryValue, RegexOption, StringQueryValue};
 pub use queryable::Queryable;
 pub use sort::SortExpression;

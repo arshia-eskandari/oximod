@@ -1704,3 +1704,51 @@ async fn typed_query_nested_elem_match_respects_serde_renames() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_optional_string_contains_text
+#[tokio::test]
+async fn typed_query_optional_string_contains_text() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_optional_string_contains_text")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        nickname: Option<String>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .nickname("cool_user".to_owned())
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .nickname("regular_user".to_owned())
+        .save()
+        .await?;
+
+    User::default().name("User3").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.nickname.contains_text("cool_"))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}

@@ -1,8 +1,8 @@
-error[E0599]: no method named `matches_regex` found for struct `Field<i32>` in the current scope
+error[E0599]: the method `matches_regex` exists for struct `Field<i32>`, but its trait bounds were not satisfied
   --> tests/ui/query/regex_on_numeric_field.rs:16:55
    |
 16 |     let _query = User::query().filter(|user| user.age.matches_regex("^2"));
-   |                                                       ^^^^^^^^^^^^^ method not found in `Field<i32>`
+   |                                                       ^^^^^^^^^^^^^ method cannot be called on `Field<i32>` due to unsatisfied trait bounds
    |
-   = note: the method was found for
-           - `Field<std::string::String>`
+   = note: the following trait bounds were not satisfied:
+           `i32: StringQueryValue`

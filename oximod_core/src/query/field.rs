@@ -87,7 +87,10 @@ impl<T> Field<Option<T>> {
     }
 }
 
-impl Field<String> {
+impl<T> Field<T>
+where
+    T: StringQueryValue,
+{
     pub fn matches_regex(&self, pattern: impl Into<String>) -> Expression {
         Expression::comparison(
             self.name.as_ref(),
@@ -327,6 +330,12 @@ impl OrderedQueryValue for i64 {}
 impl OrderedQueryValue for f64 {}
 impl OrderedQueryValue for String {}
 impl OrderedQueryValue for DateTime {}
+
+#[doc(hidden)]
+pub trait StringQueryValue {}
+
+impl StringQueryValue for String {}
+impl StringQueryValue for Option<String> {}
 
 impl<T> Field<T>
 where
@@ -1057,6 +1066,36 @@ mod tests {
                         ],
                     },
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_string_field_builds_contains_text_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.contains_text("cool_").into_document(),
+            doc! {
+                "nickname": Bson::RegularExpression(Regex {
+                    pattern: "cool_".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn optional_string_field_escapes_contains_text() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.contains_text("cool.").into_document(),
+            doc! {
+                "nickname": Bson::RegularExpression(Regex {
+                    pattern: r"cool\.".to_owned(),
+                    options: String::new(),
+                }),
             }
         );
     }
