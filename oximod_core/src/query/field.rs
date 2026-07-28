@@ -410,6 +410,24 @@ mod tests {
 
     use super::Field;
 
+    struct Address;
+
+    struct AddressFields {
+        city: Field<String>,
+        active: Field<bool>,
+    }
+
+    impl EmbeddedDocument for Address {
+        type Fields = AddressFields;
+
+        fn fields_with_prefix(prefix: &str) -> Self::Fields {
+            AddressFields {
+                city: Field::from_owned(format!("{prefix}.city")),
+                active: Field::from_owned(format!("{prefix}.active")),
+            }
+        }
+    }
+
     #[test]
     fn field_exposes_its_mongodb_name() {
         let field = Field::<String>::new("email");
@@ -931,25 +949,29 @@ mod tests {
 
     #[test]
     fn nested_field_prefixes_embedded_field_paths() {
-        struct Address;
-
-        struct AddressFields {
-            city: Field<String>,
-            active: Field<bool>,
-        }
-
-        impl EmbeddedDocument for Address {
-            type Fields = AddressFields;
-
-            fn fields_with_prefix(prefix: &str) -> Self::Fields {
-                AddressFields {
-                    city: Field::from_owned(format!("{prefix}.city")),
-                    active: Field::from_owned(format!("{prefix}.active")),
-                }
-            }
-        }
-
         let address = Field::<Address>::new("address");
+
+        let expression =
+            address.nested(|address| address.city.eq("City1") & address.active.eq(true));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "address.city": "City1",
+                    },
+                    {
+                        "address.active": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn optional_nested_field_prefixes_embedded_paths() {
+        let address = Field::<Option<Address>>::new("address");
 
         let expression =
             address.nested(|address| address.city.eq("City1") & address.active.eq(true));
