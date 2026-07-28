@@ -57,6 +57,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn add_to_set(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$addToSet", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -233,6 +243,20 @@ mod tests {
             update.into_document(),
             doc! {
                 "$push": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn add_to_set_builds_add_to_set_update_document() {
+        let update = UpdateExpression::add_to_set("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$addToSet": {
                     "tags": "mongodb",
                 },
             }

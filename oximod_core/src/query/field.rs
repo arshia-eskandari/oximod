@@ -269,6 +269,15 @@ where
     {
         UpdateExpression::push(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$addToSet` update that adds a value
+    /// only when the array does not already contain it.
+    pub fn add_to_set<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::add_to_set(self.name(), value.into())
+    }
 }
 
 impl<T> Field<Vec<T>> {
@@ -1230,6 +1239,54 @@ mod tests {
                     "active": true,
                 },
                 "$push": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_add_to_set_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.add_to_set("mongodb").into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_add_to_set_update_expressions() {
+        let update = UpdateExpression::add_to_set("tags", "mongodb")
+            & UpdateExpression::add_to_set("roles", "admin");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": "mongodb",
+                    "roles": "admin",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_add_to_set_update_expressions() {
+        let update =
+            UpdateExpression::set("active", true) & UpdateExpression::add_to_set("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$addToSet": {
                     "tags": "mongodb",
                 },
             }
