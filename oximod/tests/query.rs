@@ -1395,3 +1395,83 @@ async fn typed_query_optional_nested_document() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_embedded_document_array_elem_match
+#[tokio::test]
+async fn typed_query_embedded_document_array_elem_match() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    pub struct Address {
+        city: String,
+        active: bool,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_embedded_document_array_elem_match")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        addresses: Vec<Address>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .addresses(vec![
+            Address {
+                city: "City1".to_owned(),
+                active: true,
+            },
+            Address {
+                city: "City2".to_owned(),
+                active: false,
+            },
+        ])
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .addresses(vec![
+            Address {
+                city: "City1".to_owned(),
+                active: false,
+            },
+            Address {
+                city: "City2".to_owned(),
+                active: true,
+            },
+        ])
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .addresses(vec![Address {
+            city: "City2".to_owned(),
+            active: true,
+        }])
+        .save()
+        .await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| {
+            user.addresses
+                .elem_match_nested(|address| address.city.eq("City1") & address.active.eq(true))
+        })
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    User::clear().await?;
+
+    Ok(())
+}

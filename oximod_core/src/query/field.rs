@@ -62,6 +62,17 @@ impl<T> Field<T> {
     {
         Expression::not(build(self))
     }
+
+    #[doc(hidden)]
+    pub fn from_prefixed(prefix: &str, name: &str) -> Self {
+        let path = if prefix.is_empty() {
+            name.to_owned()
+        } else {
+            format!("{prefix}.{name}")
+        };
+
+        Self::from_owned(path)
+    }
 }
 
 impl<T> Field<Option<T>> {
@@ -256,6 +267,25 @@ impl<T> Field<Vec<T>> {
     }
 }
 
+impl<T> Field<Vec<T>>
+where
+    T: EmbeddedDocument,
+{
+    pub fn elem_match_nested<F>(&self, build: F) -> Expression
+    where
+        F: FnOnce(&T::Fields) -> Expression,
+    {
+        let fields = T::fields_with_prefix("");
+        let expression = build(&fields);
+
+        Expression::comparison(
+            self.name(),
+            ComparisonOperator::ElemMatch,
+            Bson::Document(expression.into_document()),
+        )
+    }
+}
+
 impl<T> Field<T>
 where
     T: EmbeddedDocument,
@@ -422,8 +452,8 @@ mod tests {
 
         fn fields_with_prefix(prefix: &str) -> Self::Fields {
             AddressFields {
-                city: Field::from_owned(format!("{prefix}.city")),
-                active: Field::from_owned(format!("{prefix}.active")),
+                city: Field::from_prefixed(prefix, "city"),
+                active: Field::from_prefixed(prefix, "active"),
             }
         }
     }
@@ -987,6 +1017,46 @@ mod tests {
                         "address.active": true,
                     },
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn prefixed_field_builds_nested_path() {
+        let city = Field::<String>::from_prefixed("address", "city");
+
+        assert_eq!(city.name(), "address.city");
+    }
+
+    #[test]
+    fn empty_prefix_builds_relative_path() {
+        let city = Field::<String>::from_prefixed("", "city");
+
+        assert_eq!(city.name(), "city");
+    }
+
+    #[test]
+    fn embedded_document_array_builds_elem_match_expression() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let expression = addresses
+            .elem_match_nested(|address| address.city.eq("Waterloo") & address.active.eq(true));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "addresses": {
+                    "$elemMatch": {
+                        "$and": [
+                            {
+                                "city": "Waterloo",
+                            },
+                            {
+                                "active": true,
+                            },
+                        ],
+                    },
+                },
             }
         );
     }

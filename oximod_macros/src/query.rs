@@ -328,12 +328,9 @@ fn generate_embedded_document_tokens_inner(input: &DeriveInput) -> syn::Result<T
 
             Ok(quote! {
                 #field_ident:
-                    ::oximod::_query::Field::from_owned(
-                        ::std::format!(
-                            "{}.{}",
-                            prefix,
-                            #serialized_name,
-                        )
+                    ::oximod::_query::Field::from_prefixed(
+                        prefix,
+                        #serialized_name,
                     )
             })
         })
