@@ -3331,3 +3331,43 @@ async fn typed_query_matches_bson_field_type() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_matches_numeric_modulo
+#[tokio::test]
+async fn typed_query_matches_numeric_modulo() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_matches_numeric_modulo")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        login_count: i32,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").login_count(4).save().await?;
+
+    User::default().name("User2").login_count(5).save().await?;
+
+    User::default().name("User3").login_count(6).save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.login_count.modulo(2, 0))
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].name, "User1");
+    assert_eq!(users[1].name, "User3");
+
+    User::clear().await?;
+
+    Ok(())
+}

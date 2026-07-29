@@ -635,6 +635,25 @@ where
     {
         UpdateExpression::max(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$mod` query.
+    ///
+    /// The field matches when division by `divisor` produces the
+    /// specified `remainder`.
+    pub fn modulo<D, R>(&self, divisor: D, remainder: R) -> Expression
+    where
+        D: Into<T>,
+        R: Into<T>,
+    {
+        let divisor: T = divisor.into();
+        let remainder: T = remainder.into();
+
+        Expression::comparison(
+            self.name(),
+            ComparisonOperator::Mod,
+            Bson::Array(vec![divisor.into(), remainder.into()]),
+        )
+    }
 }
 
 impl<T> Field<T>
@@ -1810,6 +1829,34 @@ mod tests {
             doc! {
                 "nickname": {
                     "$type": "string",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn numeric_field_builds_modulo_expression() {
+        let login_count = Field::<i32>::new("login_count");
+
+        assert_eq!(
+            login_count.modulo(2, 0).into_document(),
+            doc! {
+                "login_count": {
+                    "$mod": [2, 0],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn int64_field_builds_modulo_expression() {
+        let value = Field::<i64>::new("value");
+
+        assert_eq!(
+            value.modulo(5_i64, 1_i64).into_document(),
+            doc! {
+                "value": {
+                    "$mod": [5_i64, 1_i64],
                 },
             }
         );
