@@ -383,6 +383,24 @@ where
 
         build(&fields)
     }
+
+    // Existing elem_match_nested() and positional() methods...
+
+    /// Provides typed fields targeting array elements identified by a
+    /// MongoDB filtered positional placeholder such as `$[address]`.
+    ///
+    /// The corresponding array-filter condition must be supplied when
+    /// executing the update.
+    pub fn filtered<F>(&self, identifier: impl AsRef<str>, build: F) -> UpdateExpression
+    where
+        F: FnOnce(&T::Fields) -> UpdateExpression,
+    {
+        let prefix = format!("{}.$[{}]", self.name(), identifier.as_ref(),);
+
+        let fields = T::fields_with_prefix(&prefix);
+
+        build(&fields)
+    }
 }
 
 impl<T> Field<T>
@@ -1699,8 +1717,43 @@ mod tests {
         assert_eq!(
             update.into_document(),
             doc! {
+            "$set": {
+                "addresses.$.active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_filtered_builds_identifier_update_path() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let update = addresses.filtered("address", |address| address.active.set(true));
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
                 "$set": {
-                    "addresses.$.active": true,
+                    "addresses.$[address].active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_filtered_combines_multiple_update_paths() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let update = addresses.filtered("address", |address| {
+            address.city.set("City2") & address.active.set(true)
+        });
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "addresses.$[address].city": "City2",
+                    "addresses.$[address].active": true,
                 },
             }
         );
