@@ -596,6 +596,20 @@ pub use oximod_core::query::EmbeddedDocument;
 /// nested-field queries.
 pub use oximod_macros::EmbeddedDocument;
 
+/// A BSON type accepted by MongoDB's typed `$type` query operator.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let users = User::query()
+///     .filter(|user| {
+///         user.nickname.has_bson_type(BsonType::String)
+///     })
+///     .all()
+///     .await?;
+/// ```
+pub use oximod_core::query::BsonType;
+
 // --- Internal API ---
 
 #[doc(hidden)]

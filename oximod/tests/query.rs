@@ -1,8 +1,8 @@
 mod common;
 
 use common::init;
-
 use mongodb::bson::oid::ObjectId;
+use oximod::BsonType;
 use oximod::{
     BulkWriteOperation, EmbeddedDocument, Model, OxiModError, QueryError, QueryModifier, Queryable,
     RegexOption,
@@ -3284,6 +3284,48 @@ async fn typed_query_updates_array_elements_matching_filter() -> TestResult {
 
     assert_eq!(updated_user.addresses[2].city, "City2");
     assert!(!updated_user.addresses[2].active);
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_matches_bson_field_type
+#[tokio::test]
+async fn typed_query_matches_bson_field_type() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_matches_bson_field_type")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        nickname: Option<String>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .nickname("cool_user".to_owned())
+        .save()
+        .await?;
+
+    User::default().name("User2").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.nickname.has_bson_type(BsonType::String))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
 
     User::clear().await?;
 

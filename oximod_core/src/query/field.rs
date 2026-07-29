@@ -1,5 +1,6 @@
 use super::UpdateExpression;
 use super::embedded_document::EmbeddedDocument;
+use crate::query::bson_type::BsonType;
 use crate::query::expression::{ComparisonOperator, ElementExpression, Expression};
 use crate::query::sort::SortExpression;
 use mongodb::bson::{Bson, DateTime, Regex};
@@ -73,6 +74,14 @@ impl<T> Field<T> {
         };
 
         Self::from_owned(path)
+    }
+
+    /// Creates a MongoDB `$type` query for this field.
+    ///
+    /// The query matches documents where the stored field has the
+    /// specified BSON type.
+    pub fn has_bson_type(&self, bson_type: BsonType) -> Expression {
+        Expression::comparison(self.name(), ComparisonOperator::Type, bson_type)
     }
 }
 
@@ -644,6 +653,7 @@ mod tests {
     use crate::query::EmbeddedDocument;
     use crate::query::Expression;
     use crate::query::UpdateExpression;
+    use crate::query::bson_type::BsonType;
     use crate::query::field::ComparisonOperator;
     use crate::query::field::RegexOption;
     use mongodb::bson::{Bson, DateTime, Regex, doc};
@@ -1787,6 +1797,20 @@ mod tests {
             expression.into_document(),
             doc! {
                 "address.city": "City1",
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_bson_type_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.has_bson_type(BsonType::String).into_document(),
+            doc! {
+                "nickname": {
+                    "$type": "string",
+                },
             }
         );
     }

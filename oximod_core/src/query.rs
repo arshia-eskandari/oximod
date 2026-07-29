@@ -1,3 +1,4 @@
+mod bson_type;
 mod builder;
 mod embedded_document;
 mod expression;
@@ -6,6 +7,7 @@ mod queryable;
 mod sort;
 mod update_expression;
 
+pub use bson_type::BsonType;
 pub use builder::Query;
 pub use embedded_document::EmbeddedDocument;
 pub use expression::{ElementExpression, Expression};
