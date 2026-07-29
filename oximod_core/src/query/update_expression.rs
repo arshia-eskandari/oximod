@@ -155,6 +155,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn rename(source: impl Into<String>, destination: impl Into<String>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(source.into(), destination.into());
+
+        let mut document = Document::new();
+        document.insert("$rename", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -475,6 +485,20 @@ mod tests {
                 "$max": {
                     "score": 15,
                     "balance": 10.0,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn rename_builds_rename_update_document() {
+        let update = UpdateExpression::rename("nickname", "displayAlias");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$rename": {
+                    "nickname": "displayAlias",
                 },
             }
         );

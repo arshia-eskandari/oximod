@@ -93,6 +93,14 @@ impl<T> Field<Option<T>> {
     pub fn unset(&self) -> UpdateExpression {
         UpdateExpression::unset(self.name())
     }
+
+    /// Creates a typed MongoDB `$rename` update that moves this
+    /// optional field to another optional field of the same type.
+    ///
+    /// The source field is removed after its value is moved.
+    pub fn rename_to(&self, destination: &Field<Option<T>>) -> UpdateExpression {
+        UpdateExpression::rename(self.name(), destination.name())
+    }
 }
 
 impl<T> Field<T>
@@ -1558,6 +1566,40 @@ mod tests {
             doc! {
                 "$max": {
                     "balance": 10.0,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_field_builds_rename_update_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        let display_alias = Field::<Option<String>>::new("displayAlias");
+
+        assert_eq!(
+            nickname.rename_to(&display_alias).into_document(),
+            doc! {
+                "$rename": {
+                    "nickname": "displayAlias",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_rename_update_expressions() {
+        let update = UpdateExpression::set("active", true)
+            & UpdateExpression::rename("nickname", "displayAlias");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$rename": {
+                    "nickname": "displayAlias",
                 },
             }
         );
