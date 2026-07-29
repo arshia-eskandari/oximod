@@ -145,6 +145,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn max(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$max", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -436,6 +446,35 @@ mod tests {
                 "$min": {
                     "score": 8,
                     "balance": 20.0,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn max_builds_max_update_document() {
+        let update = UpdateExpression::max("score", 15);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$max": {
+                    "score": 15,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_multiple_max_update_expressions() {
+        let update = UpdateExpression::max("score", 15) & UpdateExpression::max("balance", 10.0);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$max": {
+                    "score": 15,
+                    "balance": 10.0,
                 },
             }
         );

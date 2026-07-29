@@ -549,6 +549,17 @@ where
     {
         UpdateExpression::min(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$max` update for this ordered field.
+    ///
+    /// MongoDB replaces the stored value only when the supplied value
+    /// compares higher than the current value.
+    pub fn max<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::max(self.name(), value.into())
+    }
 }
 
 #[cfg(test)]
@@ -1519,6 +1530,34 @@ mod tests {
             doc! {
                 "$min": {
                     "balance": 20.0,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn ordered_field_builds_max_update_expression() {
+        let score = Field::<i32>::new("score");
+
+        assert_eq!(
+            score.max(15).into_document(),
+            doc! {
+                "$max": {
+                    "score": 15,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn floating_point_field_builds_max_update_expression() {
+        let balance = Field::<f64>::new("balance");
+
+        assert_eq!(
+            balance.max(10.0).into_document(),
+            doc! {
+                "$max": {
+                    "balance": 10.0,
                 },
             }
         );

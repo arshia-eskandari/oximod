@@ -2999,3 +2999,47 @@ async fn typed_query_applies_minimum_numeric_values() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_applies_maximum_numeric_values
+#[tokio::test]
+async fn typed_query_applies_maximum_numeric_values() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_applies_maximum_numeric_values")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        score: i32,
+        balance: f64,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .score(10)
+        .balance(12.5)
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.score.max(15) & user.balance.max(10.0))
+        .await?
+        .expect("one user should be updated");
+
+    // 15 is higher than the stored score, so it replaces 10.
+    assert_eq!(updated_user.score, 15);
+
+    // 10.0 is lower than the stored balance, so 12.5 remains.
+    assert_eq!(updated_user.balance, 12.5);
+
+    User::clear().await?;
+
+    Ok(())
+}
