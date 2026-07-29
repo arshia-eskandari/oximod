@@ -125,6 +125,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn mul(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$mul", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -358,6 +368,35 @@ mod tests {
             doc! {
                 "$pop": {
                     "tags": 1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn mul_builds_mul_update_document() {
+        let update = UpdateExpression::mul("score", 3);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$mul": {
+                    "score": 3,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_multiple_mul_update_expressions() {
+        let update = UpdateExpression::mul("score", 3) & UpdateExpression::mul("balance", 2.0);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$mul": {
+                    "score": 3,
+                    "balance": 2.0,
                 },
             }
         );

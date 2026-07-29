@@ -2913,3 +2913,45 @@ async fn typed_query_bulk_writes_reject_query_modifiers() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_multiplies_numeric_fields
+#[tokio::test]
+async fn typed_query_multiplies_numeric_fields() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_multiplies_numeric_fields")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        score: i32,
+        balance: f64,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .score(10)
+        .balance(12.5)
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.score.mul(3) & user.balance.mul(2.0))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert_eq!(updated_user.score, 30);
+    assert_eq!(updated_user.balance, 25.0);
+
+    User::clear().await?;
+
+    Ok(())
+}

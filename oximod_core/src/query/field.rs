@@ -530,6 +530,14 @@ where
     {
         UpdateExpression::inc(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$mul` update for this numeric field.
+    pub fn mul<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::mul(self.name(), value.into())
+    }
 }
 
 #[cfg(test)]
@@ -1444,6 +1452,34 @@ mod tests {
                             "systems",
                         ],
                     },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn numeric_field_builds_mul_update_expression() {
+        let score = Field::<i32>::new("score");
+
+        assert_eq!(
+            score.mul(3).into_document(),
+            doc! {
+                "$mul": {
+                    "score": 3,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn floating_point_field_builds_mul_update_expression() {
+        let balance = Field::<f64>::new("balance");
+
+        assert_eq!(
+            balance.mul(2.0).into_document(),
+            doc! {
+                "$mul": {
+                    "balance": 2.0,
                 },
             }
         );
