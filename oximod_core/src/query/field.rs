@@ -538,6 +538,17 @@ where
     {
         UpdateExpression::mul(self.name(), value.into())
     }
+
+    /// Creates a typed MongoDB `$min` update for this ordered field.
+    ///
+    /// MongoDB replaces the stored value only when the supplied value
+    /// compares lower than the current value.
+    pub fn min<V>(&self, value: V) -> UpdateExpression
+    where
+        V: Into<T>,
+    {
+        UpdateExpression::min(self.name(), value.into())
+    }
 }
 
 #[cfg(test)]
@@ -1480,6 +1491,34 @@ mod tests {
             doc! {
                 "$mul": {
                     "balance": 2.0,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn ordered_field_builds_min_update_expression() {
+        let score = Field::<i32>::new("score");
+
+        assert_eq!(
+            score.min(8).into_document(),
+            doc! {
+                "$min": {
+                    "score": 8,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn floating_point_field_builds_min_update_expression() {
+        let balance = Field::<f64>::new("balance");
+
+        assert_eq!(
+            balance.min(20.0).into_document(),
+            doc! {
+                "$min": {
+                    "balance": 20.0,
                 },
             }
         );

@@ -135,6 +135,16 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn min(field: impl Into<String>, value: impl Into<Bson>) -> Self {
+        let mut fields = Document::new();
+        fields.insert(field.into(), value.into());
+
+        let mut document = Document::new();
+        document.insert("$min", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -397,6 +407,35 @@ mod tests {
                 "$mul": {
                     "score": 3,
                     "balance": 2.0,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn min_builds_min_update_document() {
+        let update = UpdateExpression::min("score", 8);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$min": {
+                    "score": 8,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_multiple_min_update_expressions() {
+        let update = UpdateExpression::min("score", 8) & UpdateExpression::min("balance", 20.0);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$min": {
+                    "score": 8,
+                    "balance": 20.0,
                 },
             }
         );
