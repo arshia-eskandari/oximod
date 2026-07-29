@@ -3143,3 +3143,76 @@ async fn typed_query_sets_field_to_current_date() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_updates_first_matching_array_element
+#[tokio::test]
+async fn typed_query_updates_first_matching_array_element() -> TestResult {
+    init().await?;
+
+    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Address {
+        city_name: String,
+        active: bool,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_updates_first_matching_array_element")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        addresses: Vec<Address>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .addresses(vec![
+            Address {
+                city_name: "City1".to_owned(),
+                active: false,
+            },
+            Address {
+                city_name: "City1".to_owned(),
+                active: false,
+            },
+            Address {
+                city_name: "City2".to_owned(),
+                active: false,
+            },
+        ])
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| {
+            user.addresses
+                .elem_match_nested(|address| address.city_name.eq("City1"))
+        })
+        .update_one(|user| {
+            user.addresses
+                .positional(|address| address.active.set(true))
+        })
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.addresses.len(), 3);
+
+    assert_eq!(updated_user.addresses[0].city_name, "City1");
+    assert!(updated_user.addresses[0].active);
+
+    assert_eq!(updated_user.addresses[1].city_name, "City1");
+    assert!(!updated_user.addresses[1].active);
+
+    assert_eq!(updated_user.addresses[2].city_name, "City2");
+    assert!(!updated_user.addresses[2].active);
+
+    User::clear().await?;
+
+    Ok(())
+}

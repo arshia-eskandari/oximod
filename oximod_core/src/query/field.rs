@@ -368,6 +368,21 @@ where
             Bson::Document(expression.into_document()),
         )
     }
+
+    /// Provides typed fields targeting the first array element matched
+    /// by the query through MongoDB's positional `$` operator.
+    ///
+    /// The array field must be included in the query filter so MongoDB
+    /// can determine which element the `$` placeholder represents.
+    pub fn positional<F>(&self, build: F) -> UpdateExpression
+    where
+        F: FnOnce(&T::Fields) -> UpdateExpression,
+    {
+        let prefix = format!("{}.$", self.name());
+        let fields = T::fields_with_prefix(&prefix);
+
+        build(&fields)
+    }
 }
 
 impl<T> Field<T>
@@ -1670,6 +1685,22 @@ mod tests {
                     "updated_at": {
                         "$type": "date",
                     },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_positional_builds_prefixed_update_path() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let update = addresses.positional(|address| address.active.set(true));
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "addresses.$.active": true,
                 },
             }
         );
