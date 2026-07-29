@@ -3093,3 +3093,53 @@ async fn typed_query_renames_optional_field() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_sets_field_to_current_date
+#[tokio::test]
+async fn typed_query_sets_field_to_current_date() -> TestResult {
+    init().await?;
+
+    use mongodb::bson::DateTime;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_sets_field_to_current_date")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        updated_at: Option<DateTime>,
+    }
+
+    User::clear().await?;
+
+    let original_date = DateTime::from_millis(0);
+
+    User::default()
+        .name("User1")
+        .updated_at(original_date)
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.updated_at.current_date())
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+
+    let updated_at = updated_user
+        .updated_at
+        .expect("updated_at should contain the current date");
+
+    assert!(updated_at > original_date);
+
+    User::clear().await?;
+
+    Ok(())
+}

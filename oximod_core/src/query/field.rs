@@ -425,6 +425,13 @@ impl NumericQueryValue for i32 {}
 impl NumericQueryValue for i64 {}
 impl NumericQueryValue for f64 {}
 
+/// Marker trait for fields that support MongoDB `$currentDate` updates.
+#[doc(hidden)]
+pub trait DateQueryValue {}
+
+impl DateQueryValue for DateTime {}
+impl DateQueryValue for Option<DateTime> {}
+
 impl<T> Field<T>
 where
     T: OrderedQueryValue + Into<Bson>,
@@ -570,6 +577,17 @@ where
     }
 }
 
+impl<T> Field<T>
+where
+    T: DateQueryValue,
+{
+    /// Creates a typed MongoDB `$currentDate` update that sets this
+    /// field to the current BSON date and time.
+    pub fn current_date(&self) -> UpdateExpression {
+        UpdateExpression::current_date(self.name())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::query::EmbeddedDocument;
@@ -577,7 +595,7 @@ mod tests {
     use crate::query::UpdateExpression;
     use crate::query::field::ComparisonOperator;
     use crate::query::field::RegexOption;
-    use mongodb::bson::{Bson, Regex, doc};
+    use mongodb::bson::{Bson, DateTime, Regex, doc};
 
     use super::Field;
 
@@ -1600,6 +1618,58 @@ mod tests {
                 },
                 "$rename": {
                     "nickname": "displayAlias",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn date_field_builds_current_date_update_expression() {
+        let updated_at = Field::<DateTime>::new("updated_at");
+
+        assert_eq!(
+            updated_at.current_date().into_document(),
+            doc! {
+                "$currentDate": {
+                    "updated_at": {
+                        "$type": "date",
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_current_date_update_expressions() {
+        let update =
+            UpdateExpression::set("active", true) & UpdateExpression::current_date("updated_at");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$currentDate": {
+                    "updated_at": {
+                        "$type": "date",
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_date_field_builds_current_date_update_expression() {
+        let updated_at = Field::<Option<DateTime>>::new("updated_at");
+
+        assert_eq!(
+            updated_at.current_date().into_document(),
+            doc! {
+                "$currentDate": {
+                    "updated_at": {
+                        "$type": "date",
+                    },
                 },
             }
         );

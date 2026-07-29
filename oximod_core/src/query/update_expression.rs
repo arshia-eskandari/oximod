@@ -165,6 +165,19 @@ impl UpdateExpression {
 
         Self { document }
     }
+
+    pub(crate) fn current_date(field: impl Into<String>) -> Self {
+        let mut date = Document::new();
+        date.insert("$type", "date");
+
+        let mut fields = Document::new();
+        fields.insert(field.into(), date);
+
+        let mut document = Document::new();
+        document.insert("$currentDate", fields);
+
+        Self { document }
+    }
 }
 
 impl BitAnd for UpdateExpression {
@@ -499,6 +512,22 @@ mod tests {
             doc! {
                 "$rename": {
                     "nickname": "displayAlias",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn current_date_builds_current_date_update_document() {
+        let update = UpdateExpression::current_date("updated_at");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$currentDate": {
+                    "updated_at": {
+                        "$type": "date",
+                    },
                 },
             }
         );
