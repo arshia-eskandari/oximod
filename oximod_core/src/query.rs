@@ -3,6 +3,7 @@ mod builder;
 mod embedded_document;
 mod expression;
 mod field;
+mod geospatial;
 mod queryable;
 mod sort;
 mod text_search;
@@ -16,6 +17,9 @@ pub use field::{
     ElementField, Field, IntegerQueryValue, NumericQueryValue, OrderedQueryValue, RegexOption,
     StringQueryValue,
 };
+#[doc(hidden)]
+pub use geospatial::{GeoGeometry, GeoPointQueryValue, GeoQueryValue};
+pub use geospatial::{GeoPoint, GeoPolygon, NearQuery};
 pub use queryable::Queryable;
 pub use sort::SortExpression;
 pub use text_search::TextSearch;

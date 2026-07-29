@@ -38,6 +38,9 @@ pub(crate) enum ComparisonOperator {
     BitsAnySet,
     BitsAllClear,
     BitsAnyClear,
+    Near,
+    GeoWithin,
+    GeoIntersects,
 }
 
 #[doc(hidden)]
@@ -76,6 +79,9 @@ impl ComparisonOperator {
             Self::BitsAnySet => Some("$bitsAnySet"),
             Self::BitsAllClear => Some("$bitsAllClear"),
             Self::BitsAnyClear => Some("$bitsAnyClear"),
+            Self::Near => Some("$near"),
+            Self::GeoWithin => Some("$geoWithin"),
+            Self::GeoIntersects => Some("$geoIntersects"),
         }
     }
 }

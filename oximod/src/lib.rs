@@ -612,6 +612,8 @@ pub use oximod_core::query::BsonType;
 
 pub use oximod_core::query::TextSearch;
 
+pub use oximod_core::query::{GeoPoint, GeoPolygon, NearQuery};
+
 // --- Internal API ---
 
 #[doc(hidden)]
@@ -635,7 +637,8 @@ pub use regex as _regex; // removes the need of importing the trait
 #[doc(hidden)]
 pub mod _query {
     pub use oximod_core::query::{
-        ElementExpression, ElementField, Expression, Field, IntegerQueryValue, NumericQueryValue,
-        OrderedQueryValue, Query, SortExpression, StringQueryValue,
+        ElementExpression, ElementField, Expression, Field, GeoGeometry, GeoPointQueryValue,
+        GeoQueryValue, IntegerQueryValue, NumericQueryValue, OrderedQueryValue, Query,
+        SortExpression, StringQueryValue,
     };
 }
