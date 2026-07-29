@@ -492,6 +492,13 @@ pub trait DateQueryValue {}
 impl DateQueryValue for DateTime {}
 impl DateQueryValue for Option<DateTime> {}
 
+/// Marker trait for integer fields that support bitwise queries.
+#[doc(hidden)]
+pub trait IntegerQueryValue: Into<Bson> {}
+
+impl IntegerQueryValue for i32 {}
+impl IntegerQueryValue for i64 {}
+
 impl<T> Field<T>
 where
     T: OrderedQueryValue + Into<Bson>,
@@ -664,6 +671,22 @@ where
     /// field to the current BSON date and time.
     pub fn current_date(&self) -> UpdateExpression {
         UpdateExpression::current_date(self.name())
+    }
+}
+
+impl<T> Field<T>
+where
+    T: IntegerQueryValue,
+{
+    /// Creates a typed MongoDB `$bitsAllSet` query.
+    ///
+    /// The field matches when every bit set in `mask` is also set in
+    /// the stored integer value.
+    pub fn bits_all_set<V>(&self, mask: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        Expression::comparison(self.name(), ComparisonOperator::BitsAllSet, mask.into())
     }
 }
 
@@ -1857,6 +1880,34 @@ mod tests {
             doc! {
                 "value": {
                     "$mod": [5_i64, 1_i64],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn integer_field_builds_bits_all_set_expression() {
+        let permissions = Field::<i32>::new("permissions");
+
+        assert_eq!(
+            permissions.bits_all_set(0b0101).into_document(),
+            doc! {
+                "permissions": {
+                    "$bitsAllSet": 0b0101,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn int64_field_builds_bits_all_set_expression() {
+        let permissions = Field::<i64>::new("permissions");
+
+        assert_eq!(
+            permissions.bits_all_set(5_i64).into_document(),
+            doc! {
+                "permissions": {
+                    "$bitsAllSet": 5_i64,
                 },
             }
         );

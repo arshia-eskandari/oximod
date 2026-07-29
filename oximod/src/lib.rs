@@ -633,7 +633,7 @@ pub use regex as _regex; // removes the need of importing the trait
 #[doc(hidden)]
 pub mod _query {
     pub use oximod_core::query::{
-        ElementExpression, ElementField, Expression, Field, NumericQueryValue, OrderedQueryValue,
-        Query, SortExpression, StringQueryValue,
+        ElementExpression, ElementField, Expression, Field, IntegerQueryValue, NumericQueryValue,
+        OrderedQueryValue, Query, SortExpression, StringQueryValue,
     };
 }

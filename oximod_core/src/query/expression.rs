@@ -34,6 +34,7 @@ pub(crate) enum ComparisonOperator {
     ElemMatch,
     Type,
     Mod,
+    BitsAllSet,
 }
 
 #[doc(hidden)]
@@ -68,6 +69,7 @@ impl ComparisonOperator {
             Self::ElemMatch => Some("$elemMatch"),
             Self::Type => Some("$type"),
             Self::Mod => Some("$mod"),
+            Self::BitsAllSet => Some("$bitsAllSet"),
         }
     }
 }

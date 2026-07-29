@@ -12,7 +12,8 @@ pub use builder::Query;
 pub use embedded_document::EmbeddedDocument;
 pub use expression::{ElementExpression, Expression};
 pub use field::{
-    ElementField, Field, NumericQueryValue, OrderedQueryValue, RegexOption, StringQueryValue,
+    ElementField, Field, IntegerQueryValue, NumericQueryValue, OrderedQueryValue, RegexOption,
+    StringQueryValue,
 };
 pub use queryable::Queryable;
 pub use sort::SortExpression;

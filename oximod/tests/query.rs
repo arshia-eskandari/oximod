@@ -3371,3 +3371,55 @@ async fn typed_query_matches_numeric_modulo() -> TestResult {
 
     Ok(())
 }
+
+// Run test:
+// cargo nextest run typed_query_matches_all_set_bits
+#[tokio::test]
+async fn typed_query_matches_all_set_bits() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_matches_all_set_bits")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+        permissions: i32,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .permissions(0b0111)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .permissions(0b0101)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User3")
+        .permissions(0b0010)
+        .save()
+        .await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.permissions.bits_all_set(0b0101))
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].name, "User1");
+    assert_eq!(users[1].name, "User2");
+
+    User::clear().await?;
+
+    Ok(())
+}
