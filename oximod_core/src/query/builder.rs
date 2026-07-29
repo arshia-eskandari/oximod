@@ -1,6 +1,7 @@
 use crate::error::oximod_error::OxiModError;
 use crate::error::query_error::{BulkWriteOperation, QueryError, QueryModifier};
 use crate::feature::model::Model;
+use crate::query::TextSearch;
 use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
 use crate::query::sort::SortExpression;
@@ -13,6 +14,7 @@ use std::marker::PhantomData;
 #[derive(Debug, Clone)]
 pub struct Query<M> {
     filter: Option<Expression>,
+    text: Option<TextSearch>,
     sort: Option<SortExpression>,
     limit: Option<u64>,
     skip: Option<u64>,
@@ -27,6 +29,7 @@ impl<M> Query<M> {
     pub const fn new() -> Self {
         Self {
             filter: None,
+            text: None,
             sort: None,
             limit: None,
             skip: None,
@@ -103,6 +106,60 @@ impl<M> Query<M> {
         self.array_filters.push(expression.into_document());
 
         self
+    }
+
+    /// Adds a MongoDB `$text` search to this query.
+    ///
+    /// The collection must have an appropriate text index.
+    ///
+    /// A string creates a basic search:
+    ///
+    /// ```ignore
+    /// let articles = Article::query()
+    ///     .text("rust mongodb")
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// Use [`TextSearch`] for additional options:
+    ///
+    /// ```ignore
+    /// let articles = Article::query()
+    ///     .text(
+    ///         TextSearch::new("Café")
+    ///             .language("none")
+    ///             .case_sensitive(true)
+    ///             .diacritic_sensitive(true),
+    ///     )
+    ///     .all()
+    ///     .await?;
+    /// ```
+    pub fn text<S>(mut self, search: S) -> Self
+    where
+        S: Into<TextSearch>,
+    {
+        self.text = Some(search.into());
+        self
+    }
+
+    /// Sorts text-search results by relevance score.
+    ///
+    /// This replaces the existing primary sort. Additional sorts can
+    /// be appended with [`Query::then_sort_by`].
+    pub fn sort_by_text_score(mut self) -> Self {
+        self.sort = Some(SortExpression::text_score("_textScore"));
+
+        self
+    }
+
+    fn build_filter_document(filter: Option<Expression>, text: Option<TextSearch>) -> Document {
+        let mut document = filter.map(Expression::into_document).unwrap_or_default();
+
+        if let Some(text) = text {
+            document.extend(text.into_document());
+        }
+
+        document
     }
 }
 
@@ -192,9 +249,7 @@ where
     }
 
     pub(crate) fn into_filter_document(self) -> Document {
-        self.filter
-            .map(Expression::into_document)
-            .unwrap_or_default()
+        Self::build_filter_document(self.filter, self.text)
     }
 }
 
@@ -287,6 +342,7 @@ where
     pub async fn delete_one(self) -> Result<Option<M>, OxiModError> {
         let Self {
             filter,
+            text,
             sort,
             error,
             ..
@@ -296,7 +352,7 @@ where
             return Err(error.into());
         }
 
-        let filter = filter.map(Expression::into_document).unwrap_or_default();
+        let filter = Self::build_filter_document(filter, text);
 
         let collection = M::get_collection()?;
 
@@ -321,6 +377,7 @@ where
     pub async fn delete_all(self) -> Result<DeleteResult, OxiModError> {
         let Self {
             filter,
+            text,
             sort,
             limit,
             skip,
@@ -341,7 +398,7 @@ where
             limit.is_some(),
         )?;
 
-        let filter = filter.map(Expression::into_document).unwrap_or_default();
+        let filter = Self::build_filter_document(filter, text);
 
         let collection = M::get_collection()?;
 
@@ -363,6 +420,7 @@ where
     {
         let Self {
             filter,
+            text,
             sort,
             array_filters,
             error,
@@ -376,7 +434,7 @@ where
         let fields = M::fields();
         let update = build(&fields).into_document();
 
-        let filter = filter.map(Expression::into_document).unwrap_or_default();
+        let filter = Self::build_filter_document(filter, text);
 
         let collection = M::get_collection()?;
 
@@ -410,6 +468,7 @@ where
     {
         let Self {
             filter,
+            text,
             sort,
             limit,
             skip,
@@ -433,7 +492,7 @@ where
 
         let fields = <M as Queryable>::fields();
         let update = build(&fields).into_document();
-        let filter = filter.map(Expression::into_document).unwrap_or_default();
+        let filter = Self::build_filter_document(filter, text);
         let collection = M::get_collection()?;
         let mut operation = collection.update_many(filter, update);
 
@@ -451,10 +510,24 @@ where
 mod tests {
     use mongodb::bson::doc;
 
-    use super::Query;
     use crate::error::query_error::QueryError;
-    use crate::query::field::Field;
-    use crate::query::queryable::Queryable;
+    use crate::query::{Field, Query, Queryable, SortExpression, TextSearch};
+
+    struct Article;
+
+    struct ArticleFields {
+        published: Field<bool>,
+    }
+
+    impl Queryable for Article {
+        type Fields = ArticleFields;
+
+        fn fields() -> Self::Fields {
+            ArticleFields {
+                published: Field::new("published"),
+            }
+        }
+    }
 
     struct User;
 
@@ -692,6 +765,133 @@ mod tests {
                 page: u64::MAX,
                 page_size: 2,
             }),
+        );
+    }
+
+    #[test]
+    fn text_search_builds_top_level_filter() {
+        let filter = Query::<Article>::new().text("rust").into_filter_document();
+
+        assert_eq!(
+            filter,
+            doc! {
+                "$text": {
+                    "$search": "rust",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn text_search_combines_with_typed_filter() {
+        let filter = Query::<Article>::new()
+            .text("rust")
+            .filter(|article| article.published.eq(true))
+            .into_filter_document();
+
+        assert_eq!(
+            filter,
+            doc! {
+                "published": true,
+                "$text": {
+                    "$search": "rust",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn configured_text_search_builds_options() {
+        let filter = Query::<Article>::new()
+            .text(
+                TextSearch::new("Café")
+                    .language("none")
+                    .case_sensitive(true)
+                    .diacritic_sensitive(true),
+            )
+            .into_filter_document();
+
+        assert_eq!(
+            filter,
+            doc! {
+                "$text": {
+                    "$search": "Café",
+                    "$language": "none",
+                    "$caseSensitive": true,
+                    "$diacriticSensitive": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn later_text_search_replaces_previous_search() {
+        let filter = Query::<Article>::new()
+            .text("rust")
+            .text("mongodb")
+            .into_filter_document();
+
+        assert_eq!(
+            filter,
+            doc! {
+                "$text": {
+                    "$search": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn text_search_is_preserved_when_filter_is_added_first() {
+        let filter = Query::<Article>::new()
+            .filter(|article| article.published.eq(true))
+            .text("rust")
+            .into_filter_document();
+
+        assert_eq!(
+            filter,
+            doc! {
+                "published": true,
+                "$text": {
+                    "$search": "rust",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn sort_by_text_score_sets_text_score_sort() {
+        let query = Query::<Article>::new().text("rust").sort_by_text_score();
+
+        let sort = query.sort.expect("query should contain sorting");
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "_textScore": {
+                    "$meta": "textScore",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn text_score_sort_can_be_followed_by_typed_sort() {
+        let query = Query::<Article>::new()
+            .text("rust")
+            .sort_by_text_score()
+            .then_sort_by(|_| SortExpression::ascending("published"));
+
+        let sort = query.sort.expect("query should contain sorting");
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "_textScore": {
+                    "$meta": "textScore",
+                },
+                "published": 1,
+            }
         );
     }
 }

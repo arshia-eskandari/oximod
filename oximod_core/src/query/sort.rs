@@ -1,4 +1,4 @@
-use mongodb::bson::Document;
+use mongodb::bson::{Bson, Document};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortExpression {
@@ -8,13 +8,14 @@ pub struct SortExpression {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SortField {
     name: String,
-    direction: SortDirection,
+    direction: SortValue,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SortDirection {
+enum SortValue {
     Ascending,
     Descending,
+    TextScore,
 }
 
 impl SortExpression {
@@ -22,7 +23,7 @@ impl SortExpression {
         Self {
             fields: vec![SortField {
                 name: field.into(),
-                direction: SortDirection::Ascending,
+                direction: SortValue::Ascending,
             }],
         }
     }
@@ -31,7 +32,16 @@ impl SortExpression {
         Self {
             fields: vec![SortField {
                 name: field.into(),
-                direction: SortDirection::Descending,
+                direction: SortValue::Descending,
+            }],
+        }
+    }
+
+    pub(crate) fn text_score(field: impl Into<String>) -> Self {
+        Self {
+            fields: vec![SortField {
+                name: field.into(),
+                direction: SortValue::TextScore,
             }],
         }
     }
@@ -51,14 +61,18 @@ impl SortExpression {
     }
 }
 
-impl SortDirection {
-    const fn mongo_value(self) -> i32 {
+impl SortValue {
+    fn mongo_value(self) -> Bson {
         match self {
-            Self::Ascending => 1,
-            Self::Descending => -1,
+            Self::Ascending => Bson::Int32(1),
+            Self::Descending => Bson::Int32(-1),
+            Self::TextScore => Bson::Document(mongodb::bson::doc! {
+                "$meta": "textScore",
+            }),
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
@@ -129,6 +143,37 @@ mod tests {
             doc! {
                 "role": 1,
                 "age": -1,
+                "name": 1,
+            }
+        );
+    }
+
+    #[test]
+    fn text_score_sort_converts_to_mongodb_document() {
+        let sort = SortExpression::text_score("_textScore");
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "_textScore": {
+                    "$meta": "textScore",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn text_score_sort_can_be_combined_with_field_sort() {
+        let mut sort = SortExpression::text_score("_textScore");
+
+        sort.extend(SortExpression::ascending("name"));
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "_textScore": {
+                    "$meta": "textScore",
+                },
                 "name": 1,
             }
         );

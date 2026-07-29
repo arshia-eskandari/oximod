@@ -610,6 +610,8 @@ pub use oximod_macros::EmbeddedDocument;
 /// ```
 pub use oximod_core::query::BsonType;
 
+pub use oximod_core::query::TextSearch;
+
 // --- Internal API ---
 
 #[doc(hidden)]
