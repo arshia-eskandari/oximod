@@ -401,6 +401,24 @@ where
 
         build(&fields)
     }
+
+    // Existing:
+    // - elem_match_nested()
+    // - positional()
+    // - filtered()
+
+    /// Builds a typed MongoDB array-filter condition for this embedded
+    /// document array.
+    ///
+    /// The identifier must match the identifier used by `.filtered()`.
+    pub fn array_filter<F>(&self, identifier: impl AsRef<str>, build: F) -> Expression
+    where
+        F: FnOnce(&T::Fields) -> Expression,
+    {
+        let fields = T::fields_with_prefix(identifier.as_ref());
+
+        build(&fields)
+    }
 }
 
 impl<T> Field<T>
@@ -1755,6 +1773,20 @@ mod tests {
                     "addresses.$[address].city": "City2",
                     "addresses.$[address].active": true,
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_builds_identifier_filter_expression() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let expression = addresses.array_filter("address", |address| address.city.eq("City1"));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "address.city": "City1",
             }
         );
     }

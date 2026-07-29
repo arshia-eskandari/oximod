@@ -19,6 +19,7 @@ pub struct Query<M> {
     error: Option<QueryError>,
     marker: PhantomData<fn() -> M>,
     pagination: bool,
+    array_filters: Vec<Document>,
 }
 
 impl<M> Query<M> {
@@ -32,6 +33,7 @@ impl<M> Query<M> {
             error: None,
             marker: PhantomData,
             pagination: false,
+            array_filters: Vec::new(),
         }
     }
 
@@ -84,6 +86,23 @@ impl<M> Query<M> {
         }
 
         Ok(())
+    }
+
+    /// Adds a typed MongoDB array-filter condition.
+    ///
+    /// The identifier used by the filter must match the identifier in a
+    /// filtered positional update path created with `.filtered()`.
+    pub fn array_filter<F>(mut self, build: F) -> Self
+    where
+        M: Queryable,
+        F: FnOnce(&<M as Queryable>::Fields) -> Expression,
+    {
+        let fields = <M as Queryable>::fields();
+        let expression = build(&fields);
+
+        self.array_filters.push(expression.into_document());
+
+        self
     }
 }
 
@@ -345,6 +364,7 @@ where
         let Self {
             filter,
             sort,
+            array_filters,
             error,
             ..
         } = self;
@@ -368,6 +388,10 @@ where
             operation = operation.sort(sort.into_document());
         }
 
+        if !array_filters.is_empty() {
+            operation = operation.array_filters(array_filters);
+        }
+
         operation.await.map_err(|error| {
             OxiModError::database(
                 "Failed to update the first document matching the typed query",
@@ -389,6 +413,7 @@ where
             sort,
             limit,
             skip,
+            array_filters,
             pagination,
             error,
             ..
@@ -408,17 +433,17 @@ where
 
         let fields = <M as Queryable>::fields();
         let update = build(&fields).into_document();
-
         let filter = filter.map(Expression::into_document).unwrap_or_default();
-
         let collection = M::get_collection()?;
+        let mut operation = collection.update_many(filter, update);
 
-        collection
-            .update_many(filter, update)
-            .await
-            .map_err(|error| {
-                OxiModError::database("Failed to update documents matching the typed query", error)
-            })
+        if !array_filters.is_empty() {
+            operation = operation.array_filters(array_filters);
+        }
+
+        operation.await.map_err(|error| {
+            OxiModError::database("Failed to update documents matching the typed query", error)
+        })
     }
 }
 
