@@ -699,6 +699,19 @@ where
     {
         Expression::comparison(self.name(), ComparisonOperator::BitsAnySet, mask.into())
     }
+
+    // Existing bitwise methods...
+
+    /// Creates a typed MongoDB `$bitsAllClear` query.
+    ///
+    /// The field matches when every bit set in `mask` is clear in the
+    /// stored integer value.
+    pub fn bits_all_clear<V>(&self, mask: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        Expression::comparison(self.name(), ComparisonOperator::BitsAllClear, mask.into())
+    }
 }
 
 #[cfg(test)]
@@ -1947,6 +1960,34 @@ mod tests {
             doc! {
                 "permissions": {
                     "$bitsAnySet": 12_i64,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn integer_field_builds_bits_all_clear_expression() {
+        let permissions = Field::<i32>::new("permissions");
+
+        assert_eq!(
+            permissions.bits_all_clear(0b1100).into_document(),
+            doc! {
+                "permissions": {
+                    "$bitsAllClear": 0b1100,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn int64_field_builds_bits_all_clear_expression() {
+        let permissions = Field::<i64>::new("permissions");
+
+        assert_eq!(
+            permissions.bits_all_clear(12_i64).into_document(),
+            doc! {
+                "permissions": {
+                    "$bitsAllClear": 12_i64,
                 },
             }
         );
