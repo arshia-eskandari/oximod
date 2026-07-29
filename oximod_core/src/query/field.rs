@@ -688,6 +688,17 @@ where
     {
         Expression::comparison(self.name(), ComparisonOperator::BitsAllSet, mask.into())
     }
+
+    /// Creates a typed MongoDB `$bitsAnySet` query.
+    ///
+    /// The field matches when at least one bit set in `mask` is also
+    /// set in the stored integer value.
+    pub fn bits_any_set<V>(&self, mask: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        Expression::comparison(self.name(), ComparisonOperator::BitsAnySet, mask.into())
+    }
 }
 
 #[cfg(test)]
@@ -1908,6 +1919,34 @@ mod tests {
             doc! {
                 "permissions": {
                     "$bitsAllSet": 5_i64,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn integer_field_builds_bits_any_set_expression() {
+        let permissions = Field::<i32>::new("permissions");
+
+        assert_eq!(
+            permissions.bits_any_set(0b1100).into_document(),
+            doc! {
+                "permissions": {
+                    "$bitsAnySet": 0b1100,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn int64_field_builds_bits_any_set_expression() {
+        let permissions = Field::<i64>::new("permissions");
+
+        assert_eq!(
+            permissions.bits_any_set(12_i64).into_document(),
+            doc! {
+                "permissions": {
+                    "$bitsAnySet": 12_i64,
                 },
             }
         );
