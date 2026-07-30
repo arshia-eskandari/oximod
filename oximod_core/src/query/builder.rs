@@ -1,3 +1,16 @@
+//! Typed query construction and execution.
+//!
+//! This module contains [`Query`], the builder produced by
+//! [`Queryable::query`]. Queries can be filtered, sorted, paginated,
+//! executed, updated, or deleted without manually constructing BSON
+//! documents.
+
+use std::marker::PhantomData;
+
+use mongodb::bson::Document;
+use mongodb::options::ReturnDocument;
+use mongodb::results::{DeleteResult, UpdateResult};
+
 use crate::error::oximod_error::OxiModError;
 use crate::error::query_error::{BulkWriteOperation, QueryError, QueryModifier};
 use crate::feature::model::Model;
@@ -6,11 +19,37 @@ use crate::query::expression::Expression;
 use crate::query::queryable::Queryable;
 use crate::query::sort::SortExpression;
 use crate::query::update_expression::UpdateExpression;
-use mongodb::bson::Document;
-use mongodb::options::ReturnDocument;
-use mongodb::results::{DeleteResult, UpdateResult};
-use std::marker::PhantomData;
 
+/// A type-safe MongoDB query for model `M`.
+///
+/// Queries are normally created through [`Queryable::query`] rather than
+/// constructed directly.
+///
+/// The builder stores query configuration until an execution method such as
+/// [`Query::all`], [`Query::first`], [`Query::update_one`], or
+/// [`Query::delete_all`] is called.
+///
+/// # Example
+///
+/// ```ignore
+/// let users = User::query()
+///     .filter(|user| {
+///         user.active.eq(true)
+///             & user.age.gte(18)
+///     })
+///     .sort_by(|user| user.age.desc())
+///     .limit(10)
+///     .all()
+///     .await?;
+/// ```
+///
+/// Repeated calls to [`Query::filter`] are combined using logical AND.
+/// Primary sorting methods replace the existing sort, while
+/// [`Query::then_sort_by`] appends an additional sort field.
+///
+/// Some validation errors, such as invalid pagination, are recorded while the
+/// query is being built and returned when the query is executed.
+#[must_use = "queries do nothing unless an execution method is called"]
 #[derive(Debug, Clone)]
 pub struct Query<M> {
     filter: Option<Expression>,
@@ -25,6 +64,10 @@ pub struct Query<M> {
 }
 
 impl<M> Query<M> {
+    /// Creates an empty query.
+    ///
+    /// This constructor is used by [`Queryable::query`] and generated model
+    /// code. Applications should normally call `Model::query()` instead.
     #[doc(hidden)]
     pub const fn new() -> Self {
         Self {
@@ -91,26 +134,10 @@ impl<M> Query<M> {
         Ok(())
     }
 
-    /// Adds a typed MongoDB array-filter condition.
+    /// Adds a MongoDB `$text` search.
     ///
-    /// The identifier used by the filter must match the identifier in a
-    /// filtered positional update path created with `.filtered()`.
-    pub fn array_filter<F>(mut self, build: F) -> Self
-    where
-        M: Queryable,
-        F: FnOnce(&<M as Queryable>::Fields) -> Expression,
-    {
-        let fields = <M as Queryable>::fields();
-        let expression = build(&fields);
-
-        self.array_filters.push(expression.into_document());
-
-        self
-    }
-
-    /// Adds a MongoDB `$text` search to this query.
-    ///
-    /// The collection must have an appropriate text index.
+    /// The model's collection must have a text index covering the searchable
+    /// fields.
     ///
     /// A string creates a basic search:
     ///
@@ -121,7 +148,8 @@ impl<M> Query<M> {
     ///     .await?;
     /// ```
     ///
-    /// Use [`TextSearch`] for additional options:
+    /// Use [`TextSearch`] to configure language, case sensitivity, or
+    /// diacritic sensitivity:
     ///
     /// ```ignore
     /// let articles = Article::query()
@@ -134,6 +162,23 @@ impl<M> Query<M> {
     ///     .all()
     ///     .await?;
     /// ```
+    ///
+    /// Phrase searches and excluded terms can be expressed using MongoDB's
+    /// text-search syntax:
+    ///
+    /// ```ignore
+    /// let articles = Article::query()
+    ///     .text("\"rust mongodb\" -beginner")
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// Calling this method again replaces the previously configured text
+    /// search.
+    ///
+    /// # Parameters
+    ///
+    /// - `search`: A search string or configured [`TextSearch`].
     pub fn text<S>(mut self, search: S) -> Self
     where
         S: Into<TextSearch>,
@@ -142,10 +187,23 @@ impl<M> Query<M> {
         self
     }
 
-    /// Sorts text-search results by relevance score.
+    /// Sorts text-search results by MongoDB relevance score.
     ///
-    /// This replaces the existing primary sort. Additional sorts can
-    /// be appended with [`Query::then_sort_by`].
+    /// This method replaces the existing primary sort. Use
+    /// [`Query::then_sort_by`] afterward to add a deterministic secondary
+    /// ordering.
+    ///
+    /// ```ignore
+    /// let articles = Article::query()
+    ///     .text("rust mongodb")
+    ///     .sort_by_text_score()
+    ///     .then_sort_by(|article| article.title.asc())
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// This method is intended for queries containing [`Query::text`].
+    /// MongoDB determines relevance from the collection's text index.
     pub fn sort_by_text_score(mut self) -> Self {
         self.sort = Some(SortExpression::text_score("_textScore"));
 
@@ -173,6 +231,35 @@ impl<M> Query<M>
 where
     M: Queryable,
 {
+    /// Adds a typed filter expression.
+    ///
+    /// The closure receives the field structure generated for `M`. Field
+    /// methods create type-safe MongoDB expressions, preventing operators from
+    /// being applied to incompatible field types.
+    ///
+    /// ```ignore
+    /// let query = User::query().filter(|user| {
+    ///     user.active.eq(true)
+    ///         & user.age.gte(18)
+    ///         & (
+    ///             user.role.eq("admin")
+    ///                 | user.role.eq("member")
+    ///         )
+    /// });
+    /// ```
+    ///
+    /// Repeated calls are combined using logical AND:
+    ///
+    /// ```ignore
+    /// let query = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .filter(|user| user.age.gte(18));
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `build`: A closure that creates an [`Expression`] from the generated
+    ///   fields for `M`.
     pub fn filter<F>(mut self, build: F) -> Self
     where
         F: FnOnce(&M::Fields) -> Expression,
@@ -188,16 +275,85 @@ where
         self
     }
 
+    /// Limits the number of documents returned by [`Query::all`].
+    ///
+    /// A later call replaces the previously configured limit.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .limit(20)
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `limit`: The maximum number of documents to return.
+    ///
+    /// # Errors
+    ///
+    /// Execution returns [`OxiModError`] if `limit` cannot be represented by
+    /// the signed integer required by the MongoDB driver.
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
         self
     }
 
+    /// Skips matching documents before collecting results with
+    /// [`Query::all`].
+    ///
+    /// A later call replaces the previously configured offset.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .sort_by(|user| user.name.asc())
+    ///     .skip(20)
+    ///     .limit(10)
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `skip`: The number of matching documents to skip.
     pub fn skip(mut self, skip: u64) -> Self {
         self.skip = Some(skip);
         self
     }
 
+    /// Applies one-based pagination.
+    ///
+    /// Page `1` represents the first page. This method calculates:
+    ///
+    /// ```text
+    /// skip = (page - 1) * page_size
+    /// limit = page_size
+    /// ```
+    ///
+    /// ```ignore
+    /// let second_page = User::query()
+    ///     .sort_by(|user| user.name.asc())
+    ///     .page(2, 25)
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `page`: The one-based page number.
+    /// - `page_size`: The number of documents per page.
+    ///
+    /// # Errors
+    ///
+    /// Invalid values are recorded on the query and returned when an execution
+    /// method is called:
+    ///
+    /// - `page == 0`
+    /// - `page_size == 0`
+    /// - multiplication overflow while calculating the offset
+    ///
+    /// Pagination is not supported by [`Query::update_all`] or
+    /// [`Query::delete_all`].
     pub fn page(mut self, page: u64, page_size: u64) -> Self {
         self.pagination = true;
 
@@ -223,6 +379,25 @@ where
         self
     }
 
+    /// Sets the primary sort expression.
+    ///
+    /// Calling this method again replaces the existing sort. Use
+    /// [`Query::then_sort_by`] to append additional fields.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .sort_by(|user| user.age.desc())
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// Sorting is used by [`Query::all`], [`Query::first`],
+    /// [`Query::update_one`], and [`Query::delete_one`].
+    ///
+    /// # Parameters
+    ///
+    /// - `build`: A closure that creates a [`SortExpression`] from the
+    ///   generated fields for `M`.
     pub fn sort_by<F>(mut self, build: F) -> Self
     where
         F: FnOnce(&M::Fields) -> SortExpression,
@@ -233,6 +408,23 @@ where
         self
     }
 
+    /// Appends a secondary sort expression.
+    ///
+    /// Sort fields are evaluated in insertion order. When no primary sort has
+    /// been configured, this method creates one.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .sort_by(|user| user.role.asc())
+    ///     .then_sort_by(|user| user.age.desc())
+    ///     .then_sort_by(|user| user.name.asc())
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `build`: A closure that creates the next [`SortExpression`].
     pub fn then_sort_by<F>(mut self, build: F) -> Self
     where
         F: FnOnce(&M::Fields) -> SortExpression,
@@ -241,9 +433,54 @@ where
         let next_sort = build(&fields);
 
         match &mut self.sort {
-            Some(existing) => existing.extend(next_sort),
-            None => self.sort = Some(next_sort),
+            Some(existing) => {
+                existing.extend(next_sort);
+            }
+            None => {
+                self.sort = Some(next_sort);
+            }
         }
+
+        self
+    }
+
+    /// Adds a MongoDB array filter for a filtered positional update.
+    ///
+    /// The identifier used here must match the identifier supplied to
+    /// `.filtered()` in the update expression.
+    ///
+    /// ```ignore
+    /// User::query()
+    ///     .filter(|user| user.name.eq("User1"))
+    ///     .array_filter(|user| {
+    ///         user.addresses.array_filter(
+    ///             "address",
+    ///             |address| address.active.eq(false),
+    ///         )
+    ///     })
+    ///     .update_one(|user| {
+    ///         user.addresses.filtered(
+    ///             "address",
+    ///             |address| address.active.set(true),
+    ///         )
+    ///     })
+    ///     .await?;
+    /// ```
+    ///
+    /// Multiple calls add multiple array-filter documents. Array filters are
+    /// applied by [`Query::update_one`] and [`Query::update_all`].
+    ///
+    /// # Parameters
+    ///
+    /// - `build`: A closure producing the array-filter expression.
+    pub fn array_filter<F>(mut self, build: F) -> Self
+    where
+        F: FnOnce(&M::Fields) -> Expression,
+    {
+        let fields = M::fields();
+        let expression = build(&fields);
+
+        self.array_filters.push(expression.into_document());
 
         self
     }
@@ -257,6 +494,32 @@ impl<M> Query<M>
 where
     M: Queryable + Model,
 {
+    /// Returns the first document matching this query.
+    ///
+    /// Sorting can be used to control which matching document is considered
+    /// first.
+    ///
+    /// ```ignore
+    /// let user = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .sort_by(|user| user.created_at.asc())
+    ///     .first()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(M))` when a matching document is found.
+    /// - `Ok(None)` when no document matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the query contains a deferred construction error
+    /// - the model collection cannot be resolved
+    /// - MongoDB fails to execute the query
+    /// - the matching document cannot be deserialized
     pub async fn first(mut self) -> Result<Option<M>, OxiModError> {
         self.take_error()?;
 
@@ -274,6 +537,26 @@ where
             .map_err(|error| OxiModError::database("Failed to execute typed query", error))
     }
 
+    /// Counts documents matching this query's filter.
+    ///
+    /// Sorting, skipping, limiting, and pagination do not change the returned
+    /// count.
+    ///
+    /// ```ignore
+    /// let count = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .count()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// The number of matching documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if the query contains a deferred error,
+    /// collection resolution fails, or MongoDB cannot count the documents.
     pub async fn count(mut self) -> Result<u64, OxiModError> {
         self.take_error()?;
 
@@ -286,6 +569,34 @@ where
             .map_err(|error| OxiModError::database("Failed to count typed query results", error))
     }
 
+    /// Returns all documents matching this query.
+    ///
+    /// Configured sorting, skipping, limiting, and pagination are applied
+    /// before results are collected.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .sort_by(|user| user.name.asc())
+    ///     .page(1, 25)
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// A vector containing every document returned by MongoDB after applying
+    /// the configured query options.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the query contains a deferred construction error
+    /// - the limit exceeds the range supported by the driver
+    /// - collection resolution or query execution fails
+    /// - cursor advancement fails
+    /// - a document cannot be deserialized into `M`
     pub async fn all(mut self) -> Result<Vec<M>, OxiModError> {
         self.take_error()?;
 
@@ -333,12 +644,29 @@ where
         Ok(models)
     }
 
-    /// Deletes and returns the first document matching this query.
+    /// Deletes and returns the first matching document.
     ///
     /// When sorting is configured, the first document according to that
     /// ordering is deleted.
     ///
-    /// Returns `None` when no document matches the query.
+    /// ```ignore
+    /// let deleted = User::query()
+    ///     .filter(|user| user.active.eq(false))
+    ///     .sort_by(|user| user.created_at.asc())
+    ///     .delete_one()
+    ///     .await?;
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(M))` containing the deleted document.
+    /// - `Ok(None)` when no document matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if the query contains a deferred error,
+    /// collection resolution fails, MongoDB rejects the query, or the deleted
+    /// document cannot be deserialized.
     pub async fn delete_one(self) -> Result<Option<M>, OxiModError> {
         let Self {
             filter,
@@ -370,10 +698,36 @@ where
         })
     }
 
-    /// Deletes all documents matching this query.
+    /// Deletes every document matching this query.
     ///
-    /// Sorting, skipping, limiting, and pagination are not supported for
-    /// bulk deletion.
+    /// ```ignore
+    /// let result = User::query()
+    ///     .filter(|user| user.active.eq(false))
+    ///     .delete_all()
+    ///     .await?;
+    ///
+    /// println!("Deleted {}", result.deleted_count);
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// A [`DeleteResult`] containing the number of removed documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the query contains a deferred error
+    /// - sorting, skipping, limiting, or pagination was configured
+    /// - collection resolution or deletion fails
+    ///
+    /// # Warning
+    ///
+    /// An empty query deletes every document in the model's collection:
+    ///
+    /// ```ignore
+    /// User::query().delete_all().await?;
+    /// ```
     pub async fn delete_all(self) -> Result<DeleteResult, OxiModError> {
         let Self {
             filter,
@@ -407,13 +761,39 @@ where
         })
     }
 
-    /// Updates and returns the first document matching this query.
+    /// Updates and returns the first matching document.
+    ///
+    /// The update closure receives the generated field structure for `M` and
+    /// must produce an [`UpdateExpression`].
     ///
     /// When sorting is configured, the first document according to that
-    /// ordering is updated.
+    /// ordering is updated. The returned document reflects the value after
+    /// the update.
     ///
-    /// The returned value contains the document after the update. Returns
-    /// `None` when no document matches the query.
+    /// ```ignore
+    /// let updated = User::query()
+    ///     .filter(|user| user.name.eq("User1"))
+    ///     .update_one(|user| {
+    ///         user.active.set(true)
+    ///             & user.login_count.inc(1)
+    ///     })
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `build`: A closure producing the typed update expression.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(M))` containing the updated document.
+    /// - `Ok(None)` when no document matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if the query contains a deferred error,
+    /// collection resolution fails, MongoDB rejects the update, or the updated
+    /// document cannot be deserialized.
     pub async fn update_one<F>(self, build: F) -> Result<Option<M>, OxiModError>
     where
         F: FnOnce(&M::Fields) -> UpdateExpression,
@@ -458,13 +838,42 @@ where
         })
     }
 
-    /// Updates all documents matching this query.
+    /// Updates every document matching this query.
     ///
-    /// Sorting, skipping, limiting, and pagination are not supported for
-    /// bulk updates.
+    /// ```ignore
+    /// let result = User::query()
+    ///     .filter(|user| user.active.eq(false))
+    ///     .update_all(|user| {
+    ///         user.status.set("inactive")
+    ///     })
+    ///     .await?;
+    ///
+    /// println!("Modified {}", result.modified_count);
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `build`: A closure producing the typed update expression.
+    ///
+    /// # Returns
+    ///
+    /// An [`UpdateResult`] describing how many documents matched and were
+    /// modified.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if:
+    ///
+    /// - the query contains a deferred error
+    /// - sorting, skipping, limiting, or pagination was configured
+    /// - collection resolution or update execution fails
+    ///
+    /// # Warning
+    ///
+    /// An empty query updates every document in the model's collection.
     pub async fn update_all<F>(self, build: F) -> Result<UpdateResult, OxiModError>
     where
-        F: FnOnce(&<M as Queryable>::Fields) -> UpdateExpression,
+        F: FnOnce(&M::Fields) -> UpdateExpression,
     {
         let Self {
             filter,
@@ -490,10 +899,13 @@ where
             limit.is_some(),
         )?;
 
-        let fields = <M as Queryable>::fields();
+        let fields = M::fields();
         let update = build(&fields).into_document();
+
         let filter = Self::build_filter_document(filter, text);
+
         let collection = M::get_collection()?;
+
         let mut operation = collection.update_many(filter, update);
 
         if !array_filters.is_empty() {
@@ -505,13 +917,11 @@ where
         })
     }
 }
-
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
-
     use crate::error::query_error::QueryError;
     use crate::query::{Field, Query, Queryable, SortExpression, TextSearch};
+    use mongodb::bson::doc;
 
     struct Article;
 

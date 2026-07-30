@@ -1,60 +1,128 @@
-use mongodb::bson::{Bson, Document};
+//! Typed MongoDB sort expressions.
+//!
+//! [`SortExpression`] represents one or more ordered MongoDB sort fields.
+//! Applications normally create sort expressions through methods on generated
+//! [`Field`](crate::query::Field) values:
+//!
+//! ```ignore
+//! let users = User::query()
+//!     .sort_by(|user| user.role.asc())
+//!     .then_sort_by(|user| user.age.desc())
+//!     .all()
+//!     .await?;
+//! ```
+//!
+//! Text-search relevance sorting is created through
+//! [`Query::sort_by_text_score`](crate::query::Query::sort_by_text_score).
 
+use mongodb::bson::{Bson, Document, doc};
+
+/// An ordered collection of MongoDB sort fields.
+///
+/// Sort expressions are created by:
+///
+/// - [`Field::asc`](crate::query::Field::asc)
+/// - [`Field::desc`](crate::query::Field::desc)
+/// - [`Query::sort_by_text_score`](crate::query::Query::sort_by_text_score)
+///
+/// Multiple expressions are combined by
+/// [`Query::then_sort_by`](crate::query::Query::then_sort_by). Their insertion
+/// order is preserved because MongoDB evaluates sort fields from left to
+/// right.
+///
+/// # Example
+///
+/// ```ignore
+/// let users = User::query()
+///     .sort_by(|user| user.role.asc())
+///     .then_sort_by(|user| user.age.desc())
+///     .then_sort_by(|user| user.name.asc())
+///     .all()
+///     .await?;
+/// ```
+///
+/// This creates a MongoDB sort document equivalent to:
+///
+/// ```text
+/// {
+///     "role": 1,
+///     "age": -1,
+///     "name": 1
+/// }
+/// ```
+#[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortExpression {
     fields: Vec<SortField>,
 }
 
+/// One field in an ordered sort expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SortField {
     name: String,
-    direction: SortValue,
+    value: SortValue,
 }
 
+/// The MongoDB value associated with a sort field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SortValue {
+    /// Sorts values in ascending order.
     Ascending,
+
+    /// Sorts values in descending order.
     Descending,
+
+    /// Sorts text-search results by MongoDB relevance score.
     TextScore,
 }
 
 impl SortExpression {
+    /// Creates an ascending sort expression for `field`.
     pub(crate) fn ascending(field: impl Into<String>) -> Self {
         Self {
             fields: vec![SortField {
                 name: field.into(),
-                direction: SortValue::Ascending,
+                value: SortValue::Ascending,
             }],
         }
     }
 
+    /// Creates a descending sort expression for `field`.
     pub(crate) fn descending(field: impl Into<String>) -> Self {
         Self {
             fields: vec![SortField {
                 name: field.into(),
-                direction: SortValue::Descending,
+                value: SortValue::Descending,
             }],
         }
     }
 
+    /// Creates a MongoDB text-score sort expression.
+    ///
+    /// The supplied field name is an internal placeholder. MongoDB uses the
+    /// `$meta: "textScore"` value to determine the ordering.
     pub(crate) fn text_score(field: impl Into<String>) -> Self {
         Self {
             fields: vec![SortField {
                 name: field.into(),
-                direction: SortValue::TextScore,
+                value: SortValue::TextScore,
             }],
         }
     }
 
+    /// Appends every field from `other`.
+    ///
+    /// Existing fields remain first, preserving MongoDB's sort precedence.
     pub(crate) fn extend(&mut self, other: Self) {
         self.fields.extend(other.fields);
     }
 
+    /// Converts this expression into a MongoDB sort document.
     pub(crate) fn into_document(self) -> Document {
         let mut document = Document::new();
 
         for field in self.fields {
-            document.insert(field.name, field.direction.mongo_value());
+            document.insert(field.name, field.value.mongo_value());
         }
 
         document
@@ -62,11 +130,12 @@ impl SortExpression {
 }
 
 impl SortValue {
+    /// Returns the BSON value expected by MongoDB for this sort type.
     fn mongo_value(self) -> Bson {
         match self {
             Self::Ascending => Bson::Int32(1),
             Self::Descending => Bson::Int32(-1),
-            Self::TextScore => Bson::Document(mongodb::bson::doc! {
+            Self::TextScore => Bson::Document(doc! {
                 "$meta": "textScore",
             }),
         }

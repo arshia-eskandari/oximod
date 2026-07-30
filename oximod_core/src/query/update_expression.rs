@@ -1,200 +1,204 @@
-use mongodb::bson::{Bson, Document};
+//! Typed MongoDB update expressions.
+//!
+//! [`UpdateExpression`] values are produced by methods on typed
+//! [`Field`](crate::query::Field) values and passed to
+//! [`Query::update_one`](crate::query::Query::update_one) or
+//! [`Query::update_all`](crate::query::Query::update_all).
+//!
+//! Multiple updates can be combined with `&`:
+//!
+//! ```ignore
+//! User::query()
+//!     .filter(|user| user.name.eq("User1"))
+//!     .update_one(|user| {
+//!         user.active.set(true)
+//!             & user.login_count.inc(1)
+//!             & user.nickname.unset()
+//!     })
+//!     .await?;
+//! ```
+//!
+//! Updates using the same MongoDB operator are merged into one operator
+//! document.
+
+use mongodb::bson::{Bson, Document, doc};
 use std::ops::BitAnd;
 
 /// A type-safe MongoDB update expression.
 ///
-/// Update expressions are normally created through methods on typed
-/// fields, such as [`Field::set`](super::Field::set).
+/// Update expressions are normally created through methods on generated typed
+/// fields:
+///
+/// ```ignore
+/// let updated = User::query()
+///     .filter(|user| user.name.eq("User1"))
+///     .update_one(|user| {
+///         user.active.set(true)
+///             & user.login_count.inc(1)
+///     })
+///     .await?;
+/// ```
+///
+/// This produces an update document equivalent to:
+///
+/// ```text
+/// {
+///     "$set": {
+///         "active": true
+///     },
+///     "$inc": {
+///         "login_count": 1
+///     }
+/// }
+/// ```
+///
+/// When expressions using the same operator and field are combined, the
+/// expression on the right takes precedence:
+///
+/// ```ignore
+/// user.score.set(10)
+///     & user.score.set(20)
+/// ```
+///
+/// The resulting `$set` value for `score` is `20`.
+#[must_use]
 #[derive(Debug, Clone, PartialEq)]
 pub struct UpdateExpression {
     document: Document,
 }
 
 impl UpdateExpression {
+    /// Creates a MongoDB `$set` update.
     pub(crate) fn set(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$set", fields);
-
-        Self { document }
+        single_field_update("$set", field, value)
     }
 
+    /// Creates a MongoDB `$unset` update.
+    ///
+    /// MongoDB ignores the value associated with a field under `$unset`.
+    /// OxiMod uses the conventional empty-string representation.
     pub(crate) fn unset(field: impl Into<String>) -> Self {
-        let mut fields = Document::new();
-
-        // MongoDB ignores the value associated with a field under
-        // `$unset`. An empty string is the conventional representation.
-        fields.insert(field.into(), "");
-
-        let mut document = Document::new();
-        document.insert("$unset", fields);
-
-        Self { document }
+        single_field_update("$unset", field, "")
     }
 
-    pub(crate) fn into_document(self) -> Document {
-        self.document
-    }
-
+    /// Creates a MongoDB `$inc` update.
     pub(crate) fn inc(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$inc", fields);
-
-        Self { document }
+        single_field_update("$inc", field, value)
     }
 
+    /// Creates a MongoDB `$push` update.
     pub(crate) fn push(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$push", fields);
-
-        Self { document }
+        single_field_update("$push", field, value)
     }
 
+    /// Creates a MongoDB `$addToSet` update.
     pub(crate) fn add_to_set(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$addToSet", fields);
-
-        Self { document }
+        single_field_update("$addToSet", field, value)
     }
 
+    /// Creates a MongoDB `$pull` update.
     pub(crate) fn pull(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$pull", fields);
-
-        Self { document }
+        single_field_update("$pull", field, value)
     }
 
+    /// Creates a MongoDB `$pop` update.
+    ///
+    /// MongoDB uses `-1` to remove the first element and `1` to remove the
+    /// last element.
     pub(crate) fn pop(field: impl Into<String>, position: i32) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), position);
-
-        let mut document = Document::new();
-        document.insert("$pop", fields);
-
-        Self { document }
+        single_field_update("$pop", field, position)
     }
 
+    /// Creates a MongoDB `$push` update using `$each`.
     pub(crate) fn push_each<I>(field: impl Into<String>, values: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<Bson>,
     {
-        let values = values.into_iter().map(Into::into).collect::<Vec<_>>();
-
-        let mut each = Document::new();
-        each.insert("$each", values);
-
-        let mut fields = Document::new();
-        fields.insert(field.into(), each);
-
-        let mut document = Document::new();
-        document.insert("$push", fields);
-
-        Self { document }
+        each_update("$push", field, values)
     }
 
+    /// Creates a MongoDB `$addToSet` update using `$each`.
     pub(crate) fn add_each_to_set<I>(field: impl Into<String>, values: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<Bson>,
     {
-        let values = values.into_iter().map(Into::into).collect::<Vec<_>>();
-
-        let mut each = Document::new();
-        each.insert("$each", values);
-
-        let mut fields = Document::new();
-        fields.insert(field.into(), each);
-
-        let mut document = Document::new();
-        document.insert("$addToSet", fields);
-
-        Self { document }
+        each_update("$addToSet", field, values)
     }
 
+    /// Creates a MongoDB `$mul` update.
     pub(crate) fn mul(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$mul", fields);
-
-        Self { document }
+        single_field_update("$mul", field, value)
     }
 
+    /// Creates a MongoDB `$min` update.
     pub(crate) fn min(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$min", fields);
-
-        Self { document }
+        single_field_update("$min", field, value)
     }
 
+    /// Creates a MongoDB `$max` update.
     pub(crate) fn max(field: impl Into<String>, value: impl Into<Bson>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(field.into(), value.into());
-
-        let mut document = Document::new();
-        document.insert("$max", fields);
-
-        Self { document }
+        single_field_update("$max", field, value)
     }
 
+    /// Creates a MongoDB `$rename` update.
     pub(crate) fn rename(source: impl Into<String>, destination: impl Into<String>) -> Self {
-        let mut fields = Document::new();
-        fields.insert(source.into(), destination.into());
-
-        let mut document = Document::new();
-        document.insert("$rename", fields);
-
-        Self { document }
+        single_field_update("$rename", source, destination.into())
     }
 
+    /// Creates a MongoDB `$currentDate` update using BSON date semantics.
+    ///
+    /// This generates:
+    ///
+    /// ```text
+    /// {
+    ///     "$currentDate": {
+    ///         "updated_at": {
+    ///             "$type": "date"
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub(crate) fn current_date(field: impl Into<String>) -> Self {
-        let mut date = Document::new();
-        date.insert("$type", "date");
+        single_field_update(
+            "$currentDate",
+            field,
+            Bson::Document(doc! {
+                "$type": "date",
+            }),
+        )
+    }
 
-        let mut fields = Document::new();
-        fields.insert(field.into(), date);
-
-        let mut document = Document::new();
-        document.insert("$currentDate", fields);
-
-        Self { document }
+    /// Converts this expression into a MongoDB update document.
+    pub(crate) fn into_document(self) -> Document {
+        self.document
     }
 }
 
 impl BitAnd for UpdateExpression {
     type Output = Self;
 
-    /// Combines two update expressions into one MongoDB update document.
+    /// Combines two update expressions.
     ///
-    /// Fields using the same update operator are merged into the same
-    /// operator document.
+    /// Fields using the same update operator are merged into the same operator
+    /// document:
+    ///
+    /// ```ignore
+    /// user.name.set("User1")
+    ///     & user.active.set(true)
+    /// ```
+    ///
+    /// This produces one `$set` document containing both fields.
+    ///
+    /// When both expressions update the same field through the same operator,
+    /// the value from the expression on the right takes precedence.
     fn bitand(mut self, rhs: Self) -> Self::Output {
         for (operator, value) in rhs.document {
             match value {
                 Bson::Document(rhs_fields) => {
                     if let Some(Bson::Document(lhs_fields)) = self.document.get_mut(&operator) {
                         for (field, value) in rhs_fields {
-                            // When the same field is supplied more than once,
-                            // the expression on the right takes precedence.
                             lhs_fields.insert(field, value);
                         }
                     } else {
@@ -210,6 +214,40 @@ impl BitAnd for UpdateExpression {
 
         self
     }
+}
+
+/// Creates an update document containing one operator and one field.
+fn single_field_update(
+    operator: &'static str,
+    field: impl Into<String>,
+    value: impl Into<Bson>,
+) -> UpdateExpression {
+    let mut fields = Document::new();
+
+    fields.insert(field.into(), value.into());
+
+    let mut document = Document::new();
+
+    document.insert(operator, Bson::Document(fields));
+
+    UpdateExpression { document }
+}
+
+/// Creates an array update using MongoDB's `$each` modifier.
+fn each_update<I>(operator: &'static str, field: impl Into<String>, values: I) -> UpdateExpression
+where
+    I: IntoIterator,
+    I::Item: Into<Bson>,
+{
+    let values = values.into_iter().map(Into::into).collect::<Vec<Bson>>();
+
+    single_field_update(
+        operator,
+        field,
+        Bson::Document(doc! {
+            "$each": values,
+        }),
+    )
 }
 
 #[cfg(test)]

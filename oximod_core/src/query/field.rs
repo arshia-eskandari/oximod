@@ -1,11 +1,65 @@
-use super::UpdateExpression;
-use super::embedded_document::EmbeddedDocument;
-use crate::query::bson_type::BsonType;
-use crate::query::expression::{ComparisonOperator, ElementExpression, Expression};
-use crate::query::sort::SortExpression;
-use mongodb::bson::{Bson, DateTime, Regex};
+//! Typed model fields.
+//!
+//! [`Field`] represents a MongoDB field path together with its Rust value
+//! type. Generated model and embedded-document field structures contain
+//! `Field<T>` values, which expose only the query and update operations
+//! supported by `T`.
+//!
+//! Applications normally access fields through [`crate::query::Queryable`]
+//! rather than constructing them directly.
+
+mod array;
+mod element;
+mod embedded;
+mod numeric;
+mod scalar;
+mod string;
+mod traits;
+
 use std::{borrow::Cow, marker::PhantomData};
 
+use crate::query::bson_type::BsonType;
+use crate::query::expression::{ComparisonOperator, Expression};
+use crate::query::sort::SortExpression;
+
+pub use element::ElementField;
+pub use string::RegexOption;
+pub use traits::{
+    DateQueryValue, IntegerQueryValue, NumericQueryValue, OrderedQueryValue, StringQueryValue,
+};
+
+/// A typed MongoDB field path.
+///
+/// OxiMod generates one `Field<T>` for each model field. The Rust type `T`
+/// determines which query and update methods are available.
+///
+/// # Example
+///
+/// ```ignore
+/// let users = User::query()
+///     .filter(|user| {
+///         user.active.eq(true)
+///             & user.age.gte(18)
+///     })
+///     .sort_by(|user| user.name.asc())
+///     .all()
+///     .await?;
+/// ```
+///
+/// Embedded fields preserve their complete MongoDB path:
+///
+/// ```ignore
+/// let users = User::query()
+///     .filter(|user| {
+///         user.address.nested(|address| {
+///             address.city.eq("City1")
+///         })
+///     })
+///     .all()
+///     .await?;
+/// ```
+///
+/// In that query, the generated city field targets `"address.city"`.
 #[derive(Debug)]
 pub struct Field<T> {
     name: Cow<'static, str>,
@@ -22,6 +76,9 @@ impl<T> Clone for Field<T> {
 }
 
 impl<T> Field<T> {
+    /// Creates a field from a static MongoDB path.
+    ///
+    /// This constructor is used by generated model field structures.
     #[doc(hidden)]
     pub const fn new(name: &'static str) -> Self {
         Self {
@@ -30,6 +87,10 @@ impl<T> Field<T> {
         }
     }
 
+    /// Creates a field from an owned MongoDB path.
+    ///
+    /// This constructor is used when generating nested and positional field
+    /// paths dynamically.
     #[doc(hidden)]
     pub fn from_owned(name: String) -> Self {
         Self {
@@ -38,26 +99,65 @@ impl<T> Field<T> {
         }
     }
 
+    /// Returns the complete MongoDB field path.
+    ///
+    /// Top-level fields return their serialized field name. Nested and
+    /// positional fields include their generated prefixes.
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
 
+    /// Creates an ascending sort expression for this field.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .sort_by(|user| user.name.asc())
+    ///     .all()
+    ///     .await?;
+    /// ```
     pub fn asc(&self) -> SortExpression {
-        SortExpression::ascending(self.name.as_ref())
+        SortExpression::ascending(self.name())
     }
 
+    /// Creates a descending sort expression for this field.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .sort_by(|user| user.created_at.desc())
+    ///     .all()
+    ///     .await?;
+    /// ```
     pub fn desc(&self) -> SortExpression {
-        SortExpression::descending(self.name.as_ref())
+        SortExpression::descending(self.name())
     }
 
+    /// Matches documents where this field exists.
+    ///
+    /// This produces MongoDB's `{ "$exists": true }` condition.
     pub fn exists(&self) -> Expression {
-        Expression::comparison(self.name.as_ref(), ComparisonOperator::Exists, true)
+        Expression::comparison(self.name(), ComparisonOperator::Exists, true)
     }
 
+    /// Matches documents where this field is missing.
+    ///
+    /// This produces MongoDB's `{ "$exists": false }` condition.
     pub fn not_exists(&self) -> Expression {
-        Expression::comparison(self.name.as_ref(), ComparisonOperator::Exists, false)
+        Expression::comparison(self.name(), ComparisonOperator::Exists, false)
     }
 
+    /// Negates a condition built for this field.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .filter(|user| {
+    ///         user.age.not(|age| age.gte(18))
+    ///     })
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// Field comparisons are represented through MongoDB `$not`. Negated
+    /// logical expression trees are represented through `$nor`.
     pub fn not<F>(&self, build: F) -> Expression
     where
         F: FnOnce(&Self) -> Expression,
@@ -65,6 +165,7 @@ impl<T> Field<T> {
         Expression::not(build(self))
     }
 
+    /// Creates a field by joining a parent path and serialized field name.
     #[doc(hidden)]
     pub fn from_prefixed(prefix: &str, name: &str) -> Self {
         let path = if prefix.is_empty() {
@@ -76,664 +177,31 @@ impl<T> Field<T> {
         Self::from_owned(path)
     }
 
-    /// Creates a MongoDB `$type` query for this field.
+    /// Matches documents where this field stores the specified BSON type.
     ///
-    /// The query matches documents where the stored field has the
-    /// specified BSON type.
+    /// ```ignore
+    /// let users = User::query()
+    ///     .filter(|user| {
+    ///         user.nickname
+    ///             .has_bson_type(BsonType::String)
+    ///     })
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// This checks the BSON representation stored in MongoDB. It does not
+    /// deserialize or convert the field before matching.
     pub fn has_bson_type(&self, bson_type: BsonType) -> Expression {
         Expression::comparison(self.name(), ComparisonOperator::Type, bson_type)
     }
 }
-
-impl<T> Field<Option<T>> {
-    pub fn is_null(&self) -> Expression {
-        Expression::comparison(self.name.as_ref(), ComparisonOperator::Eq, Bson::Null)
-            & self.exists()
-    }
-
-    pub fn is_not_null(&self) -> Expression {
-        Expression::comparison(self.name.as_ref(), ComparisonOperator::Ne, Bson::Null)
-            & self.exists()
-    }
-
-    /// Creates a typed MongoDB `$unset` update for this optional field.
-    ///
-    /// The field is removed entirely from the stored MongoDB document.
-    pub fn unset(&self) -> UpdateExpression {
-        UpdateExpression::unset(self.name())
-    }
-
-    /// Creates a typed MongoDB `$rename` update that moves this
-    /// optional field to another optional field of the same type.
-    ///
-    /// The source field is removed after its value is moved.
-    pub fn rename_to(&self, destination: &Field<Option<T>>) -> UpdateExpression {
-        UpdateExpression::rename(self.name(), destination.name())
-    }
-}
-
-impl<T> Field<T>
-where
-    T: StringQueryValue,
-{
-    pub fn matches_regex(&self, pattern: impl Into<String>) -> Expression {
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::Eq,
-            Bson::RegularExpression(Regex {
-                pattern: pattern.into(),
-                options: String::new(),
-            }),
-        )
-    }
-
-    pub fn matches_regex_with_options<I>(
-        &self,
-        pattern: impl Into<String>,
-        options: I,
-    ) -> Expression
-    where
-        I: IntoIterator<Item = RegexOption>,
-    {
-        let options = options
-            .into_iter()
-            .map(RegexOption::as_str)
-            .collect::<String>();
-
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::Eq,
-            Bson::RegularExpression(Regex {
-                pattern: pattern.into(),
-                options,
-            }),
-        )
-    }
-
-    pub fn starts_with(&self, prefix: impl AsRef<str>) -> Expression {
-        let escaped_prefix = regex::escape(prefix.as_ref());
-
-        self.matches_regex(format!("^{escaped_prefix}"))
-    }
-
-    pub fn ends_with(&self, suffix: impl AsRef<str>) -> Expression {
-        let escaped_suffix = regex::escape(suffix.as_ref());
-
-        self.matches_regex(format!("{escaped_suffix}$"))
-    }
-
-    pub fn contains_text(&self, text: impl AsRef<str>) -> Expression {
-        let escaped_text = regex::escape(text.as_ref());
-
-        self.matches_regex(escaped_text)
-    }
-}
-
-impl<T> Field<T>
-where
-    T: Into<Bson>,
-{
-    pub fn eq<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Eq, value)
-    }
-
-    pub fn ne<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Ne, value)
-    }
-
-    fn comparison<V>(&self, operator: ComparisonOperator, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        let value: T = value.into();
-
-        Expression::comparison(self.name.as_ref(), operator, value)
-    }
-
-    pub fn in_values<I, V>(&self, values: I) -> Expression
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-    {
-        let values = values
-            .into_iter()
-            .map(|value| {
-                let value: T = value.into();
-                value.into()
-            })
-            .collect::<Vec<Bson>>();
-
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::In,
-            Bson::Array(values),
-        )
-    }
-
-    pub fn not_in_values<I, V>(&self, values: I) -> Expression
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-    {
-        let values = values
-            .into_iter()
-            .map(|value| {
-                let value: T = value.into();
-                value.into()
-            })
-            .collect::<Vec<Bson>>();
-
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::Nin,
-            Bson::Array(values),
-        )
-    }
-
-    /// Creates a typed MongoDB `$set` update for this field.
-    pub fn set<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::set(self.name(), value.into())
-    }
-}
-
-impl<T> Field<Vec<T>>
-where
-    T: Into<Bson>,
-{
-    pub fn contains<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        let value: T = value.into();
-
-        Expression::comparison(self.name.as_ref(), ComparisonOperator::Eq, value)
-    }
-
-    pub fn contains_all<I, V>(&self, values: I) -> Expression
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-    {
-        let values = values
-            .into_iter()
-            .map(|value| {
-                let value: T = value.into();
-                value.into()
-            })
-            .collect::<Vec<Bson>>();
-
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::All,
-            Bson::Array(values),
-        )
-    }
-
-    /// Creates a typed MongoDB `$push` update that appends one value
-    /// to this array field.
-    pub fn push<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::push(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$addToSet` update that adds a value
-    /// only when the array does not already contain it.
-    pub fn add_to_set<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::add_to_set(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$pull` update that removes every
-    /// occurrence of the given value from this array field.
-    pub fn pull<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::pull(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$push` update using `$each` to append
-    /// multiple values to this array field.
-    pub fn push_each<I, V>(&self, values: I) -> UpdateExpression
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-    {
-        UpdateExpression::push_each(self.name(), values.into_iter().map(Into::into))
-    }
-
-    pub fn add_each_to_set<I, V>(&self, values: I) -> UpdateExpression
-    where
-        I: IntoIterator<Item = V>,
-        V: Into<T>,
-    {
-        UpdateExpression::add_each_to_set(self.name(), values.into_iter().map(Into::into))
-    }
-}
-
-impl<T> Field<Vec<T>> {
-    pub fn has_size(&self, size: u32) -> Expression {
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::Size,
-            Bson::Int64(i64::from(size)),
-        )
-    }
-
-    pub fn elem_match<F>(&self, build: F) -> Expression
-    where
-        F: FnOnce(&ElementField<T>) -> ElementExpression,
-    {
-        let element = ElementField::new();
-        let expression = build(&element);
-
-        Expression::comparison(
-            self.name.as_ref(),
-            ComparisonOperator::ElemMatch,
-            Bson::Document(expression.into_document()),
-        )
-    }
-
-    /// Creates a typed MongoDB `$pop` update that removes the first
-    /// element from this array field.
-    pub fn pop_first(&self) -> UpdateExpression {
-        UpdateExpression::pop(self.name(), -1)
-    }
-
-    /// Creates a typed MongoDB `$pop` update that removes the last
-    /// element from this array field.
-    pub fn pop_last(&self) -> UpdateExpression {
-        UpdateExpression::pop(self.name(), 1)
-    }
-}
-
-impl<T> Field<Vec<T>>
-where
-    T: EmbeddedDocument,
-{
-    pub fn elem_match_nested<F>(&self, build: F) -> Expression
-    where
-        F: FnOnce(&T::Fields) -> Expression,
-    {
-        let fields = T::fields_with_prefix("");
-        let expression = build(&fields);
-
-        Expression::comparison(
-            self.name(),
-            ComparisonOperator::ElemMatch,
-            Bson::Document(expression.into_document()),
-        )
-    }
-
-    /// Provides typed fields targeting the first array element matched
-    /// by the query through MongoDB's positional `$` operator.
-    ///
-    /// The array field must be included in the query filter so MongoDB
-    /// can determine which element the `$` placeholder represents.
-    pub fn positional<F>(&self, build: F) -> UpdateExpression
-    where
-        F: FnOnce(&T::Fields) -> UpdateExpression,
-    {
-        let prefix = format!("{}.$", self.name());
-        let fields = T::fields_with_prefix(&prefix);
-
-        build(&fields)
-    }
-
-    // Existing elem_match_nested() and positional() methods...
-
-    /// Provides typed fields targeting array elements identified by a
-    /// MongoDB filtered positional placeholder such as `$[address]`.
-    ///
-    /// The corresponding array-filter condition must be supplied when
-    /// executing the update.
-    pub fn filtered<F>(&self, identifier: impl AsRef<str>, build: F) -> UpdateExpression
-    where
-        F: FnOnce(&T::Fields) -> UpdateExpression,
-    {
-        let prefix = format!("{}.$[{}]", self.name(), identifier.as_ref(),);
-
-        let fields = T::fields_with_prefix(&prefix);
-
-        build(&fields)
-    }
-
-    // Existing:
-    // - elem_match_nested()
-    // - positional()
-    // - filtered()
-
-    /// Builds a typed MongoDB array-filter condition for this embedded
-    /// document array.
-    ///
-    /// The identifier must match the identifier used by `.filtered()`.
-    pub fn array_filter<F>(&self, identifier: impl AsRef<str>, build: F) -> Expression
-    where
-        F: FnOnce(&T::Fields) -> Expression,
-    {
-        let fields = T::fields_with_prefix(identifier.as_ref());
-
-        build(&fields)
-    }
-}
-
-impl<T> Field<T>
-where
-    T: EmbeddedDocument,
-{
-    pub fn nested<R, F>(&self, build: F) -> R
-    where
-        F: FnOnce(&T::Fields) -> R,
-    {
-        let fields = T::fields_with_prefix(self.name());
-
-        build(&fields)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegexOption {
-    CaseInsensitive,
-    Multiline,
-    DotMatchesNewLine,
-    IgnoreWhitespace,
-}
-
-impl RegexOption {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::CaseInsensitive => "i",
-            Self::Multiline => "m",
-            Self::DotMatchesNewLine => "s",
-            Self::IgnoreWhitespace => "x",
-        }
-    }
-}
-
-#[doc(hidden)]
-pub trait OrderedQueryValue {}
-
-impl OrderedQueryValue for i32 {}
-impl OrderedQueryValue for i64 {}
-impl OrderedQueryValue for f64 {}
-impl OrderedQueryValue for String {}
-impl OrderedQueryValue for DateTime {}
-
-#[doc(hidden)]
-pub trait StringQueryValue {}
-
-impl StringQueryValue for String {}
-impl StringQueryValue for Option<String> {}
-
-#[doc(hidden)]
-pub trait NumericQueryValue: Into<Bson> {}
-
-impl NumericQueryValue for i32 {}
-impl NumericQueryValue for i64 {}
-impl NumericQueryValue for f64 {}
-
-/// Marker trait for fields that support MongoDB `$currentDate` updates.
-#[doc(hidden)]
-pub trait DateQueryValue {}
-
-impl DateQueryValue for DateTime {}
-impl DateQueryValue for Option<DateTime> {}
-
-/// Marker trait for integer fields that support bitwise queries.
-#[doc(hidden)]
-pub trait IntegerQueryValue: Into<Bson> {}
-
-impl IntegerQueryValue for i32 {}
-impl IntegerQueryValue for i64 {}
-
-impl<T> Field<T>
-where
-    T: OrderedQueryValue + Into<Bson>,
-{
-    pub fn gt<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Gt, value)
-    }
-
-    pub fn gte<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Gte, value)
-    }
-
-    pub fn lt<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Lt, value)
-    }
-
-    pub fn lte<V>(&self, value: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Lte, value)
-    }
-}
-
-#[doc(hidden)]
-#[derive(Debug)]
-pub struct ElementField<T> {
-    marker: PhantomData<fn() -> T>,
-}
-
-impl<T> Copy for ElementField<T> {}
-
-impl<T> Clone for ElementField<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> ElementField<T> {
-    const fn new() -> Self {
-        Self {
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T> ElementField<T>
-where
-    T: Into<Bson>,
-{
-    fn comparison<V>(&self, operator: ComparisonOperator, value: V) -> ElementExpression
-    where
-        V: Into<T>,
-    {
-        let value: T = value.into();
-
-        ElementExpression::comparison(operator, value)
-    }
-}
-
-impl<T> ElementField<T>
-where
-    T: OrderedQueryValue + Into<Bson>,
-{
-    pub fn gt<V>(&self, value: V) -> ElementExpression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Gt, value)
-    }
-
-    pub fn gte<V>(&self, value: V) -> ElementExpression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Gte, value)
-    }
-
-    pub fn lt<V>(&self, value: V) -> ElementExpression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Lt, value)
-    }
-
-    pub fn lte<V>(&self, value: V) -> ElementExpression
-    where
-        V: Into<T>,
-    {
-        self.comparison(ComparisonOperator::Lte, value)
-    }
-}
-
-impl<T> Field<T>
-where
-    T: NumericQueryValue,
-{
-    /// Creates a typed MongoDB `$inc` update for this numeric field.
-    pub fn inc<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::inc(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$mul` update for this numeric field.
-    pub fn mul<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::mul(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$min` update for this ordered field.
-    ///
-    /// MongoDB replaces the stored value only when the supplied value
-    /// compares lower than the current value.
-    pub fn min<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::min(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$max` update for this ordered field.
-    ///
-    /// MongoDB replaces the stored value only when the supplied value
-    /// compares higher than the current value.
-    pub fn max<V>(&self, value: V) -> UpdateExpression
-    where
-        V: Into<T>,
-    {
-        UpdateExpression::max(self.name(), value.into())
-    }
-
-    /// Creates a typed MongoDB `$mod` query.
-    ///
-    /// The field matches when division by `divisor` produces the
-    /// specified `remainder`.
-    pub fn modulo<D, R>(&self, divisor: D, remainder: R) -> Expression
-    where
-        D: Into<T>,
-        R: Into<T>,
-    {
-        let divisor: T = divisor.into();
-        let remainder: T = remainder.into();
-
-        Expression::comparison(
-            self.name(),
-            ComparisonOperator::Mod,
-            Bson::Array(vec![divisor.into(), remainder.into()]),
-        )
-    }
-}
-
-impl<T> Field<T>
-where
-    T: DateQueryValue,
-{
-    /// Creates a typed MongoDB `$currentDate` update that sets this
-    /// field to the current BSON date and time.
-    pub fn current_date(&self) -> UpdateExpression {
-        UpdateExpression::current_date(self.name())
-    }
-}
-
-impl<T> Field<T>
-where
-    T: IntegerQueryValue,
-{
-    /// Creates a typed MongoDB `$bitsAllSet` query.
-    ///
-    /// The field matches when every bit set in `mask` is also set in
-    /// the stored integer value.
-    pub fn bits_all_set<V>(&self, mask: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        Expression::comparison(self.name(), ComparisonOperator::BitsAllSet, mask.into())
-    }
-
-    /// Creates a typed MongoDB `$bitsAnySet` query.
-    ///
-    /// The field matches when at least one bit set in `mask` is also
-    /// set in the stored integer value.
-    pub fn bits_any_set<V>(&self, mask: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        Expression::comparison(self.name(), ComparisonOperator::BitsAnySet, mask.into())
-    }
-
-    /// Creates a typed MongoDB `$bitsAllClear` query.
-    ///
-    /// The field matches when every bit set in `mask` is clear in the
-    /// stored integer value.
-    pub fn bits_all_clear<V>(&self, mask: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        Expression::comparison(self.name(), ComparisonOperator::BitsAllClear, mask.into())
-    }
-
-    /// Creates a typed MongoDB `$bitsAnyClear` query.
-    ///
-    /// The field matches when at least one bit set in `mask` is clear
-    /// in the stored integer value.
-    pub fn bits_any_clear<V>(&self, mask: V) -> Expression
-    where
-        V: Into<T>,
-    {
-        Expression::comparison(self.name(), ComparisonOperator::BitsAnyClear, mask.into())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::query::EmbeddedDocument;
-    use crate::query::Expression;
-    use crate::query::UpdateExpression;
-    use crate::query::bson_type::BsonType;
-    use crate::query::field::ComparisonOperator;
-    use crate::query::field::RegexOption;
+    use super::{Field, RegexOption};
+    use crate::query::{
+        BsonType, EmbeddedDocument, Expression, UpdateExpression, expression::ComparisonOperator,
+    };
     use mongodb::bson::{Bson, DateTime, Regex, doc};
-
-    use super::Field;
 
     struct Address;
 

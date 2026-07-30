@@ -1,16 +1,59 @@
+//! MongoDB text-search configuration.
+//!
+//! [`TextSearch`] configures the top-level MongoDB `$text` query operator.
+//! Applications can pass either a plain string or a configured `TextSearch`
+//! value to [`Query::text`](crate::query::Query::text).
+//!
+//! The collection must have an appropriate text index before MongoDB can
+//! execute a text-search query.
+
 use mongodb::bson::{Bson, Document};
 
 /// Configuration for a MongoDB `$text` query.
 ///
-/// A plain search can be created from a string:
+/// A basic search can be created directly from a string:
 ///
-/// ```
-/// # use oximod::TextSearch;
-/// let search = TextSearch::new("rust mongodb");
+/// ```ignore
+/// let articles = Article::query()
+///     .text("rust mongodb")
+///     .all()
+///     .await?;
 /// ```
 ///
-/// Optional language, case-sensitivity, and diacritic-sensitivity
-/// settings can be configured through the builder methods.
+/// Use `TextSearch` when additional MongoDB options are required:
+///
+/// ```ignore
+/// use oximod::TextSearch;
+///
+/// let articles = Article::query()
+///     .text(
+///         TextSearch::new("Café")
+///             .language("none")
+///             .case_sensitive(true)
+///             .diacritic_sensitive(true),
+///     )
+///     .all()
+///     .await?;
+/// ```
+///
+/// MongoDB phrase searches and excluded terms are expressed inside the search
+/// string:
+///
+/// ```ignore
+/// let articles = Article::query()
+///     .text(
+///         TextSearch::new(
+///             "\"rust mongodb\" -beginner",
+///         ),
+///     )
+///     .all()
+///     .await?;
+/// ```
+///
+/// Unconfigured Boolean options are omitted from the generated BSON document.
+/// This distinguishes an unspecified option from one explicitly set to
+/// `false`.
+#[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextSearch {
     search: String,
@@ -21,6 +64,24 @@ pub struct TextSearch {
 
 impl TextSearch {
     /// Creates a text-search configuration.
+    ///
+    /// The search string is passed to MongoDB unchanged. It may contain
+    /// ordinary terms, quoted phrases, or excluded terms using MongoDB's
+    /// `$text` search syntax.
+    ///
+    /// # Parameters
+    ///
+    /// - `search`: The terms and text-search syntax to pass to MongoDB.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use oximod::TextSearch;
+    ///
+    /// let search = TextSearch::new(
+    ///     "\"rust mongodb\" -beginner",
+    /// );
+    /// ```
     pub fn new(search: impl Into<String>) -> Self {
         Self {
             search: search.into(),
@@ -30,27 +91,53 @@ impl TextSearch {
         }
     }
 
-    /// Sets the language used to parse the search terms.
+    /// Sets the language used by MongoDB to parse and stem search terms.
+    ///
+    /// Use `"none"` to disable language-specific stemming and stop-word
+    /// processing when supported by the collection's text index.
+    ///
+    /// ```ignore
+    /// let search = TextSearch::new("running")
+    ///     .language("none");
+    /// ```
+    ///
+    /// A later call replaces the previously configured language.
     pub fn language(mut self, language: impl Into<String>) -> Self {
         self.language = Some(language.into());
         self
     }
 
-    /// Controls whether the search distinguishes uppercase and
-    /// lowercase characters.
+    /// Controls whether MongoDB distinguishes uppercase and lowercase
+    /// characters.
+    ///
+    /// The option is omitted unless this method is called.
+    ///
+    /// ```ignore
+    /// let search = TextSearch::new("Rust")
+    ///     .case_sensitive(true);
+    /// ```
     pub const fn case_sensitive(mut self, case_sensitive: bool) -> Self {
         self.case_sensitive = Some(case_sensitive);
+
         self
     }
 
-    /// Controls whether the search distinguishes characters with
-    /// and without diacritical marks.
+    /// Controls whether MongoDB distinguishes characters with and without
+    /// diacritical marks.
+    ///
+    /// The option is omitted unless this method is called.
+    ///
+    /// ```ignore
+    /// let search = TextSearch::new("café")
+    ///     .diacritic_sensitive(true);
+    /// ```
     pub const fn diacritic_sensitive(mut self, diacritic_sensitive: bool) -> Self {
         self.diacritic_sensitive = Some(diacritic_sensitive);
 
         self
     }
 
+    /// Converts this configuration into a top-level MongoDB `$text` document.
     pub(crate) fn into_document(self) -> Document {
         let mut options = Document::new();
 
@@ -77,12 +164,14 @@ impl TextSearch {
 }
 
 impl From<String> for TextSearch {
+    /// Creates a basic text search from an owned string.
     fn from(search: String) -> Self {
         Self::new(search)
     }
 }
 
 impl From<&str> for TextSearch {
+    /// Creates a basic text search from a borrowed string.
     fn from(search: &str) -> Self {
         Self::new(search)
     }
@@ -90,9 +179,8 @@ impl From<&str> for TextSearch {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
-
     use super::TextSearch;
+    use mongodb::bson::doc;
 
     #[test]
     fn plain_text_search_builds_search_document() {

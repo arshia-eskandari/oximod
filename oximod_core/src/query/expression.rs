@@ -1,23 +1,92 @@
-use mongodb::bson::{Bson, Document, doc};
-use std::ops::{BitAnd, BitOr};
+//! Typed MongoDB query expressions.
+//!
+//! This module contains the expression trees produced by OxiMod's typed field
+//! methods. Applications normally create expressions through generated model
+//! fields rather than constructing [`Expression`] values directly.
+//!
+//! Expressions can be combined with Rust's bitwise operators:
+//!
+//! - `&` creates MongoDB `$and` expressions.
+//! - `|` creates MongoDB `$or` expressions.
+//!
+//! Bitwise operators are used instead of `&&` and `||` because query
+//! expressions are values rather than Rust Boolean conditions.
 
+use std::{
+    collections::HashSet,
+    ops::{BitAnd, BitOr},
+};
+
+use mongodb::bson::{Bson, Document, doc};
+
+/// A typed MongoDB filter expression.
+///
+/// Expressions are created through methods on generated model fields:
+///
+/// ```ignore
+/// let query = User::query().filter(|user| {
+///     user.active.eq(true)
+///         & user.age.gte(18)
+/// });
+/// ```
+///
+/// Logical expressions can be nested using `&`, `|`, and parentheses:
+///
+/// ```ignore
+/// let query = User::query().filter(|user| {
+///     user.active.eq(true)
+///         & (
+///             user.role.eq("admin")
+///                 | user.role.eq("member")
+///         )
+/// });
+/// ```
+///
+/// This produces a MongoDB filter equivalent to:
+///
+/// ```text
+/// {
+///     "$and": [
+///         { "active": true },
+///         {
+///             "$or": [
+///                 { "role": "admin" },
+///                 { "role": "member" }
+///             ]
+///         }
+///     ]
+/// }
+/// ```
+///
+/// Repeated operators of the same logical kind are flattened into one logical
+/// expression rather than producing unnecessary nested `$and` or `$or`
+/// documents.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression {
     pub(crate) kind: ExpressionKind,
 }
 
+/// The internal representation of a typed query expression.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ExpressionKind {
+    /// A comparison applied to a model field.
     Comparison {
         field: String,
         operator: ComparisonOperator,
         value: Bson,
     },
+
+    /// A MongoDB `$and` expression.
     And(Vec<Expression>),
+
+    /// A MongoDB `$or` expression.
     Or(Vec<Expression>),
+
+    /// A negated expression.
     Not(Box<Expression>),
 }
 
+/// A MongoDB comparison, array, bitwise, type, or geospatial operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ComparisonOperator {
     Eq,
@@ -43,23 +112,51 @@ pub(crate) enum ComparisonOperator {
     GeoIntersects,
 }
 
+/// A typed condition applied to an individual array element.
+///
+/// This type is used internally by scalar `$elemMatch` queries. Applications
+/// normally create it through the element-field value passed to an
+/// `elem_match` closure:
+///
+/// ```ignore
+/// let users = User::query()
+///     .filter(|user| {
+///         user.scores.elem_match(|score| {
+///             score.gte(60) & score.lte(100)
+///         })
+///     })
+///     .all()
+///     .await?;
+/// ```
+///
+/// Element conditions using different MongoDB operators are merged into one
+/// operator document. Repeated operators are represented with `$and` so no
+/// condition is overwritten.
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementExpression {
     kind: ElementExpressionKind,
 }
 
+/// The internal representation of an array-element condition.
 #[derive(Debug, Clone, PartialEq)]
 enum ElementExpressionKind {
+    /// A comparison applied directly to the array element.
     Comparison {
         operator: ComparisonOperator,
         value: Bson,
     },
+
+    /// Multiple conditions that must match the same element.
     And(Vec<ElementExpression>),
 }
 
 impl ComparisonOperator {
-    fn mongo_name(self) -> Option<&'static str> {
+    /// Returns the MongoDB operator name.
+    ///
+    /// Equality returns `None` because ordinary field equality uses MongoDB's
+    /// abbreviated `{ "field": value }` syntax.
+    const fn mongo_name(self) -> Option<&'static str> {
         match self {
             Self::Eq => None,
             Self::Ne => Some("$ne"),
@@ -87,6 +184,7 @@ impl ComparisonOperator {
 }
 
 impl ElementExpression {
+    /// Creates a comparison against one array element.
     pub(crate) fn comparison<V>(operator: ComparisonOperator, value: V) -> Self
     where
         V: Into<Bson>,
@@ -99,6 +197,7 @@ impl ElementExpression {
         }
     }
 
+    /// Converts this element expression into a MongoDB operator document.
     pub(crate) fn into_document(self) -> Document {
         match self.kind {
             ElementExpressionKind::Comparison { operator, value } => {
@@ -109,6 +208,10 @@ impl ElementExpression {
         }
     }
 
+    /// Returns the children of an `$and` expression or treats this expression
+    /// as one child.
+    ///
+    /// This flattens repeated `&` operations.
     fn into_and_children(self) -> Vec<Self> {
         match self.kind {
             ElementExpressionKind::And(expressions) => expressions,
@@ -121,8 +224,10 @@ impl ElementExpression {
 impl BitAnd for ElementExpression {
     type Output = Self;
 
+    /// Combines two element conditions using MongoDB logical AND.
     fn bitand(self, rhs: Self) -> Self::Output {
         let mut expressions = self.into_and_children();
+
         expressions.extend(rhs.into_and_children());
 
         Self {
@@ -131,22 +236,141 @@ impl BitAnd for ElementExpression {
     }
 }
 
-fn element_comparison_into_document(operator: ComparisonOperator, value: Bson) -> Document {
-    let operator_name = operator.mongo_name().unwrap_or("$eq");
+impl Expression {
+    /// Creates a field comparison.
+    pub(crate) fn comparison<V>(
+        field: impl Into<String>,
+        operator: ComparisonOperator,
+        value: V,
+    ) -> Self
+    where
+        V: Into<Bson>,
+    {
+        Self {
+            kind: ExpressionKind::Comparison {
+                field: field.into(),
+                operator,
+                value: value.into(),
+            },
+        }
+    }
 
-    let mut document = Document::new();
-    document.insert(operator_name, value);
+    /// Converts this expression tree into a MongoDB filter document.
+    pub(crate) fn into_document(self) -> Document {
+        match self.kind {
+            ExpressionKind::Comparison {
+                field,
+                operator,
+                value,
+            } => comparison_into_document(field, operator, value),
 
-    document
+            ExpressionKind::And(expressions) => logical_into_document("$and", expressions),
+
+            ExpressionKind::Or(expressions) => logical_into_document("$or", expressions),
+
+            ExpressionKind::Not(expression) => not_into_document(*expression),
+        }
+    }
+
+    /// Negates an expression.
+    ///
+    /// Field comparisons are converted to MongoDB `$not`. Logical expressions
+    /// are converted to `$nor`.
+    pub(crate) fn not(expression: Expression) -> Self {
+        Self {
+            kind: ExpressionKind::Not(Box::new(expression)),
+        }
+    }
+
+    /// Returns the children of an `$and` expression or treats this expression
+    /// as one child.
+    fn into_and_children(self) -> Vec<Expression> {
+        match self.kind {
+            ExpressionKind::And(expressions) => expressions,
+            kind => vec![Expression { kind }],
+        }
+    }
+
+    /// Returns the children of an `$or` expression or treats this expression
+    /// as one child.
+    fn into_or_children(self) -> Vec<Expression> {
+        match self.kind {
+            ExpressionKind::Or(expressions) => expressions,
+            kind => vec![Expression { kind }],
+        }
+    }
 }
 
+impl BitAnd for Expression {
+    type Output = Expression;
+
+    /// Combines two filter expressions using MongoDB `$and`.
+    ///
+    /// Existing `$and` children are flattened.
+    fn bitand(self, rhs: Expression) -> Self::Output {
+        let mut expressions = self.into_and_children();
+
+        expressions.extend(rhs.into_and_children());
+
+        Expression {
+            kind: ExpressionKind::And(expressions),
+        }
+    }
+}
+
+impl BitOr for Expression {
+    type Output = Expression;
+
+    /// Combines two filter expressions using MongoDB `$or`.
+    ///
+    /// Existing `$or` children are flattened.
+    fn bitor(self, rhs: Expression) -> Self::Output {
+        let mut expressions = self.into_or_children();
+
+        expressions.extend(rhs.into_or_children());
+
+        Expression {
+            kind: ExpressionKind::Or(expressions),
+        }
+    }
+}
+
+/// Converts an array-element comparison into an operator document.
+///
+/// Element equality must use an explicit `$eq` because the resulting document
+/// does not contain a field name.
+fn element_comparison_into_document(operator: ComparisonOperator, value: Bson) -> Document {
+    operator_document(operator, value)
+}
+
+/// Combines element comparisons without overwriting repeated operators.
+///
+/// Distinct operators can share one document:
+///
+/// ```text
+/// {
+///     "$gte": 18,
+///     "$lte": 65
+/// }
+/// ```
+///
+/// Repeated operators require `$and`:
+///
+/// ```text
+/// {
+///     "$and": [
+///         { "$ne": "blocked" },
+///         { "$ne": "deleted" }
+///     ]
+/// }
+/// ```
 fn element_and_into_document(expressions: Vec<ElementExpression>) -> Document {
     let documents = expressions
         .into_iter()
         .map(ElementExpression::into_document)
         .collect::<Vec<_>>();
 
-    let mut operator_names = std::collections::HashSet::new();
+    let mut operator_names = HashSet::new();
 
     let has_duplicate_operator = documents
         .iter()
@@ -172,6 +396,10 @@ fn element_and_into_document(expressions: Vec<ElementExpression>) -> Document {
     result
 }
 
+/// Converts a negated expression into MongoDB syntax.
+///
+/// MongoDB uses `$not` for field comparisons and `$nor` for logical expression
+/// trees.
 fn not_into_document(expression: Expression) -> Document {
     match expression.kind {
         ExpressionKind::Comparison {
@@ -182,28 +410,19 @@ fn not_into_document(expression: Expression) -> Document {
             let not_value = match (operator, value) {
                 (ComparisonOperator::Eq, value @ Bson::RegularExpression(_)) => value,
 
-                (ComparisonOperator::Eq, value) => Bson::Document(doc! {
-                    "$eq": value,
-                }),
-
-                (operator, value) => {
-                    let operator_name = operator.mongo_name().expect(
-                        "non-equality comparison must have \
-                             a MongoDB operator",
-                    );
-
-                    let mut operator_document = Document::new();
-
-                    operator_document.insert(operator_name, value);
-
-                    Bson::Document(operator_document)
+                (ComparisonOperator::Eq, value) => {
+                    Bson::Document(operator_document(ComparisonOperator::Eq, value))
                 }
+
+                (operator, value) => Bson::Document(operator_document(operator, value)),
             };
 
             let mut not_document = Document::new();
+
             not_document.insert("$not", not_value);
 
             let mut document = Document::new();
+
             document.insert(field, not_document);
 
             document
@@ -221,89 +440,10 @@ fn not_into_document(expression: Expression) -> Document {
     }
 }
 
-impl Expression {
-    pub(crate) fn comparison<V>(
-        field: impl Into<String>,
-        operator: ComparisonOperator,
-        value: V,
-    ) -> Self
-    where
-        V: Into<Bson>,
-    {
-        Self {
-            kind: ExpressionKind::Comparison {
-                field: field.into(),
-                operator,
-                value: value.into(),
-            },
-        }
-    }
-
-    pub(crate) fn into_document(self) -> Document {
-        match self.kind {
-            ExpressionKind::Comparison {
-                field,
-                operator,
-                value,
-            } => comparison_into_document(field, operator, value),
-
-            ExpressionKind::And(expressions) => logical_into_document("$and", expressions),
-
-            ExpressionKind::Or(expressions) => logical_into_document("$or", expressions),
-
-            ExpressionKind::Not(expression) => not_into_document(*expression),
-        }
-    }
-
-    pub(crate) fn not(expression: Expression) -> Self {
-        Self {
-            kind: ExpressionKind::Not(Box::new(expression)),
-        }
-    }
-
-    fn into_and_children(self) -> Vec<Expression> {
-        match self.kind {
-            ExpressionKind::And(expressions) => expressions,
-            kind => vec![Expression { kind }],
-        }
-    }
-
-    fn into_or_children(self) -> Vec<Expression> {
-        match self.kind {
-            ExpressionKind::Or(expressions) => expressions,
-            kind => vec![Expression { kind }],
-        }
-    }
-}
-
-impl BitAnd for Expression {
-    type Output = Expression;
-
-    fn bitand(self, rhs: Expression) -> Self::Output {
-        let mut expressions = self.into_and_children();
-
-        expressions.extend(rhs.into_and_children());
-
-        Expression {
-            kind: ExpressionKind::And(expressions),
-        }
-    }
-}
-
-impl BitOr for Expression {
-    type Output = Expression;
-
-    fn bitor(self, rhs: Expression) -> Self::Output {
-        let mut expressions = self.into_or_children();
-
-        expressions.extend(rhs.into_or_children());
-
-        Expression {
-            kind: ExpressionKind::Or(expressions),
-        }
-    }
-}
-
+/// Converts a field comparison into a MongoDB document.
+///
+/// Equality uses MongoDB's abbreviated field-value syntax. Every other
+/// comparison uses an operator document.
 fn comparison_into_document(field: String, operator: ComparisonOperator, value: Bson) -> Document {
     let mut document = Document::new();
 
@@ -314,6 +454,7 @@ fn comparison_into_document(field: String, operator: ComparisonOperator, value: 
 
         Some(operator_name) => {
             let mut operator_document = Document::new();
+
             operator_document.insert(operator_name, value);
 
             document.insert(field, operator_document);
@@ -323,6 +464,7 @@ fn comparison_into_document(field: String, operator: ComparisonOperator, value: 
     document
 }
 
+/// Converts logical children into a MongoDB `$and` or `$or` document.
 fn logical_into_document(operator: &'static str, expressions: Vec<Expression>) -> Document {
     let children = expressions
         .into_iter()
@@ -330,17 +472,32 @@ fn logical_into_document(operator: &'static str, expressions: Vec<Expression>) -
         .collect::<Vec<_>>();
 
     let mut document = Document::new();
+
     document.insert(operator, Bson::Array(children));
+
+    document
+}
+
+/// Creates an explicit MongoDB operator document.
+///
+/// Equality is represented as `$eq` here because this helper is used in
+/// contexts where MongoDB's abbreviated field equality syntax is unavailable,
+/// such as element expressions and `$not`.
+fn operator_document(operator: ComparisonOperator, value: Bson) -> Document {
+    let operator_name = operator.mongo_name().unwrap_or("$eq");
+
+    let mut document = Document::new();
+
+    document.insert(operator_name, value);
+
     document
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::query::ElementExpression;
+    use super::{ComparisonOperator, ElementExpression, Expression};
     use crate::query::UpdateExpression;
     use mongodb::bson::{Bson, Document, doc, oid::ObjectId};
-
-    use super::{ComparisonOperator, Expression};
 
     fn comparison(field: &str, operator: ComparisonOperator, value: impl Into<Bson>) -> Expression {
         Expression::comparison(field, operator, value)
