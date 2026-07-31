@@ -5,7 +5,7 @@ error[E0599]: no method named `unset` found for struct `Field<std::string::Strin
    |                                                            ^^^^^
    |
 help: there is a method `set` with a similar name, but with different arguments
-  --> $WORKSPACE/oximod_core/src/query/field.rs
+  --> $WORKSPACE/oximod_core/src/query/field/scalar.rs
    |
    | /     pub fn set<V>(&self, value: V) -> UpdateExpression
    | |     where

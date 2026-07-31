@@ -16,6 +16,8 @@
 //! - optional lifecycle hooks
 //! - global and explicit-client workflows
 //! - typed and raw MongoDB collection access
+//! - type-safe filtering, sorting, pagination, updates, and deletions
+//! - typed text-search and GeoJSON geospatial queries
 //!
 //! ## Quick Start
 //!
@@ -245,28 +247,53 @@ pub use oximod_macros::Model;
 
 /// Trait implemented by models that support OxiMod's typed-query API.
 ///
-/// This trait is implemented automatically by [`Model`]. Importing it brings
-/// methods such as [`Queryable::query`] into scope.
+/// This trait is implemented automatically by `#[derive(Model)]`. Importing it
+/// brings [`Queryable::query`] into scope.
+///
+/// A typed query receives generated model fields whose available operations
+/// depend on their Rust types. This prevents incompatible MongoDB operators
+/// from being applied to fields.
 ///
 /// # Example
 ///
 /// ```rust,no_run
 /// use mongodb::bson::oid::ObjectId;
-/// use oximod::{Model, OxiModError, Queryable};
-/// use serde::{Deserialize, Serialize};
+/// use oximod::{
+///     Model,
+///     OxiModError,
+///     Queryable,
+/// };
+/// use serde::{
+///     Deserialize,
+///     Serialize,
+/// };
 ///
-/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[derive(
+///     Debug,
+///     Serialize,
+///     Deserialize,
+///     Model,
+/// )]
 /// #[db("app")]
 /// #[collection("users")]
 /// struct User {
 ///     #[serde(skip_serializing_if = "Option::is_none")]
 ///     _id: Option<ObjectId>,
+///
 ///     name: String,
+///     age: i32,
+///     active: bool,
+///     role: String,
 /// }
 ///
 /// # async fn run() -> Result<(), OxiModError> {
 /// let users = User::query()
-///     .filter(|user| user.name.eq("Alice"))
+///     .filter(|user| {
+///         user.active.eq(true)
+///             & user.age.gte(18)
+///     })
+///     .sort_by(|user| user.name.asc())
+///     .limit(20)
 ///     .all()
 ///     .await?;
 ///
@@ -276,17 +303,38 @@ pub use oximod_macros::Model;
 /// # }
 /// ```
 ///
-/// # Filtering
+/// # Equality and membership
 ///
-/// Equality comparisons are available for fields whose values can be
-/// represented as BSON:
+/// Fields whose values can be represented as BSON support equality and
+/// inequality:
 ///
 /// ```rust,ignore
-/// user.name.eq("Alice")
-/// user.name.ne("Bob")
+/// user.name.eq("User1")
+/// user.name.ne("User2")
 /// ```
 ///
-/// Ordered fields support:
+/// Match one of several values with `$in`:
+///
+/// ```rust,ignore
+/// user.role.in_values([
+///     "admin",
+///     "member",
+/// ])
+/// ```
+///
+/// Exclude several values with `$nin`:
+///
+/// ```rust,ignore
+/// user.role.not_in_values([
+///     "banned",
+///     "suspended",
+/// ])
+/// ```
+///
+/// # Ordered comparisons
+///
+/// Numeric values, strings, and BSON date-time values support ordered
+/// comparisons:
 ///
 /// ```rust,ignore
 /// user.age.gt(18)
@@ -295,74 +343,28 @@ pub use oximod_macros::Model;
 /// user.age.lte(65)
 /// ```
 ///
-/// Multiple values can be matched or excluded with:
-///
-/// ```rust,ignore
-/// user.role.in_values(["admin", "manager"])
-/// user.role.not_in_values(["banned", "suspended"])
-/// ```
-///
 /// # Logical expressions
 ///
-/// Expressions can be combined with `&` for AND and `|` for OR:
-///
-/// ```rust,ignore
-/// user.active.eq(true) & user.age.gte(18)
-/// ```
-///
-/// ```rust,ignore
-/// user.role.eq("admin") | user.role.eq("manager")
-/// ```
-///
-/// Parentheses can be used to create nested expressions:
+/// Combine expressions with `&` for MongoDB `$and` and `|` for `$or`:
 ///
 /// ```rust,ignore
 /// user.active.eq(true)
 ///     & (
 ///         user.role.eq("admin")
-///             | user.role.eq("manager")
+///             | user.role.eq("member")
 ///     )
 /// ```
 ///
-/// Rust does not allow overloading the `&&` and `||` operators, so typed
-/// query expressions use `&` and `|`.
+/// Rust does not allow overloading `&&` and `||`, so typed expressions use
+/// the bitwise operators `&` and `|`.
 ///
-/// # Sorting
-///
-/// Sort by one field:
+/// Negate a field condition with `.not()`:
 ///
 /// ```rust,ignore
-/// User::query()
-///     .sort_by(|user| user.age.desc())
+/// user.age.not(|age| age.gte(18))
 /// ```
 ///
-/// Add secondary sort fields with `then_sort_by`:
-///
-/// ```rust,ignore
-/// User::query()
-///     .sort_by(|user| user.age.desc())
-///     .then_sort_by(|user| user.name.asc())
-/// ```
-///
-/// # Limits and pagination
-///
-/// ```rust,ignore
-/// User::query()
-///     .skip(20)
-///     .limit(10)
-/// ```
-///
-/// Pagination is one-based:
-///
-/// ```rust,ignore
-/// User::query()
-///     .page(2, 10)
-/// ```
-///
-/// Invalid pagination configuration is returned as a
-/// [`QueryError`](crate::QueryError) when the query is executed.
-///
-/// # Null and missing fields
+/// # Field existence, null, and BSON type
 ///
 /// Existence checks are available for every field:
 ///
@@ -371,47 +373,85 @@ pub use oximod_macros::Model;
 /// user.nickname.not_exists()
 /// ```
 ///
-/// Optional fields also support strict null checks:
+/// Optional fields support strict null checks:
 ///
 /// ```rust,ignore
 /// user.nickname.is_null()
 /// user.nickname.is_not_null()
 /// ```
 ///
-/// `is_null` matches a field that exists and contains BSON null. It does
-/// not match a field that is missing from the document.
+/// `is_null()` matches only fields that exist and contain BSON null. It does
+/// not match missing fields.
+///
+/// Query the stored BSON representation with [`BsonType`]:
+///
+/// ```rust,ignore
+/// user.nickname.has_bson_type(
+///     BsonType::String,
+/// )
+/// ```
 ///
 /// # Regular expressions
 ///
-/// String fields support BSON regular-expression queries:
+/// Required and optional string fields support BSON regular-expression
+/// queries:
 ///
 /// ```rust,ignore
-/// user.name.matches_regex("^Ali")
+/// user.name.matches_regex("^User")
 /// ```
 ///
-/// Typed options can be combined:
+/// Typed options can be supplied with [`RegexOption`]:
 ///
 /// ```rust,ignore
-/// use oximod::RegexOption;
-///
 /// user.name.matches_regex_with_options(
-///     "^alice",
+///     "^user",
 ///     [RegexOption::CaseInsensitive],
 /// )
 /// ```
 ///
-/// # Array fields
+/// Literal prefix, suffix, and substring helpers are also available:
 ///
-/// Array fields support element membership:
+/// ```rust,ignore
+/// user.name.starts_with("User")
+/// user.name.ends_with("1")
+/// user.name.contains_text("ser")
+/// ```
+///
+/// These helpers escape regular-expression metacharacters before creating
+/// the query.
+///
+/// # Numeric and bitwise queries
+///
+/// Numeric fields support MongoDB `$mod`:
+///
+/// ```rust,ignore
+/// user.login_count.modulo(2, 0)
+/// ```
+///
+/// Integer fields support all four MongoDB bitwise query operators:
+///
+/// ```rust,ignore
+/// user.permissions.bits_all_set(0b0101)
+/// user.permissions.bits_any_set(0b1100)
+/// user.permissions.bits_all_clear(0b1100)
+/// user.permissions.bits_any_clear(0b1100)
+/// ```
+///
+/// # Array queries
+///
+/// Match an array containing one value:
 ///
 /// ```rust,ignore
 /// user.tags.contains("rust")
 /// ```
 ///
-/// Match arrays containing every requested value:
+/// Match an array containing every supplied value:
 ///
 /// ```rust,ignore
-/// user.tags.contains_all(["rust", "mongodb"])
+/// user.tags.contains_all([
+///     "rust",
+///     "mongodb",
+/// ])
 /// ```
 ///
 /// Match an exact array length:
@@ -420,33 +460,30 @@ pub use oximod_macros::Model;
 /// user.tags.has_size(2)
 /// ```
 ///
-/// # Execution
-///
-/// Retrieve all matching models:
+/// Scalar arrays support typed `$elemMatch` conditions:
 ///
 /// ```rust,ignore
-/// User::query().all().await?
+/// user.scores.elem_match(|score| {
+///     score.gte(60)
+///         & score.lte(100)
+/// })
 /// ```
 ///
-/// Retrieve the first matching model:
+/// Arrays of embedded documents support [`trait@EmbeddedDocument`] field access:
 ///
 /// ```rust,ignore
-/// User::query().first().await?
-/// ```
-///
-/// Count matching documents:
-///
-/// ```rust,ignore
-/// User::query().count().await?
+/// user.addresses.elem_match_nested(
+///     |address| {
+///         address.city.eq("City1")
+///             & address.active.eq(true)
+///     },
+/// )
 /// ```
 ///
 /// # Embedded documents
 ///
-/// Derive [`EmbeddedDocument`] for nested types and use `.nested()`
-/// to access their generated typed fields.
-///
-/// Use `.elem_match_nested()` to create typed `$elemMatch` queries for
-/// arrays of embedded documents.
+/// Use `#[derive(EmbeddedDocument)]` for nested types and call `.nested()` to
+/// access their generated typed fields:
 ///
 /// ```rust,no_run
 /// use mongodb::bson::oid::ObjectId;
@@ -511,10 +548,12 @@ pub use oximod_macros::Model;
 ///
 /// let users_with_matching_address = User::query()
 ///     .filter(|user| {
-///         user.addresses.elem_match_nested(|address| {
-///             address.city_name.eq("City1")
-///                 & address.active.eq(true)
-///         })
+///         user.addresses.elem_match_nested(
+///             |address| {
+///                 address.city_name.eq("City1")
+///                     & address.active.eq(true)
+///             },
+///         )
 ///     })
 ///     .all()
 ///     .await?;
@@ -524,12 +563,252 @@ pub use oximod_macros::Model;
 /// # Ok(())
 /// # }
 /// ```
+///
+/// Nested field paths respect Serde `rename` and `rename_all` attributes.
+///
+/// # Sorting
+///
+/// Set a primary sort with `.sort_by()`:
+///
+/// ```rust,ignore
+/// User::query()
+///     .sort_by(|user| user.age.desc())
+/// ```
+///
+/// Append secondary fields with `.then_sort_by()`:
+///
+/// ```rust,ignore
+/// User::query()
+///     .sort_by(|user| user.role.asc())
+///     .then_sort_by(|user| user.age.desc())
+///     .then_sort_by(|user| user.name.asc())
+/// ```
+///
+/// Sort precedence follows insertion order.
+///
+/// # Limiting and pagination
+///
+/// Skip and limit matching results:
+///
+/// ```rust,ignore
+/// User::query()
+///     .skip(20)
+///     .limit(10)
+/// ```
+///
+/// Pagination is one-based:
+///
+/// ```rust,ignore
+/// User::query()
+///     .page(2, 10)
+/// ```
+///
+/// This calculates an offset of `10` and a limit of `10`.
+///
+/// Invalid page numbers, page sizes, and pagination overflow are returned as
+/// [`QueryError`] when the query is executed.
+///
+/// # Text search
+///
+/// Collections with a text index can be searched with `.text()`:
+///
+/// ```rust,ignore
+/// Article::query()
+///     .text("rust mongodb")
+///     .sort_by_text_score()
+///     .all()
+///     .await?
+/// ```
+///
+/// Use [`TextSearch`] to configure language, case sensitivity, and diacritic
+/// sensitivity:
+///
+/// ```rust,ignore
+/// Article::query()
+///     .text(
+///         TextSearch::new("Café")
+///             .language("none")
+///             .case_sensitive(true)
+///             .diacritic_sensitive(true),
+///     )
+///     .all()
+///     .await?
+/// ```
+///
+/// Text-search strings may also contain quoted phrases and excluded terms:
+///
+/// ```rust,ignore
+/// Article::query()
+///     .text("\"rust mongodb\" -beginner")
+/// ```
+///
+/// # Geospatial queries
+///
+/// GeoJSON point fields with a `2dsphere` index support `$near`:
+///
+/// ```rust,ignore
+/// Place::query()
+///     .filter(|place| {
+///         place.location.near(
+///             GeoPoint::new(
+///                 -79.38,
+///                 43.65,
+///             ),
+///         )
+///     })
+///     .all()
+///     .await?
+/// ```
+///
+/// Use [`NearQuery`] for distance limits:
+///
+/// ```rust,ignore
+/// place.location.near(
+///     NearQuery::new(
+///         GeoPoint::new(
+///             -79.38,
+///             43.65,
+///         ),
+///     )
+///     .min_distance(500.0)
+///     .max_distance(5_000.0),
+/// )
+/// ```
+///
+/// GeoJSON values also support `$geoWithin` and `$geoIntersects`:
+///
+/// ```rust,ignore
+/// place.location.geo_within(boundary)
+/// region.boundary.geo_intersects(point)
+/// ```
+///
+/// Coordinates use longitude-latitude order. Distances for GeoJSON `$near`
+/// queries are expressed in metres.
+///
+/// # Execution
+///
+/// Retrieve all matching models:
+///
+/// ```rust,ignore
+/// User::query()
+///     .filter(|user| user.active.eq(true))
+///     .all()
+///     .await?
+/// ```
+///
+/// Retrieve the first matching model:
+///
+/// ```rust,ignore
+/// User::query()
+///     .sort_by(|user| user.created_at.asc())
+///     .first()
+///     .await?
+/// ```
+///
+/// Count matching documents:
+///
+/// ```rust,ignore
+/// User::query()
+///     .filter(|user| user.active.eq(true))
+///     .count()
+///     .await?
+/// ```
+///
+/// # Typed updates
+///
+/// Update and return the first matching document:
+///
+/// ```rust,ignore
+/// User::query()
+///     .filter(|user| user.name.eq("User1"))
+///     .update_one(|user| {
+///         user.active.set(true)
+///             & user.login_count.inc(1)
+///     })
+///     .await?
+/// ```
+///
+/// Update every matching document:
+///
+/// ```rust,ignore
+/// User::query()
+///     .filter(|user| user.active.eq(false))
+///     .update_all(|user| {
+///         user.status.set("inactive")
+///     })
+///     .await?
+/// ```
+///
+/// Supported typed update helpers include:
+///
+/// ```rust,ignore
+/// user.name.set("User1")
+/// user.nickname.unset()
+/// user.login_count.inc(1)
+/// user.score.mul(2)
+/// user.score.min(10)
+/// user.score.max(100)
+/// user.nickname.rename_to(
+///     &user.display_name,
+/// )
+/// user.updated_at.current_date()
+/// ```
+///
+/// Array update helpers include:
+///
+/// ```rust,ignore
+/// user.tags.push("rust")
+/// user.tags.push_each(["rust", "mongodb"])
+/// user.tags.add_to_set("rust")
+/// user.tags.add_each_to_set(["rust", "mongodb"])
+/// user.tags.pull("deprecated")
+/// user.tags.pop_first()
+/// user.tags.pop_last()
+/// ```
+///
+/// Array elements in embedded-document arrays can be updated through the
+/// positional `$` and filtered positional `$[identifier]` operators.
+///
+/// Bulk updates reject sorting, skipping, limiting, and pagination.
+///
+/// # Typed deletions
+///
+/// Delete and return the first matching document:
+///
+/// ```rust,ignore
+/// User::query()
+///     .filter(|user| user.active.eq(false))
+///     .sort_by(|user| user.created_at.asc())
+///     .delete_one()
+///     .await?
+/// ```
+///
+/// Delete all matching documents:
+///
+/// ```rust,ignore
+/// User::query()
+///     .filter(|user| user.active.eq(false))
+///     .delete_all()
+///     .await?
+/// ```
+///
+/// Bulk deletions reject sorting, skipping, limiting, and pagination.
+///
+/// An unfiltered `.update_all()` or `.delete_all()` operation affects every
+/// document in the model's collection.
 pub use oximod_core::query::Queryable;
 
 /// An option that modifies MongoDB regular-expression matching.
 ///
 /// Multiple options can be combined when calling
-/// `matches_regex_with_options`.
+/// `matches_regex_with_options()`.
+///
+/// # Variants
+///
+/// - [`RegexOption::CaseInsensitive`] uses MongoDB option `"i"`.
+/// - [`RegexOption::Multiline`] uses MongoDB option `"m"`.
+/// - [`RegexOption::DotMatchesNewLine`] uses MongoDB option `"s"`.
+/// - [`RegexOption::IgnoreWhitespace`] uses MongoDB option `"x"`.
 ///
 /// # Example
 ///
@@ -541,14 +820,23 @@ pub use oximod_core::query::Queryable;
 ///     Queryable,
 ///     RegexOption,
 /// };
-/// use serde::{Deserialize, Serialize};
+/// use serde::{
+///     Deserialize,
+///     Serialize,
+/// };
 ///
-/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[derive(
+///     Debug,
+///     Serialize,
+///     Deserialize,
+///     Model,
+/// )]
 /// #[db("app")]
 /// #[collection("users")]
 /// struct User {
 ///     #[serde(skip_serializing_if = "Option::is_none")]
 ///     _id: Option<ObjectId>,
+///
 ///     name: String,
 /// }
 ///
@@ -556,7 +844,7 @@ pub use oximod_core::query::Queryable;
 /// let users = User::query()
 ///     .filter(|user| {
 ///         user.name.matches_regex_with_options(
-///             "^alice",
+///             "^user",
 ///             [RegexOption::CaseInsensitive],
 ///         )
 ///     })
@@ -570,49 +858,213 @@ pub use oximod_core::query::Queryable;
 /// ```
 pub use oximod_core::query::RegexOption;
 
-/// A type-safe MongoDB update expression used by typed-query update operations.
+/// A type-safe MongoDB update expression.
 ///
-/// Update expressions are normally created through methods on generated typed
-/// fields, such as `.set()`, and passed to [`Queryable::update_one`].
+/// Update expressions are produced by methods on generated model fields and
+/// returned from the closures passed to `.update_one()` and `.update_all()`.
+///
+/// Expressions can be combined with `&`. Updates using the same MongoDB
+/// operator are merged into one operator document.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// let updated_user = User::query()
-///     .filter(|user| user.name.eq("User1"))
-///     .update_one(|user| user.active.set(true))
+///     .filter(|user| {
+///         user.name.eq("User1")
+///     })
+///     .update_one(|user| {
+///         user.active.set(true)
+///             & user.login_count.inc(1)
+///             & user.nickname.unset()
+///     })
 ///     .await?;
 /// ```
+///
+/// When the same operator updates the same field more than once, the
+/// expression on the right takes precedence.
 pub use oximod_core::query::UpdateExpression;
 
-/// Trait implemented by embedded documents that support
-/// typed nested-field queries.
+/// Trait implemented by embedded documents that support typed nested-field
+/// queries and updates.
 ///
-/// It is implemented automatically by
+/// Applications normally implement this trait through
 /// `#[derive(EmbeddedDocument)]`.
+///
+/// Required and optional embedded documents use the same generated typed-field
+/// API.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// user.address.nested(|address| {
+///     address.city.eq("City1")
+/// })
+/// ```
+///
+/// Arrays of embedded documents additionally support typed `$elemMatch`,
+/// positional updates, filtered positional updates, and array filters.
 pub use oximod_core::query::EmbeddedDocument;
 
-/// Derive macro for embedded documents used in typed
-/// nested-field queries.
+/// Derive macro for embedded documents used by typed nested-field queries and
+/// updates.
+///
+/// The derive generates the field structure required by the
+/// [`trait@EmbeddedDocument`] trait.
+///
+/// # Example
+///
+/// ```rust
+/// use oximod::EmbeddedDocument;
+/// use serde::{
+///     Deserialize,
+///     Serialize,
+/// };
+///
+/// #[derive(
+///     Debug,
+///     Default,
+///     Serialize,
+///     Deserialize,
+///     EmbeddedDocument,
+/// )]
+/// struct Address {
+///     city: String,
+///     active: bool,
+/// }
+/// ```
 pub use oximod_macros::EmbeddedDocument;
 
-/// A BSON type accepted by MongoDB's typed `$type` query operator.
+/// A BSON type accepted by MongoDB's `$type` query operator.
+///
+/// Each variant maps to MongoDB's canonical string alias, such as `"string"`,
+/// `"objectId"`, `"date"`, or `"long"`.
+///
+/// `$type` checks the BSON representation stored in MongoDB. It does not
+/// deserialize or convert the value before matching.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// let users = User::query()
 ///     .filter(|user| {
-///         user.nickname.has_bson_type(BsonType::String)
+///         user.nickname.has_bson_type(
+///             BsonType::String,
+///         )
 ///     })
 ///     .all()
 ///     .await?;
 /// ```
 pub use oximod_core::query::BsonType;
 
+/// Configuration for a MongoDB `$text` search.
+///
+/// A string can be passed directly to `.text()` for a basic search. Use
+/// `TextSearch` when language, case-sensitivity, or diacritic-sensitivity
+/// options are required.
+///
+/// # Example
+///
+/// ```rust
+/// use oximod::TextSearch;
+///
+/// let search = TextSearch::new(
+///     "\"rust mongodb\" -beginner",
+/// )
+/// .language("none")
+/// .case_sensitive(true)
+/// .diacritic_sensitive(true);
+/// ```
+///
+/// The collection must have an appropriate MongoDB text index before the query
+/// can be executed.
 pub use oximod_core::query::TextSearch;
 
-pub use oximod_core::query::{GeoPoint, GeoPolygon, NearQuery};
+/// A GeoJSON point.
+///
+/// Coordinates must be provided in longitude-latitude order.
+///
+/// # Example
+///
+/// ```rust
+/// use oximod::GeoPoint;
+///
+/// let point = GeoPoint::new(
+///     -79.38,
+///     43.65,
+/// );
+///
+/// assert_eq!(point.longitude(), -79.38);
+/// assert_eq!(point.latitude(), 43.65);
+/// ```
+///
+/// The serialized BSON representation is equivalent to:
+///
+/// ```text
+/// {
+///     "type": "Point",
+///     "coordinates": [-79.38, 43.65]
+/// }
+/// ```
+///
+/// OxiMod does not validate coordinate ranges.
+pub use oximod_core::query::GeoPoint;
+
+/// A single-ring GeoJSON polygon.
+///
+/// [`GeoPolygon::new`] accepts the exterior ring in longitude-latitude order.
+/// When the supplied ring is not already closed, its first coordinate is
+/// appended automatically.
+///
+/// # Example
+///
+/// ```rust
+/// use oximod::GeoPolygon;
+///
+/// let polygon = GeoPolygon::new([
+///     [-1.0, -1.0],
+///     [1.0, -1.0],
+///     [1.0, 1.0],
+///     [-1.0, 1.0],
+/// ]);
+/// ```
+///
+/// OxiMod closes the exterior ring but does not otherwise validate polygon
+/// geometry.
+///
+/// `GeoPolygon::default()` exists for generated model-builder compatibility
+/// and represents an empty polygon. Replace it before persistence.
+pub use oximod_core::query::GeoPolygon;
+
+/// Configuration for a MongoDB `$near` query.
+///
+/// Pass a [`GeoPoint`] directly to `.near()` for a basic proximity query. Use
+/// `NearQuery` to configure minimum or maximum distance.
+///
+/// Distances are expressed in metres for GeoJSON queries using a MongoDB
+/// `2dsphere` index.
+///
+/// # Example
+///
+/// ```rust
+/// use oximod::{
+///     GeoPoint,
+///     NearQuery,
+/// };
+///
+/// let query = NearQuery::new(
+///     GeoPoint::new(
+///         -79.38,
+///         43.65,
+///     ),
+/// )
+/// .min_distance(500.0)
+/// .max_distance(5_000.0);
+/// ```
+///
+/// OxiMod does not validate that distances are non-negative or that the
+/// minimum does not exceed the maximum. MongoDB validates the resulting query.
+pub use oximod_core::query::NearQuery;
 
 // --- Internal API ---
 
@@ -637,8 +1089,8 @@ pub use regex as _regex; // removes the need of importing the trait
 #[doc(hidden)]
 pub mod _query {
     pub use oximod_core::query::{
-        ElementExpression, ElementField, Expression, Field, GeoGeometry, GeoPointQueryValue,
-        GeoQueryValue, IntegerQueryValue, NumericQueryValue, OrderedQueryValue, Query,
-        SortExpression, StringQueryValue,
+        DateQueryValue, ElementExpression, ElementField, Expression, Field, GeoGeometry,
+        GeoPointQueryValue, GeoQueryValue, IntegerQueryValue, NumericQueryValue, OrderedQueryValue,
+        Query, SortExpression, StringQueryValue,
     };
 }

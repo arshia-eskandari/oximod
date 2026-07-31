@@ -17,11 +17,11 @@ error[E0277]: the trait bound `i32: From<&str>` is not satisfied
              `i32` implements `From<socket2::Type>`
            and $N others
    = note: required for `&str` to implement `Into<i32>`
-note: required by a bound in `Field::<Vec<T>>::push`
-  --> $WORKSPACE/oximod_core/src/query/field.rs
+note: required by a bound in `oximod_core::query::field::array::<impl Field<Vec<T>>>::push`
+  --> $WORKSPACE/oximod_core/src/query/field/array.rs
    |
    |     pub fn push<V>(&self, value: V) -> UpdateExpression
    |            ---- required by a bound in this associated function
    |     where
    |         V: Into<T>,
-   |            ^^^^^^^ required by this bound in `Field::<Vec<T>>::push`
+   |            ^^^^^^^ required by this bound in `oximod_core::query::field::array::<impl Field<Vec<T>>>::push`
