@@ -22,10 +22,11 @@
 //! - Respect Serde field renaming in generated query paths
 
 use mongodb::bson::oid::ObjectId;
-use oximod::{EmbeddedDocument, Model, OxiClient, Queryable, RegexOption};
+use oximod::{Model, OxiClient, Queryable, RegexOption};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize, EmbeddedDocument, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Model, PartialEq)]
+#[model(embedded)]
 #[serde(rename_all = "camelCase")]
 struct Address {
     city_name: String,
@@ -92,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn seed_users() -> Result<(), Box<dyn std::error::Error>> {
-    User::default()
+    User::new()
         .display_name("User1")
         .age(30)
         .active(true)
@@ -100,63 +101,43 @@ async fn seed_users() -> Result<(), Box<dyn std::error::Error>> {
         .middle_name("A".to_owned())
         .tags(vec!["rust".to_owned(), "mongodb".to_owned()])
         .scores(vec![75, 85, 95])
-        .address(Address {
-            city_name: "City1".to_owned(),
-            active: true,
-            primary: true,
-        })
+        .address(Address::new().city_name("City1").active(true).primary(true))
         .addresses(vec![
-            Address {
-                city_name: "City1".to_owned(),
-                active: true,
-                primary: true,
-            },
-            Address {
-                city_name: "City2".to_owned(),
-                active: false,
-                primary: false,
-            },
+            Address::new().city_name("City1").active(true).primary(true),
+            Address::new()
+                .city_name("City2")
+                .active(false)
+                .primary(false),
         ])
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .display_name("User2")
         .age(17)
         .active(false)
         .tags(vec!["typescript".to_owned()])
         .scores(vec![70, 95])
-        .address(Address {
-            city_name: "City2".to_owned(),
-            active: true,
-            primary: true,
-        })
+        .address(Address::new().city_name("City2").active(true).primary(true))
         .addresses(vec![
-            Address {
-                city_name: "City1".to_owned(),
-                active: false,
-                primary: false,
-            },
-            Address {
-                city_name: "City2".to_owned(),
-                active: true,
-                primary: true,
-            },
+            Address::new()
+                .city_name("City1")
+                .active(false)
+                .primary(false),
+            Address::new().city_name("City2").active(true).primary(true),
         ])
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .display_name("User3")
         .age(22)
         .active(true)
         .tags(vec!["rust".to_owned(), "backend".to_owned()])
         .scores(vec![79, 90])
-        .addresses(vec![Address {
-            city_name: "City2".to_owned(),
-            active: true,
-            primary: true,
-        }])
+        .addresses(vec![
+            Address::new().city_name("City2").active(true).primary(true),
+        ])
         .save()
         .await?;
 

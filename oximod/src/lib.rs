@@ -9,7 +9,7 @@
 //!
 //! ## Features
 //!
-//! - derive-based model definitions
+//! - derive-based collection and embedded model definitions
 //! - builder-style model construction
 //! - validation and defaults
 //! - index declarations
@@ -202,35 +202,85 @@ pub use oximod_core::error::oximod_error::ValidationErrors;
 /// ```
 pub use oximod_core::feature::conn::client::OxiClient;
 
-/// Trait for defining lifecycle hooks on OxiMod models.
+/// Trait for defining lifecycle hooks on collection-backed OxiMod models.
 ///
 /// Hooks allow custom logic to run before and after save, update, delete,
 /// and query operations.
 ///
-/// Hooks are optional and must be enabled with `#[hooks]` on the model.
+/// Hooks are optional and must be enabled with `#[hooks]` on a
+/// collection-backed model. Embedded models do not support persistence hooks.
 pub use oximod_core::feature::hooks::Hooks;
 
-/// Core trait implemented by all OxiMod models.
+/// Public trait implemented by collection-backed OxiMod models.
 ///
-/// This trait provides the primary model API, including persistence,
-/// lookup, mutation, counting, existence checks, and access to both typed
-/// and raw MongoDB collections.
+/// Importing `oximod::Model` brings the derive macro and this trait into scope.
+/// Rust keeps derive macros and traits in separate namespaces, so one import
+/// supports both model declaration and collection persistence.
 ///
-/// It is implemented automatically by `#[derive(Model)]`.
-pub use oximod_core::feature::model::Model;
-
-/// Derive macro for defining OxiMod models.
+/// This trait provides:
 ///
-/// This macro generates:
+/// - typed and raw MongoDB collection access,
+/// - global and explicit-client save operations,
+/// - lookup, update, and deletion by `_id`,
+/// - collection clearing,
+/// - existence checks,
+/// - document counting.
 ///
-/// - builder methods
-/// - model methods
-/// - validation support
-/// - default handling
-/// - index initialization
-/// - optional hook integration
+/// It is implemented automatically for ordinary `#[derive(Model)]` types.
+/// Models declared with `#[model(embedded)]` do not implement this trait.
+/// Embedded models still receive generated builders, defaults, validation, and
+/// typed nested-field metadata.
 ///
 /// # Example
+///
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{
+///     Model,
+///     OxiModError,
+/// };
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     name: String,
+/// }
+///
+/// # async fn run() -> Result<(), OxiModError> {
+/// let user = User::new().name("Alice");
+/// let id = user.save().await?;
+/// let found = User::find_by_id(id).await?;
+///
+/// # let _ = found;
+/// # Ok(())
+/// # }
+/// ```
+pub use oximod_core::feature::model::Model;
+
+/// Derive macro for defining collection-backed and embedded OxiMod models.
+///
+/// By default, `#[derive(Model)]` generates a collection-backed model with:
+///
+/// - fluent builder methods,
+/// - default handling,
+/// - validation support,
+/// - typed-query support,
+/// - index initialization,
+/// - optional hook integration,
+/// - MongoDB collection and persistence support.
+///
+/// Collection-backed models require `#[db(...)]` and `#[collection(...)]`.
+///
+/// Use `#[model(embedded)]` to generate an embedded model. Embedded models
+/// receive fluent builder methods, default handling, validation support, and
+/// typed nested-field access, but do not receive collection access, querying,
+/// indexes, hooks, or persistence methods.
+///
+/// # Collection-backed model
 ///
 /// ```rust
 /// use oximod::Model;
@@ -241,8 +291,43 @@ pub use oximod_core::feature::model::Model;
 /// #[collection("users")]
 /// struct User {
 ///     name: String,
+///     address: Address,
+/// }
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[model(embedded)]
+/// struct Address {
+///     city: String,
 /// }
 /// ```
+///
+/// # Embedded model
+///
+/// ```rust
+/// use oximod::Model;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[model(embedded)]
+/// struct Address {
+///     street: String,
+///     city: String,
+/// }
+///
+/// let address = Address::new()
+///     .street("13544 Cane St")
+///     .city("City1");
+/// ```
+///
+/// The following attributes are not supported on embedded models:
+///
+/// - `#[db(...)]`
+/// - `#[collection(...)]`
+/// - `#[hooks]`
+/// - `#[index(...)]`
+/// - `#[document_id_setter_ident(...)]`
+/// - `#[index_max_retries(...)]`
+/// - `#[index_max_init_seconds(...)]`
 pub use oximod_macros::Model;
 
 /// Trait implemented by models that support OxiMod's typed-query API.
@@ -469,7 +554,7 @@ pub use oximod_macros::Model;
 /// })
 /// ```
 ///
-/// Arrays of embedded documents support [`trait@EmbeddedDocument`] field access:
+/// Arrays of embedded models support generated typed-field access:
 ///
 /// ```rust,ignore
 /// user.addresses.elem_match_nested(
@@ -480,15 +565,14 @@ pub use oximod_macros::Model;
 /// )
 /// ```
 ///
-/// # Embedded documents
+/// # Embedded models
 ///
-/// Use `#[derive(EmbeddedDocument)]` for nested types and call `.nested()` to
-/// access their generated typed fields:
+/// Derive [`Model`] with `#[model(embedded)]` for nested types and call
+/// `.nested()` to access their generated typed fields:
 ///
 /// ```rust,no_run
 /// use mongodb::bson::oid::ObjectId;
 /// use oximod::{
-///     EmbeddedDocument,
 ///     Model,
 ///     Queryable,
 /// };
@@ -499,11 +583,11 @@ pub use oximod_macros::Model;
 ///
 /// #[derive(
 ///     Debug,
-///     Default,
 ///     Serialize,
 ///     Deserialize,
-///     EmbeddedDocument,
+///     Model,
 /// )]
+/// #[model(embedded)]
 /// #[serde(rename_all = "camelCase")]
 /// struct Address {
 ///     city_name: String,
@@ -564,7 +648,9 @@ pub use oximod_macros::Model;
 /// # }
 /// ```
 ///
-/// Nested field paths respect Serde `rename` and `rename_all` attributes.
+/// Embedded models support required fields, `Option<T>`, `Vec<T>`, and
+/// multiple nesting levels. Nested field paths respect Serde `rename` and
+/// `rename_all` attributes.
 ///
 /// # Sorting
 ///
@@ -885,56 +971,6 @@ pub use oximod_core::query::RegexOption;
 /// expression on the right takes precedence.
 pub use oximod_core::query::UpdateExpression;
 
-/// Trait implemented by embedded documents that support typed nested-field
-/// queries and updates.
-///
-/// Applications normally implement this trait through
-/// `#[derive(EmbeddedDocument)]`.
-///
-/// Required and optional embedded documents use the same generated typed-field
-/// API.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// user.address.nested(|address| {
-///     address.city.eq("City1")
-/// })
-/// ```
-///
-/// Arrays of embedded documents additionally support typed `$elemMatch`,
-/// positional updates, filtered positional updates, and array filters.
-pub use oximod_core::query::EmbeddedDocument;
-
-/// Derive macro for embedded documents used by typed nested-field queries and
-/// updates.
-///
-/// The derive generates the field structure required by the
-/// [`trait@EmbeddedDocument`] trait.
-///
-/// # Example
-///
-/// ```rust
-/// use oximod::EmbeddedDocument;
-/// use serde::{
-///     Deserialize,
-///     Serialize,
-/// };
-///
-/// #[derive(
-///     Debug,
-///     Default,
-///     Serialize,
-///     Deserialize,
-///     EmbeddedDocument,
-/// )]
-/// struct Address {
-///     city: String,
-///     active: bool,
-/// }
-/// ```
-pub use oximod_macros::EmbeddedDocument;
-
 /// A BSON type accepted by MongoDB's `$type` query operator.
 ///
 /// Each variant maps to MongoDB's canonical string alias, such as `"string"`,
@@ -1089,8 +1125,8 @@ pub use regex as _regex; // removes the need of importing the trait
 #[doc(hidden)]
 pub mod _query {
     pub use oximod_core::query::{
-        DateQueryValue, ElementExpression, ElementField, Expression, Field, GeoGeometry,
-        GeoPointQueryValue, GeoQueryValue, IntegerQueryValue, NumericQueryValue, OrderedQueryValue,
-        Query, SortExpression, StringQueryValue,
+        DateQueryValue, ElementExpression, ElementField, Expression, Field, FieldSchema,
+        GeoGeometry, GeoPointQueryValue, GeoQueryValue, IntegerQueryValue, NumericQueryValue,
+        OrderedQueryValue, Query, SortExpression, StringQueryValue,
     };
 }

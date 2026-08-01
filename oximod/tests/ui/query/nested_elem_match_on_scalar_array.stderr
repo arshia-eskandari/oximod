@@ -5,7 +5,7 @@ error[E0599]: the method `elem_match_nested` exists for struct `Field<Vec<i32>>`
    |                                                          ^^^^^^^^^^^^^^^^^
    |
    = note: the following trait bounds were not satisfied:
-           `i32: oximod::EmbeddedDocument`
+           `i32: FieldSchema`
 
 error[E0282]: type annotations needed
   --> tests/ui/query/nested_elem_match_on_scalar_array.rs:16:77

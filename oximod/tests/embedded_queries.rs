@@ -2,7 +2,7 @@ mod common;
 
 use common::init;
 use mongodb::bson::oid::ObjectId;
-use oximod::{EmbeddedDocument, Model, Queryable};
+use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -12,7 +12,8 @@ use testresult::TestResult;
 async fn typed_query_nested_document_field() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Address {
         city: String,
         active: bool,
@@ -31,30 +32,21 @@ async fn typed_query_nested_document_field() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .address(Address {
-            city: "City1".to_owned(),
-            active: true,
-        })
+        .address(Address::new().city("City1").active(true))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
-        .address(Address {
-            city: "City2".to_owned(),
-            active: true,
-        })
+        .address(Address::new().city("City2").active(true))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User3")
-        .address(Address {
-            city: "City1".to_owned(),
-            active: false,
-        })
+        .address(Address::new().city("City1").active(false))
         .save()
         .await?;
 
@@ -80,7 +72,8 @@ async fn typed_query_nested_document_field() -> TestResult {
 async fn typed_query_nested_document_respects_serde_renames() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
@@ -103,21 +96,15 @@ async fn typed_query_nested_document_respects_serde_renames() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .display_name("User1")
-        .home_address(Address {
-            city_name: "City1".to_owned(),
-            primary: true,
-        })
+        .home_address(Address::new().city_name("City1").primary(true))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .display_name("User2")
-        .home_address(Address {
-            city_name: "City2".to_owned(),
-            primary: true,
-        })
+        .home_address(Address::new().city_name("City2").primary(true))
         .save()
         .await?;
 
@@ -162,7 +149,8 @@ async fn typed_query_nested_document_respects_serde_renames() -> TestResult {
 async fn typed_query_optional_nested_document() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Address {
         city: String,
         active: bool,
@@ -183,25 +171,19 @@ async fn typed_query_optional_nested_document() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .address(Address {
-            city: "City1".to_owned(),
-            active: true,
-        })
+        .address(Address::new().city("City1").active(true))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
-        .address(Address {
-            city: "City2".to_owned(),
-            active: true,
-        })
+        .address(Address::new().city("City2").active(true))
         .save()
         .await?;
 
-    User::default().name("User3").save().await?;
+    User::new().name("User3").save().await?;
 
     let fields = <User as Queryable>::fields();
 
@@ -234,12 +216,13 @@ async fn typed_query_optional_nested_document() -> TestResult {
 }
 
 // Run test:
-// cargo nextest run typed_query_embedded_document_array_elem_match
+// cargo nextest run typed_query_embedded_model_array_elem_match
 #[tokio::test]
-async fn typed_query_embedded_document_array_elem_match() -> TestResult {
+async fn typed_query_embedded_model_array_elem_match() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Address {
         city: String,
         active: bool,
@@ -247,7 +230,7 @@ async fn typed_query_embedded_document_array_elem_match() -> TestResult {
 
     #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
     #[db("test")]
-    #[collection("typed_query_embedded_document_array_elem_match")]
+    #[collection("typed_query_embedded_model_array_elem_match")]
     pub struct User {
         #[serde(skip_serializing_if = "Option::is_none")]
         _id: Option<ObjectId>,
@@ -258,42 +241,27 @@ async fn typed_query_embedded_document_array_elem_match() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
         .addresses(vec![
-            Address {
-                city: "City1".to_owned(),
-                active: true,
-            },
-            Address {
-                city: "City2".to_owned(),
-                active: false,
-            },
+            Address::new().city("City1").active(true),
+            Address::new().city("City2").active(false),
         ])
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
         .addresses(vec![
-            Address {
-                city: "City1".to_owned(),
-                active: false,
-            },
-            Address {
-                city: "City2".to_owned(),
-                active: true,
-            },
+            Address::new().city("City1").active(false),
+            Address::new().city("City2").active(true),
         ])
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User3")
-        .addresses(vec![Address {
-            city: "City2".to_owned(),
-            active: true,
-        }])
+        .addresses(vec![Address::new().city("City2").active(true)])
         .save()
         .await?;
 
@@ -319,13 +287,15 @@ async fn typed_query_embedded_document_array_elem_match() -> TestResult {
 async fn typed_query_supports_multiple_nested_document_levels() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Address {
         city: String,
         active: bool,
     }
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, PartialEq, Default)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Profile {
         address: Address,
     }
@@ -343,36 +313,21 @@ async fn typed_query_supports_multiple_nested_document_levels() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .profile(Profile {
-            address: Address {
-                city: "City1".to_owned(),
-                active: true,
-            },
-        })
+        .profile(Profile::new().address(Address::new().city("City1").active(true)))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
-        .profile(Profile {
-            address: Address {
-                city: "City1".to_owned(),
-                active: false,
-            },
-        })
+        .profile(Profile::new().address(Address::new().city("City1").active(false)))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User3")
-        .profile(Profile {
-            address: Address {
-                city: "City2".to_owned(),
-                active: true,
-            },
-        })
+        .profile(Profile::new().address(Address::new().city("City2").active(true)))
         .save()
         .await?;
 
@@ -420,7 +375,8 @@ async fn typed_query_supports_multiple_nested_document_levels() -> TestResult {
 async fn typed_query_sorts_by_nested_document_field() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Address {
         city: String,
     }
@@ -438,27 +394,21 @@ async fn typed_query_sorts_by_nested_document_field() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .address(Address {
-            city: "City2".to_owned(),
-        })
+        .address(Address::new().city("City2"))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
-        .address(Address {
-            city: "City3".to_owned(),
-        })
+        .address(Address::new().city("City3"))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User3")
-        .address(Address {
-            city: "City1".to_owned(),
-        })
+        .address(Address::new().city("City1"))
         .save()
         .await?;
 
@@ -483,7 +433,8 @@ async fn typed_query_sorts_by_nested_document_field() -> TestResult {
 async fn typed_query_nested_elem_match_respects_serde_renames() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
@@ -505,21 +456,15 @@ async fn typed_query_nested_elem_match_respects_serde_renames() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .addresses(vec![Address {
-            city_name: "City1".to_owned(),
-            active: true,
-        }])
+        .addresses(vec![Address::new().city_name("City1").active(true)])
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
-        .addresses(vec![Address {
-            city_name: "City1".to_owned(),
-            active: false,
-        }])
+        .addresses(vec![Address::new().city_name("City1").active(false)])
         .save()
         .await?;
 
@@ -548,7 +493,8 @@ async fn typed_query_nested_elem_match_respects_serde_renames() -> TestResult {
 async fn typed_query_optional_nested_document_respects_serde_renames() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
@@ -572,25 +518,19 @@ async fn typed_query_optional_nested_document_respects_serde_renames() -> TestRe
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .address(Address {
-            city_name: "City1".to_owned(),
-            active: true,
-        })
+        .address(Address::new().city_name("City1").active(true))
         .save()
         .await?;
 
-    User::default()
+    User::new()
         .name("User2")
-        .address(Address {
-            city_name: "City1".to_owned(),
-            active: false,
-        })
+        .address(Address::new().city_name("City1").active(false))
         .save()
         .await?;
 
-    User::default().name("User3").save().await?;
+    User::new().name("User3").save().await?;
 
     let fields = <User as Queryable>::fields();
 

@@ -1,13 +1,72 @@
-use crate::model_macro::{HookTokens, generate_hook_tokens};
+use crate::{
+    helpers::ModelKind,
+    model_macro::{HookTokens, generate_hook_tokens},
+};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
 pub fn generate_model_token(
     name: &Ident,
+    kind: ModelKind,
+    validations: Vec<TokenStream>,
+) -> TokenStream {
+    let mode = match kind {
+        ModelKind::Collection => {
+            quote! {
+                ::oximod::_feature::model::Collection
+            }
+        }
+
+        ModelKind::Embedded => {
+            quote! {
+                ::oximod::_feature::model::Embedded
+            }
+        }
+    };
+
+    quote! {
+        impl ::oximod::_feature::model::ModelCore<#mode> for #name {
+            #[inline]
+            fn validate(&self) -> Result<(), ::oximod::OxiModError> {
+                let mut validation_errors = Vec::new();
+
+                #(#validations)*
+
+                if validation_errors.is_empty() {
+                    Ok(())
+                } else {
+                    Err(
+                        ::oximod::OxiModError::validations(
+                            validation_errors,
+                        ),
+                    )
+                }
+            }
+        }
+
+        impl #name {
+            /// Validates this model using its configured field validations.
+            ///
+            /// This inherent method is generated for both collection-backed
+            /// and embedded models, so no internal validation trait needs to
+            /// be imported by application code.
+            #[inline]
+            pub fn validate(
+                &self,
+            ) -> Result<(), ::oximod::OxiModError> {
+                <
+                    Self as ::oximod::_feature::model::ModelCore<#mode>
+                >::validate(self)
+            }
+        }
+    }
+}
+
+pub fn generate_collection_model_token(
+    name: &Ident,
     db: &str,
     collection: &str,
     hooks: bool,
-    validations: Vec<TokenStream>,
 ) -> TokenStream {
     let HookTokens {
         pre_save,
@@ -22,7 +81,7 @@ pub fn generate_model_token(
         post_update,
     } = generate_hook_tokens(hooks);
 
-    // this avoid cloning update when hooks are disabled
+    // This avoids cloning `update` when hooks are disabled.
     let update_token = if hooks {
         quote! { update.clone() }
     } else {
@@ -32,44 +91,50 @@ pub fn generate_model_token(
     quote! {
         #[::oximod::_async_trait::async_trait]
         impl ::oximod::_feature::model::Model for #name {
-            #[inline]
-            fn validate(&self) -> Result<(), ::oximod::OxiModError> {
-                let mut validation_errors = Vec::new();
-
-                #(#validations)*
-
-                if validation_errors.is_empty() {
-                    Ok(())
-                } else {
-                    Err(::oximod::OxiModError::validations(validation_errors))
-                }
-            }
-
-            fn get_collection_from(client: &::oximod::_mongodb::Client) -> Result<
+            fn get_collection_from(
+                client: &::oximod::_mongodb::Client,
+            ) -> Result<
                 ::oximod::_mongodb::Collection<Self>,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
                 let db = client.database(#db);
+
                 Ok(db.collection::<Self>(#collection))
             }
 
-            async fn save_from(&self, client: &::oximod::_mongodb::Client) -> Result<
+            async fn save_from(
+                &self,
+                client: &::oximod::_mongodb::Client,
+            ) -> Result<
                 ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
                 #pre_save
-                let id = self.__oximod_insert_with_client(client).await?;
+
+                let id = self
+                    .__oximod_insert_with_client(client)
+                    .await?;
+
                 #post_save
+
                 Ok(id)
             }
 
-            async fn save_from_mut(&mut self, client: &::oximod::_mongodb::Client) -> Result<
+            async fn save_from_mut(
+                &mut self,
+                client: &::oximod::_mongodb::Client,
+            ) -> Result<
                 ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
                 #pre_save_mut
-                let id = self.__oximod_insert_with_client(client).await?;
+
+                let id = self
+                    .__oximod_insert_with_client(client)
+                    .await?;
+
                 #post_save_mut
+
                 Ok(id)
             }
 
@@ -78,17 +143,29 @@ pub fn generate_model_token(
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
                 Option<Self>,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
                 #pre_find
-                let collection = Self::get_collection_from(client)?;
+
+                let collection =
+                    Self::get_collection_from(client)?;
+
                 let result = collection
-                    .find_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() })
+                    .find_one(
+                        ::oximod::_mongodb::bson::doc! {
+                            "_id": id.clone(),
+                        },
+                    )
                     .await
-                    .map_err(|e|
-                        ::oximod::OxiModError::database("Failed to find document by _id", e)
-                    )?;
+                    .map_err(|error| {
+                        ::oximod::OxiModError::database(
+                            "Failed to find document by _id",
+                            error,
+                        )
+                    })?;
+
                 #post_find
+
                 Ok(result)
             }
 
@@ -97,17 +174,29 @@ pub fn generate_model_token(
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
                 ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
                 #pre_delete
-                let collection = Self::get_collection_from(client)?;
+
+                let collection =
+                    Self::get_collection_from(client)?;
+
                 let result = collection
-                    .delete_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() })
+                    .delete_one(
+                        ::oximod::_mongodb::bson::doc! {
+                            "_id": id.clone(),
+                        },
+                    )
                     .await
-                    .map_err(|e|
-                        ::oximod::OxiModError::database("Failed to delete document by _id", e)
-                    )?;
+                    .map_err(|error| {
+                        ::oximod::OxiModError::database(
+                            "Failed to delete document by _id",
+                            error,
+                        )
+                    })?;
+
                 #post_delete
+
                 Ok(result)
             }
 
@@ -117,35 +206,53 @@ pub fn generate_model_token(
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
                 ::oximod::_mongodb::results::UpdateResult,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
                 #pre_update
-                let collection = Self::get_collection_from(client)?;
+
+                let collection =
+                    Self::get_collection_from(client)?;
+
                 let result = collection
-                    .update_one(::oximod::_mongodb::bson::doc! { "_id": id.clone() }, #update_token)
+                    .update_one(
+                        ::oximod::_mongodb::bson::doc! {
+                            "_id": id.clone(),
+                        },
+                        #update_token,
+                    )
                     .await
-                    .map_err(|e|
-                        ::oximod::OxiModError::database("Failed to update document by _id", e)
-                    )?;
+                    .map_err(|error| {
+                        ::oximod::OxiModError::database(
+                            "Failed to update document by _id",
+                            error,
+                        )
+                    })?;
+
                 #post_update
+
                 Ok(result)
             }
 
-            async fn clear_from(client: &::oximod::_mongodb::Client) -> Result<
+            async fn clear_from(
+                client: &::oximod::_mongodb::Client,
+            ) -> Result<
                 ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::OxiModError
+                ::oximod::OxiModError,
             > {
-                let collection = Self::get_collection_from(client)?;
+                let collection =
+                    Self::get_collection_from(client)?;
 
                 let result = collection
-                    .delete_many(::oximod::_mongodb::bson::doc! {})
+                    .delete_many(
+                        ::oximod::_mongodb::bson::doc! {},
+                    )
                     .await
-                    .map_err(|e|
+                    .map_err(|error| {
                         ::oximod::OxiModError::database(
                             "Failed to execute MongoDB delete_many operation",
-                            e,
+                            error,
                         )
-                )?;
+                    })?;
 
                 Ok(result)
             }

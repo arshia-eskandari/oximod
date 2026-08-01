@@ -2,7 +2,7 @@ mod common;
 
 use common::init;
 use mongodb::bson::oid::ObjectId;
-use oximod::{EmbeddedDocument, Model, Queryable};
+use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -12,7 +12,8 @@ use testresult::TestResult;
 async fn typed_query_sets_nested_document_field() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
@@ -32,12 +33,9 @@ async fn typed_query_sets_nested_document_field() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .address(Address {
-            city_name: "City1".to_owned(),
-            active: true,
-        })
+        .address(Address::new().city_name("City1").active(true))
         .save()
         .await?;
 
@@ -65,7 +63,8 @@ async fn typed_query_sets_nested_document_field() -> TestResult {
 async fn typed_query_unsets_optional_nested_document_field() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
@@ -87,12 +86,9 @@ async fn typed_query_unsets_optional_nested_document_field() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .address(Address {
-            city_name: "City1".to_owned(),
-            postal_code: Some("A1A 1A1".to_owned()),
-        })
+        .address(Address::new().city_name("City1").postal_code("A1A 1A1"))
         .save()
         .await?;
 
@@ -128,7 +124,8 @@ async fn typed_query_unsets_optional_nested_document_field() -> TestResult {
 async fn typed_query_increments_nested_numeric_field() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Statistics {
         login_count: i32,
@@ -148,12 +145,9 @@ async fn typed_query_increments_nested_numeric_field() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .statistics(Statistics {
-            login_count: 5,
-            balance: 10.5,
-        })
+        .statistics(Statistics::new().login_count(5).balance(10.5))
         .save()
         .await?;
 
@@ -199,7 +193,7 @@ async fn typed_query_updates_serde_renamed_fields() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .display_name("User1")
         .active(false)
         .login_count(5)
@@ -235,14 +229,16 @@ async fn typed_query_updates_serde_renamed_fields() -> TestResult {
 async fn typed_query_updates_multi_level_nested_field() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
         active: bool,
     }
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Profile {
         address: Address,
@@ -261,14 +257,9 @@ async fn typed_query_updates_multi_level_nested_field() -> TestResult {
 
     User::clear().await?;
 
-    User::default()
+    User::new()
         .name("User1")
-        .profile(Profile {
-            address: Address {
-                city_name: "City1".to_owned(),
-                active: false,
-            },
-        })
+        .profile(Profile::new().address(Address::new().city_name("City1").active(false)))
         .save()
         .await?;
 

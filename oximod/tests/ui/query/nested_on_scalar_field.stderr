@@ -7,10 +7,10 @@ error[E0599]: the method `nested` exists for struct `Field<std::string::String>`
   ::: $RUST/alloc/src/string.rs
    |
    | pub struct String {
-   | ----------------- doesn't satisfy `std::string::String: oximod::EmbeddedDocument`
+   | ----------------- doesn't satisfy `std::string::String: FieldSchema`
    |
    = note: the following trait bounds were not satisfied:
-           `std::string::String: oximod::EmbeddedDocument`
+           `std::string::String: FieldSchema`
 
 error[E0282]: type annotations needed
   --> tests/ui/query/nested_on_scalar_field.rs:16:64

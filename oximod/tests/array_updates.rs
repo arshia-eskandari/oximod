@@ -2,7 +2,7 @@ mod common;
 
 use common::init;
 use mongodb::bson::oid::ObjectId;
-use oximod::{EmbeddedDocument, Model, Queryable};
+use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -311,7 +311,8 @@ async fn typed_query_adds_multiple_unique_values_to_array() -> TestResult {
 async fn typed_query_updates_first_matching_array_element() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     #[serde(rename_all = "camelCase")]
     pub struct Address {
         city_name: String,
@@ -334,18 +335,9 @@ async fn typed_query_updates_first_matching_array_element() -> TestResult {
     User::default()
         .name("User1")
         .addresses(vec![
-            Address {
-                city_name: "City1".to_owned(),
-                active: false,
-            },
-            Address {
-                city_name: "City1".to_owned(),
-                active: false,
-            },
-            Address {
-                city_name: "City2".to_owned(),
-                active: false,
-            },
+            Address::new().city_name("City1").active(false),
+            Address::new().city_name("City1").active(false),
+            Address::new().city_name("City2").active(false),
         ])
         .save()
         .await?;
@@ -384,7 +376,8 @@ async fn typed_query_updates_first_matching_array_element() -> TestResult {
 async fn typed_query_updates_array_elements_matching_filter() -> TestResult {
     init().await?;
 
-    #[derive(EmbeddedDocument, Serialize, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
     pub struct Address {
         city: String,
         active: bool,
@@ -406,18 +399,9 @@ async fn typed_query_updates_array_elements_matching_filter() -> TestResult {
     User::default()
         .name("User1")
         .addresses(vec![
-            Address {
-                city: "City1".to_owned(),
-                active: false,
-            },
-            Address {
-                city: "City1".to_owned(),
-                active: false,
-            },
-            Address {
-                city: "City2".to_owned(),
-                active: false,
-            },
+            Address::new().city("City1").active(false),
+            Address::new().city("City1").active(false),
+            Address::new().city("City2").active(false),
         ])
         .save()
         .await?;

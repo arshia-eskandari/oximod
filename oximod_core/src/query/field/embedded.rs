@@ -1,17 +1,24 @@
-//! Embedded-document field paths and embedded-array operations.
+//! Embedded-model field paths and embedded-array operations.
+//!
+//! This module provides typed query and update methods for model fields whose
+//! values implement [`FieldSchema`](crate::query::FieldSchema).
+//!
+//! Both collection-backed models and models declared with
+//! `#[model(embedded)]` implement `FieldSchema`, allowing their generated
+//! fields to participate in nested MongoDB queries and updates.
 
 use mongodb::bson::Bson;
 
 use super::Field;
-use crate::query::embedded_document::EmbeddedDocument;
+use crate::query::FieldSchema;
 use crate::query::expression::{ComparisonOperator, Expression};
 use crate::query::update_expression::UpdateExpression;
 
 impl<T> Field<Vec<T>>
 where
-    T: EmbeddedDocument,
+    T: FieldSchema,
 {
-    /// Matches an array containing an embedded document that satisfies the
+    /// Matches an array containing an embedded model that satisfies the
     /// supplied typed conditions.
     ///
     /// ```ignore
@@ -32,7 +39,6 @@ where
         F: FnOnce(&T::Fields) -> Expression,
     {
         let fields = T::fields_with_prefix("");
-
         let expression = build(&fields);
 
         Expression::comparison(
@@ -71,7 +77,6 @@ where
         F: FnOnce(&T::Fields) -> UpdateExpression,
     {
         let prefix = format!("{}.$", self.name());
-
         let fields = T::fields_with_prefix(&prefix);
 
         build(&fields)
@@ -86,7 +91,7 @@ where
     where
         F: FnOnce(&T::Fields) -> UpdateExpression,
     {
-        let prefix = format!("{}.$[{}]", self.name(), identifier.as_ref(),);
+        let prefix = format!("{}.$[{}]", self.name(), identifier.as_ref());
 
         let fields = T::fields_with_prefix(&prefix);
 
@@ -95,7 +100,8 @@ where
 
     /// Builds a typed MongoDB array-filter condition.
     ///
-    /// The identifier must match the identifier passed to [`Field::filtered`].
+    /// The identifier must match the identifier passed to
+    /// [`Field::filtered`].
     ///
     /// ```ignore
     /// User::query()
@@ -129,12 +135,11 @@ where
 
 impl<T> Field<T>
 where
-    T: EmbeddedDocument,
+    T: FieldSchema,
 {
-    /// Provides the typed fields of this embedded document.
+    /// Provides the generated typed fields of this nested model.
     ///
-    /// The generated nested fields preserve the complete serialized MongoDB
-    /// path.
+    /// The generated fields preserve the complete serialized MongoDB path.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -147,8 +152,11 @@ where
     ///     .await?;
     /// ```
     ///
-    /// This method can return either a query or update expression depending
-    /// on what the closure builds.
+    /// This method can return a query expression, sort expression, update
+    /// expression, or another value depending on what the closure builds.
+    ///
+    /// Required and optional nested models use the same API because
+    /// `Option<T>` forwards its field schema to `T`.
     pub fn nested<R, F>(&self, build: F) -> R
     where
         F: FnOnce(&T::Fields) -> R,

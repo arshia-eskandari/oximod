@@ -1,9 +1,9 @@
 //! Typed model fields.
 //!
 //! [`Field`] represents a MongoDB field path together with its Rust value
-//! type. Generated model and embedded-document field structures contain
-//! `Field<T>` values, which expose only the query and update operations
-//! supported by `T`.
+//! type. Generated field structures for collection-backed and embedded
+//! models contain `Field<T>` values, which expose only the query and update
+//! operations supported by `T`.
 //!
 //! Applications normally access fields through [`crate::query::Queryable`]
 //! rather than constructing them directly.
@@ -199,7 +199,7 @@ impl<T> Field<T> {
 mod tests {
     use super::{Field, RegexOption};
     use crate::query::{
-        BsonType, EmbeddedDocument, Expression, UpdateExpression, expression::ComparisonOperator,
+        BsonType, Expression, FieldSchema, UpdateExpression, expression::ComparisonOperator,
     };
     use mongodb::bson::{Bson, DateTime, Regex, doc};
 
@@ -210,7 +210,7 @@ mod tests {
         active: Field<bool>,
     }
 
-    impl EmbeddedDocument for Address {
+    impl FieldSchema for Address {
         type Fields = AddressFields;
 
         fn fields_with_prefix(prefix: &str) -> Self::Fields {
@@ -799,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn embedded_document_array_builds_elem_match_expression() {
+    fn embedded_model_array_builds_elem_match_expression() {
         let addresses = Field::<Vec<Address>>::new("addresses");
 
         let expression = addresses

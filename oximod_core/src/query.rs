@@ -24,9 +24,9 @@
 
 mod bson_type;
 mod builder;
-mod embedded_document;
 mod expression;
 mod field;
+mod field_schema;
 mod geospatial;
 mod queryable;
 mod sort;
@@ -37,12 +37,10 @@ mod update_expression;
 pub use builder::Query;
 pub use expression::Expression;
 pub use field::{Field, RegexOption};
+pub use field_schema::FieldSchema;
 pub use queryable::Queryable;
 pub use sort::SortExpression;
 pub use update_expression::UpdateExpression;
-
-// Embedded documents.
-pub use embedded_document::EmbeddedDocument;
 
 // BSON and text-search configuration.
 pub use bson_type::BsonType;

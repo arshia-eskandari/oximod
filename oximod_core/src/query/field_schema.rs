@@ -95,11 +95,11 @@ pub trait FieldSchema {
     fn fields_with_prefix(prefix: &str) -> Self::Fields;
 }
 
-/// Treats an optional model as having the same typed fields as its contained
-/// value.
+/// Treats an optional model as having the same generated typed fields as its
+/// contained model.
 ///
-/// This allows required and optional embedded values to use the same typed
-/// query syntax:
+/// This enables `Field<Option<T>>` to use the same nested-query and nested-update
+/// operations as `Field<T>`:
 ///
 /// ```ignore
 /// User::query()
@@ -110,8 +110,8 @@ pub trait FieldSchema {
 ///     })
 /// ```
 ///
-/// The presence or absence of the stored value does not change its generated
-/// MongoDB field paths.
+/// Whether the stored value is required or optional does not change its
+/// generated MongoDB field paths.
 impl<T> FieldSchema for Option<T>
 where
     T: FieldSchema,

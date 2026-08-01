@@ -1,4 +1,4 @@
-use crate::parsers::parse_attr_value_ts;
+use crate::{helpers::ModelKind, parsers::parse_attr_value_ts};
 use proc_macro2::{Span, TokenStream};
 use syn::{Attribute, spanned::Spanned};
 
@@ -12,7 +12,12 @@ fn missing_attr_ts(attrs: &[Attribute], msg: &str) -> TokenStream {
     }
 }
 
-pub struct ModelAttrs {
+/// Collection-specific configuration for a collection-backed model.
+///
+/// These attributes are required or applicable only when deriving a regular
+/// collection-backed model. Embedded models do not have an independent MongoDB
+/// collection and therefore do not receive this configuration.
+pub struct CollectionAttrs {
     pub collection: String,
     pub db: String,
     pub index_max_retries: u32,
@@ -21,9 +26,28 @@ pub struct ModelAttrs {
     pub hooks: bool,
 }
 
+/// Top-level configuration collected for a model.
+///
+/// Every model has a [`ModelKind`]. Collection-backed models additionally
+/// contain [`CollectionAttrs`], while embedded models have no collection
+/// configuration.
+pub struct ModelAttrs {
+    pub kind: ModelKind,
+    pub collection: Option<CollectionAttrs>,
+}
+
 /// Collects and validates top-level model attributes, returning core model
 /// configuration values or compile error token streams on failure.
+///
+/// Models are collection-backed by default. Collection-backed models require
+/// both `#[db(...)]` and `#[collection(...)]`.
+///
+/// Models marked with `#[model(embedded)]` do not require collection
+/// configuration and reject attributes that are only meaningful for
+/// collection-backed models.
 pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStream> {
+    let kind = ModelKind::from_attrs(attrs)?;
+
     let mut collection: Option<String> = None;
     let mut db: Option<String> = None;
     let mut index_max_retries: u32 = 3;
@@ -33,6 +57,50 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
 
     for attr in attrs {
         let path = attr.path();
+
+        if path.is_ident("model") {
+            // The model mode is parsed separately by `ModelKind::from_attrs`.
+            continue;
+        }
+
+        if path.is_ident("serde") {
+            // Serde container attributes, such as `rename_all`, are handled
+            // separately by the generated serialization and query code.
+            continue;
+        }
+
+        if kind == ModelKind::Embedded {
+            let unsupported_attribute = if path.is_ident("collection") {
+                Some("collection")
+            } else if path.is_ident("db") {
+                Some("db")
+            } else if path.is_ident("index_max_retries") {
+                Some("index_max_retries")
+            } else if path.is_ident("index_max_init_seconds") {
+                Some("index_max_init_seconds")
+            } else if path.is_ident("document_id_setter_ident") {
+                Some("document_id_setter_ident")
+            } else if path.is_ident("hooks") {
+                Some("hooks")
+            } else {
+                None
+            };
+
+            if let Some(attribute_name) = unsupported_attribute {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    format!("`{attribute_name}` is not supported on embedded models"),
+                )
+                .to_compile_error());
+            }
+
+            return Err(syn::Error::new_spanned(
+                attr,
+                "Unsupported attribute for #[derive(Model)]",
+            )
+            .to_compile_error());
+        }
+
         if path.is_ident("collection") {
             collection = Some(parse_attr_value_ts::<String>(
                 attr,
@@ -58,10 +126,6 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
             )?;
         } else if path.is_ident("hooks") {
             hooks = true;
-        } else if path.is_ident("serde") {
-            // Serde container attributes, such as `rename_all`, are handled
-            // separately by the generated serialization and query code.
-            continue;
         } else {
             return Err(syn::Error::new_spanned(
                 attr,
@@ -69,6 +133,13 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
             )
             .to_compile_error());
         }
+    }
+
+    if kind == ModelKind::Embedded {
+        return Ok(ModelAttrs {
+            kind,
+            collection: None,
+        });
     }
 
     let collection = collection.ok_or_else(|| {
@@ -81,11 +152,14 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
     let db = db.ok_or_else(|| missing_attr_ts(attrs, r#"Missing #[db("db_name")] attribute"#))?;
 
     Ok(ModelAttrs {
-        collection,
-        db,
-        index_max_retries,
-        index_max_init_seconds,
-        document_id_setter_ident,
-        hooks,
+        kind,
+        collection: Some(CollectionAttrs {
+            collection,
+            db,
+            index_max_retries,
+            index_max_init_seconds,
+            document_id_setter_ident,
+            hooks,
+        }),
     })
 }
