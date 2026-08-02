@@ -1,20 +1,21 @@
-//! Model-trait implementation generation.
+//! Validation token generation for derived models.
 //!
-//! This module generates:
+//! This module generates validation support shared by collection and embedded
+//! models:
 //!
-//! - validation support shared by collection and embedded models;
-//! - the public inherent `validate()` method;
-//! - MongoDB persistence methods available only to collection models.
+//! - the internal `ModelCore` implementation;
+//! - aggregation of all configured field-validation errors;
+//! - the public inherent `validate()` method.
 //!
-//! Hook invocation tokens are generated separately by `hook_tokens`.
+//! Collection persistence methods are generated separately by
+//! `collection_model_token`.
 
-use crate::{
-    helpers::ModelKind,
-    model_macro::{HookTokens, generate_hook_tokens},
-};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
+use crate::helpers::ModelKind;
+
+/// Generates validation support for a collection or embedded model.
 pub fn generate_model_token(
     name: &Ident,
     kind: ModelKind,
@@ -37,7 +38,9 @@ pub fn generate_model_token(
     quote! {
         impl ::oximod::_feature::model::ModelCore<#mode> for #name {
             #[inline]
-            fn validate(&self) -> Result<(), ::oximod::OxiModError> {
+            fn validate(
+                &self,
+            ) -> Result<(), ::oximod::OxiModError> {
                 let mut validation_errors = Vec::new();
 
                 #(#validations)*
@@ -67,204 +70,6 @@ pub fn generate_model_token(
                 <
                     Self as ::oximod::_feature::model::ModelCore<#mode>
                 >::validate(self)
-            }
-        }
-    }
-}
-
-pub fn generate_collection_model_token(
-    name: &Ident,
-    db: &str,
-    collection: &str,
-    hooks: bool,
-) -> TokenStream {
-    let HookTokens {
-        pre_save,
-        post_save,
-        pre_save_mut,
-        post_save_mut,
-        pre_find,
-        post_find,
-        pre_delete,
-        post_delete,
-        pre_update,
-        post_update,
-    } = generate_hook_tokens(hooks);
-
-    // This avoids cloning `update` when hooks are disabled.
-    let update_token = if hooks {
-        quote! { update.clone() }
-    } else {
-        quote! { update }
-    };
-
-    quote! {
-        #[::oximod::_async_trait::async_trait]
-        impl ::oximod::_feature::model::Model for #name {
-            fn get_collection_from(
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                ::oximod::_mongodb::Collection<Self>,
-                ::oximod::OxiModError,
-            > {
-                let db = client.database(#db);
-
-                Ok(db.collection::<Self>(#collection))
-            }
-
-            async fn save_from(
-                &self,
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::OxiModError,
-            > {
-                #pre_save
-
-                let id = self
-                    .__oximod_insert_with_client(client)
-                    .await?;
-
-                #post_save
-
-                Ok(id)
-            }
-
-            async fn save_from_mut(
-                &mut self,
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                ::oximod::_mongodb::bson::oid::ObjectId,
-                ::oximod::OxiModError,
-            > {
-                #pre_save_mut
-
-                let id = self
-                    .__oximod_insert_with_client(client)
-                    .await?;
-
-                #post_save_mut
-
-                Ok(id)
-            }
-
-            async fn find_by_id_from(
-                id: ::oximod::_mongodb::bson::oid::ObjectId,
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                Option<Self>,
-                ::oximod::OxiModError,
-            > {
-                #pre_find
-
-                let collection =
-                    Self::get_collection_from(client)?;
-
-                let result = collection
-                    .find_one(
-                        ::oximod::_mongodb::bson::doc! {
-                            "_id": id.clone(),
-                        },
-                    )
-                    .await
-                    .map_err(|error| {
-                        ::oximod::OxiModError::database(
-                            "Failed to find document by _id",
-                            error,
-                        )
-                    })?;
-
-                #post_find
-
-                Ok(result)
-            }
-
-            async fn delete_by_id_from(
-                id: ::oximod::_mongodb::bson::oid::ObjectId,
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::OxiModError,
-            > {
-                #pre_delete
-
-                let collection =
-                    Self::get_collection_from(client)?;
-
-                let result = collection
-                    .delete_one(
-                        ::oximod::_mongodb::bson::doc! {
-                            "_id": id.clone(),
-                        },
-                    )
-                    .await
-                    .map_err(|error| {
-                        ::oximod::OxiModError::database(
-                            "Failed to delete document by _id",
-                            error,
-                        )
-                    })?;
-
-                #post_delete
-
-                Ok(result)
-            }
-
-            async fn update_by_id_from(
-                id: ::oximod::_mongodb::bson::oid::ObjectId,
-                update: ::oximod::_mongodb::bson::Document,
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                ::oximod::_mongodb::results::UpdateResult,
-                ::oximod::OxiModError,
-            > {
-                #pre_update
-
-                let collection =
-                    Self::get_collection_from(client)?;
-
-                let result = collection
-                    .update_one(
-                        ::oximod::_mongodb::bson::doc! {
-                            "_id": id.clone(),
-                        },
-                        #update_token,
-                    )
-                    .await
-                    .map_err(|error| {
-                        ::oximod::OxiModError::database(
-                            "Failed to update document by _id",
-                            error,
-                        )
-                    })?;
-
-                #post_update
-
-                Ok(result)
-            }
-
-            async fn clear_from(
-                client: &::oximod::_mongodb::Client,
-            ) -> Result<
-                ::oximod::_mongodb::results::DeleteResult,
-                ::oximod::OxiModError,
-            > {
-                let collection =
-                    Self::get_collection_from(client)?;
-
-                let result = collection
-                    .delete_many(
-                        ::oximod::_mongodb::bson::doc! {},
-                    )
-                    .await
-                    .map_err(|error| {
-                        ::oximod::OxiModError::database(
-                            "Failed to execute MongoDB delete_many operation",
-                            error,
-                        )
-                    })?;
-
-                Ok(result)
             }
         }
     }
@@ -367,7 +172,7 @@ mod tests {
 Err(::oximod::OxiModError::validations(validation_errors,),)}"
             ),
             "generated validation should aggregate all errors; \
-     generated tokens: {generated}"
+             generated tokens: {generated}"
         );
     }
 
