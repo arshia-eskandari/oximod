@@ -211,3 +211,142 @@ pub fn generate_collection_model_token(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use quote::{ToTokens, format_ident};
+    use syn::{ImplItem, Item, parse2};
+
+    use super::generate_collection_model_token;
+
+    #[test]
+    fn generates_collection_model_implementation() {
+        let name = format_ident!("User");
+
+        let tokens = generate_collection_model_token(&name, "app_db", "users", false);
+
+        let generated_file: syn::File = parse2(tokens).expect("generated tokens should parse");
+
+        assert_eq!(generated_file.items.len(), 1);
+
+        let Item::Impl(model_impl) = &generated_file.items[0] else {
+            panic!("generated item should be an impl");
+        };
+
+        let Some((_, trait_path, _)) = &model_impl.trait_ else {
+            panic!("generated impl should target a trait");
+        };
+
+        assert_eq!(compact(trait_path), "::oximod::_feature::model::Model");
+
+        assert_eq!(compact(model_impl.self_ty.as_ref()), "User");
+    }
+
+    #[test]
+    fn generates_all_collection_persistence_methods() {
+        let name = format_ident!("User");
+
+        let tokens = generate_collection_model_token(&name, "app_db", "users", false);
+
+        let generated_file: syn::File = parse2(tokens).expect("generated tokens should parse");
+
+        let Item::Impl(model_impl) = &generated_file.items[0] else {
+            panic!("generated item should be an impl");
+        };
+
+        let method_names = model_impl
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ImplItem::Fn(function) => Some(function.sig.ident.to_string()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            method_names,
+            [
+                "get_collection_from",
+                "save_from",
+                "save_from_mut",
+                "find_by_id_from",
+                "delete_by_id_from",
+                "update_by_id_from",
+                "clear_from",
+            ]
+        );
+    }
+
+    #[test]
+    fn uses_configured_database_and_collection_names() {
+        let name = format_ident!("User");
+
+        let generated = compact(&generate_collection_model_token(
+            &name, "app_db", "users", false,
+        ));
+
+        assert!(
+            generated.contains("client.database(\"app_db\")"),
+            "generated implementation should use the configured database; \
+             generated tokens: {generated}"
+        );
+
+        assert!(
+            generated.contains("db.collection::<Self>(\"users\")"),
+            "generated implementation should use the configured collection; \
+             generated tokens: {generated}"
+        );
+    }
+
+    #[test]
+    fn disabled_hooks_generate_no_hook_calls_or_update_clone() {
+        let name = format_ident!("User");
+
+        let generated = compact(&generate_collection_model_token(
+            &name, "app_db", "users", false,
+        ));
+
+        assert!(
+            !generated.contains("::oximod::Hooks"),
+            "disabled hooks should not add hook calls; \
+             generated tokens: {generated}"
+        );
+
+        assert!(
+            !generated.contains("update.clone()"),
+            "updates should not be cloned when hooks are disabled; \
+             generated tokens: {generated}"
+        );
+    }
+
+    #[test]
+    fn enabled_hooks_generate_hook_calls_and_update_clone() {
+        let name = format_ident!("User");
+
+        let generated = compact(&generate_collection_model_token(
+            &name, "app_db", "users", true,
+        ));
+
+        assert!(
+            generated.contains("<Selfas::oximod::Hooks>::pre_save(self).await?;"),
+            "enabled hooks should generate pre-save invocation; \
+             generated tokens: {generated}"
+        );
+
+        assert!(
+            generated.contains("<Selfas::oximod::Hooks>::post_update(id,&update,).await?;"),
+            "enabled hooks should generate post-update invocation; \
+             generated tokens: {generated}"
+        );
+
+        assert!(
+            generated.contains("update.clone()"),
+            "the update document should be cloned when hooks need it \
+             after the database operation; generated tokens: {generated}"
+        );
+    }
+
+    fn compact(tokens: &impl ToTokens) -> String {
+        tokens.to_token_stream().to_string().replace(' ', "")
+    }
+}
