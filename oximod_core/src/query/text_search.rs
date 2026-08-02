@@ -4,8 +4,8 @@
 //! Applications can pass either a plain string or a configured `TextSearch`
 //! value to [`Query::text`](crate::query::Query::text).
 //!
-//! The collection must have an appropriate text index before MongoDB can
-//! execute a text-search query.
+//! The target collection must have an appropriate text index before MongoDB
+//! can execute the query.
 
 use mongodb::bson::{Bson, Document};
 
@@ -23,7 +23,7 @@ use mongodb::bson::{Bson, Document};
 /// Use `TextSearch` when additional MongoDB options are required:
 ///
 /// ```ignore
-/// use oximod::TextSearch;
+/// use oximod_core::query::TextSearch;
 ///
 /// let articles = Article::query()
 ///     .text(
@@ -53,8 +53,11 @@ use mongodb::bson::{Bson, Document};
 /// Unconfigured Boolean options are omitted from the generated BSON document.
 /// This distinguishes an unspecified option from one explicitly set to
 /// `false`.
-#[must_use]
+///
+/// Calling the same configuration method more than once replaces its earlier
+/// value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "a text search must be attached to a query"]
 pub struct TextSearch {
     search: String,
     language: Option<String>,
@@ -71,16 +74,18 @@ impl TextSearch {
     ///
     /// # Parameters
     ///
-    /// - `search`: The terms and text-search syntax to pass to MongoDB.
+    /// - `search`: the terms and text-search syntax to pass to MongoDB.
     ///
     /// # Example
     ///
     /// ```
-    /// use oximod::TextSearch;
+    /// use oximod_core::query::TextSearch;
     ///
     /// let search = TextSearch::new(
     ///     "\"rust mongodb\" -beginner",
     /// );
+    ///
+    /// # let _ = search;
     /// ```
     pub fn new(search: impl Into<String>) -> Self {
         Self {
@@ -94,14 +99,14 @@ impl TextSearch {
     /// Sets the language used by MongoDB to parse and stem search terms.
     ///
     /// Use `"none"` to disable language-specific stemming and stop-word
-    /// processing when supported by the collection's text index.
+    /// processing.
     ///
     /// ```ignore
     /// let search = TextSearch::new("running")
     ///     .language("none");
     /// ```
     ///
-    /// A later call replaces the previously configured language.
+    /// Calling this method again replaces the previously configured language.
     pub fn language(mut self, language: impl Into<String>) -> Self {
         self.language = Some(language.into());
         self
@@ -110,7 +115,8 @@ impl TextSearch {
     /// Controls whether MongoDB distinguishes uppercase and lowercase
     /// characters.
     ///
-    /// The option is omitted unless this method is called.
+    /// The option is omitted unless this method is called. Calling it again
+    /// replaces the previous value.
     ///
     /// ```ignore
     /// let search = TextSearch::new("Rust")
@@ -118,14 +124,14 @@ impl TextSearch {
     /// ```
     pub const fn case_sensitive(mut self, case_sensitive: bool) -> Self {
         self.case_sensitive = Some(case_sensitive);
-
         self
     }
 
     /// Controls whether MongoDB distinguishes characters with and without
     /// diacritical marks.
     ///
-    /// The option is omitted unless this method is called.
+    /// The option is omitted unless this method is called. Calling it again
+    /// replaces the previous value.
     ///
     /// ```ignore
     /// let search = TextSearch::new("café")
@@ -133,11 +139,11 @@ impl TextSearch {
     /// ```
     pub const fn diacritic_sensitive(mut self, diacritic_sensitive: bool) -> Self {
         self.diacritic_sensitive = Some(diacritic_sensitive);
-
         self
     }
 
     /// Converts this configuration into a top-level MongoDB `$text` document.
+    #[must_use]
     pub(crate) fn into_document(self) -> Document {
         let mut options = Document::new();
 
@@ -251,6 +257,28 @@ mod tests {
             doc! {
                 "$text": {
                     "$search": "rust",
+                    "$caseSensitive": false,
+                    "$diacriticSensitive": false,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn repeated_options_replace_previous_values() {
+        assert_eq!(
+            TextSearch::new("rust")
+                .language("english")
+                .language("none")
+                .case_sensitive(true)
+                .case_sensitive(false)
+                .diacritic_sensitive(true)
+                .diacritic_sensitive(false)
+                .into_document(),
+            doc! {
+                "$text": {
+                    "$search": "rust",
+                    "$language": "none",
                     "$caseSensitive": false,
                     "$diacriticSensitive": false,
                 },

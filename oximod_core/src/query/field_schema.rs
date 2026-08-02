@@ -1,21 +1,22 @@
-//! Support for generated typed field schemas.
+//! Support for generated typed-field schemas.
 //!
-//! [`FieldSchema`] connects an OxiMod model to the generated field structure
-//! used by the typed query and update APIs.
+//! [`FieldSchema`] connects a model to the generated field structure used by
+//! OxiMod's typed query and update APIs.
 //!
-//! Both collection-backed models and models marked with `#[model(embedded)]`
-//! implement this trait automatically through `#[derive(Model)]`.
-//!
-//! Applications generally do not implement this trait manually.
+//! Collection-backed models and models declared with `#[model(embedded)]`
+//! implement this trait automatically through `#[derive(Model)]`. Applications
+//! normally do not implement or reference it directly.
 
 /// A model whose fields can be represented as typed MongoDB paths.
 ///
 /// OxiMod's `Model` derive generates an associated field structure containing
 /// typed [`Field`](crate::query::Field) values. Each generated field stores its
-/// complete MongoDB path, including any parent prefixes.
+/// complete serialized MongoDB path, including any supplied parent, positional,
+/// or array-filter prefix.
 ///
-/// Collection-backed models use an empty prefix when constructing root-level
-/// fields. Embedded models use the path of their containing field.
+/// Collection-backed models use an empty prefix at the root of a query.
+/// Embedded models and embedded-array operations provide the prefix of the
+/// containing MongoDB path.
 ///
 /// # Example
 ///
@@ -70,27 +71,27 @@
 /// # }
 /// ```
 ///
-/// The generated field paths preserve nesting. In the example above, the
-/// `city` field is represented internally as `"address.city"`.
+/// The generated field paths preserve nesting. In this example, the `city`
+/// field is represented internally as `"address.city"`.
 ///
-/// Optional embedded models are supported automatically through the
-/// implementation for `Option<T>`.
+/// Optional embedded models are supported through the implementation for
+/// `Option<T>`.
 #[doc(hidden)]
 pub trait FieldSchema {
     /// The generated typed-field structure associated with this model.
     ///
-    /// Each field in this structure contains its complete MongoDB path,
-    /// including any parent prefixes.
+    /// Each field in the structure contains its complete serialized MongoDB
+    /// path, including any supplied prefix.
     type Fields;
 
-    /// Creates the generated typed-field structure using `prefix` as the
-    /// containing MongoDB document path.
+    /// Creates the generated typed-field structure beneath `prefix`.
     ///
-    /// An empty prefix creates root-level field paths. A nonempty prefix
-    /// creates nested paths using MongoDB dot notation.
+    /// An empty prefix creates root-level paths. A nonempty prefix creates
+    /// nested or positional paths using MongoDB dot notation.
     ///
-    /// This method is called by generated query code when a model is used at
-    /// the root of a query or nested inside another model.
+    /// Generated query code calls this method when a model is used at the root
+    /// of a query, nested inside another model, or inside an embedded-model
+    /// array operation.
     #[doc(hidden)]
     fn fields_with_prefix(prefix: &str) -> Self::Fields;
 }
@@ -98,8 +99,8 @@ pub trait FieldSchema {
 /// Treats an optional model as having the same generated typed fields as its
 /// contained model.
 ///
-/// This enables `Field<Option<T>>` to use the same nested-query and nested-update
-/// operations as `Field<T>`:
+/// This allows `Field<Option<T>>` to use the same nested-query and
+/// nested-update operations as `Field<T>`:
 ///
 /// ```ignore
 /// User::query()
@@ -110,8 +111,8 @@ pub trait FieldSchema {
 ///     })
 /// ```
 ///
-/// Whether the stored value is required or optional does not change its
-/// generated MongoDB field paths.
+/// Whether the stored model is required or optional does not change its
+/// generated MongoDB paths.
 impl<T> FieldSchema for Option<T>
 where
     T: FieldSchema,

@@ -1,9 +1,12 @@
 //! Type-safe MongoDB queries and updates.
 //!
-//! This module contains the building blocks used by OxiMod's typed query API.
-//! Most applications begin with [`Queryable::query`] and construct filters,
-//! sorting, updates, text searches, and geospatial queries through generated
-//! [`Field`] values.
+//! This module contains the runtime building blocks for OxiMod's typed-query
+//! API. Applications normally begin with [`Queryable::query`] and construct
+//! filters, sorting, pagination, updates, deletions, text searches, and
+//! geospatial queries through generated [`Field`] values.
+//!
+//! Public query types are re-exported from the main `oximod` crate, so
+//! applications should normally import them directly from `oximod`.
 //!
 //! # Example
 //!
@@ -18,9 +21,6 @@
 //!     .all()
 //!     .await?;
 //! ```
-//!
-//! Public query types are re-exported from the `oximod` crate root, so
-//! applications normally import them directly from `oximod`.
 
 mod bson_type;
 mod builder;
@@ -33,11 +33,10 @@ mod sort;
 mod text_search;
 mod update_expression;
 
-// Core query API.
+// Core typed-query API.
 pub use builder::Query;
 pub use expression::Expression;
 pub use field::{Field, RegexOption};
-pub use field_schema::FieldSchema;
 pub use queryable::Queryable;
 pub use sort::SortExpression;
 pub use update_expression::UpdateExpression;
@@ -49,7 +48,7 @@ pub use text_search::TextSearch;
 // GeoJSON values and geospatial query configuration.
 pub use geospatial::{GeoPoint, GeoPolygon, NearQuery};
 
-// Internal support types used by generated code and typed field methods.
+// Internal support used by generated code and typed-field implementations.
 #[doc(hidden)]
 pub use expression::ElementExpression;
 
@@ -58,6 +57,9 @@ pub use field::{
     DateQueryValue, ElementField, IntegerQueryValue, NumericQueryValue, OrderedQueryValue,
     StringQueryValue,
 };
+
+#[doc(hidden)]
+pub use field_schema::FieldSchema;
 
 #[doc(hidden)]
 pub use geospatial::{GeoGeometry, GeoPointQueryValue, GeoQueryValue};

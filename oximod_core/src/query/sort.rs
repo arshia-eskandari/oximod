@@ -21,14 +21,17 @@ use mongodb::bson::{Bson, Document, doc};
 ///
 /// Sort expressions are created by:
 ///
-/// - [`Field::asc`](crate::query::Field::asc)
-/// - [`Field::desc`](crate::query::Field::desc)
-/// - [`Query::sort_by_text_score`](crate::query::Query::sort_by_text_score)
+/// - [`Field::asc`](crate::query::Field::asc);
+/// - [`Field::desc`](crate::query::Field::desc);
+/// - [`Query::sort_by_text_score`](crate::query::Query::sort_by_text_score).
 ///
 /// Multiple expressions are combined by
 /// [`Query::then_sort_by`](crate::query::Query::then_sort_by). Their insertion
 /// order is preserved because MongoDB evaluates sort fields from left to
 /// right.
+///
+/// When the same field is appended more than once, the later direction replaces
+/// the earlier direction in the final MongoDB document.
 ///
 /// # Example
 ///
@@ -50,8 +53,8 @@ use mongodb::bson::{Bson, Document, doc};
 ///     "name": 1
 /// }
 /// ```
-#[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "a sort expression must be attached to a query"]
 pub struct SortExpression {
     fields: Vec<SortField>,
 }
@@ -99,8 +102,8 @@ impl SortExpression {
 
     /// Creates a MongoDB text-score sort expression.
     ///
-    /// The supplied field name is an internal placeholder. MongoDB uses the
-    /// `$meta: "textScore"` value to determine the ordering.
+    /// The supplied field name becomes the key containing
+    /// `{ "$meta": "textScore" }` in the MongoDB sort document.
     pub(crate) fn text_score(field: impl Into<String>) -> Self {
         Self {
             fields: vec![SortField {
@@ -113,11 +116,18 @@ impl SortExpression {
     /// Appends every field from `other`.
     ///
     /// Existing fields remain first, preserving MongoDB's sort precedence.
+    /// A duplicate field replaces its earlier value when the final BSON
+    /// document is created.
     pub(crate) fn extend(&mut self, other: Self) {
         self.fields.extend(other.fields);
     }
 
     /// Converts this expression into a MongoDB sort document.
+    ///
+    /// Field insertion order is preserved. Because BSON documents cannot
+    /// contain duplicate keys through this representation, a later entry for
+    /// the same field replaces the earlier value.
+    #[must_use]
     pub(crate) fn into_document(self) -> Document {
         let mut document = Document::new();
 
@@ -131,6 +141,7 @@ impl SortExpression {
 
 impl SortValue {
     /// Returns the BSON value expected by MongoDB for this sort type.
+    #[must_use]
     fn mongo_value(self) -> Bson {
         match self {
             Self::Ascending => Bson::Int32(1),
@@ -204,7 +215,6 @@ mod tests {
         let mut sort = SortExpression::ascending("role");
 
         sort.extend(SortExpression::descending("age"));
-
         sort.extend(SortExpression::ascending("name"));
 
         assert_eq!(
@@ -213,6 +223,20 @@ mod tests {
                 "role": 1,
                 "age": -1,
                 "name": 1,
+            }
+        );
+    }
+
+    #[test]
+    fn later_duplicate_sort_replaces_direction() {
+        let mut sort = SortExpression::ascending("age");
+
+        sort.extend(SortExpression::descending("age"));
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "age": -1,
             }
         );
     }

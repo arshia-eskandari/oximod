@@ -1,24 +1,34 @@
 //! Typed query construction and execution.
 //!
 //! This module contains [`Query`], the builder produced by
-//! [`Queryable::query`]. Queries can be filtered, sorted, paginated,
-//! executed, updated, or deleted without manually constructing BSON
-//! documents.
+//! [`Queryable::query`]. It stores typed filters and query modifiers until an
+//! execution method reads from, updates, or deletes documents in the model's
+//! MongoDB collection.
+//!
+//! Filters and text searches apply to every execution method. Sorting applies
+//! to reads and single-document writes. Skipping, limiting, and pagination are
+//! applied by [`Query::all`]; bulk writes reject them rather than silently
+//! ignoring them. Array filters are used only by typed update operations.
 
 use std::marker::PhantomData;
 
-use mongodb::bson::Document;
-use mongodb::options::ReturnDocument;
-use mongodb::results::{DeleteResult, UpdateResult};
+use mongodb::{
+    bson::Document,
+    options::ReturnDocument,
+    results::{DeleteResult, UpdateResult},
+};
 
-use crate::error::oximod_error::OxiModError;
-use crate::error::query_error::{BulkWriteOperation, QueryError, QueryModifier};
-use crate::feature::model::Model;
-use crate::query::TextSearch;
-use crate::query::expression::Expression;
-use crate::query::queryable::Queryable;
-use crate::query::sort::SortExpression;
-use crate::query::update_expression::UpdateExpression;
+use crate::{
+    error::{
+        oximod_error::OxiModError,
+        query_error::{BulkWriteOperation, QueryError, QueryModifier},
+    },
+    feature::model::Model,
+    query::{
+        expression::Expression, queryable::Queryable, sort::SortExpression,
+        text_search::TextSearch, update_expression::UpdateExpression,
+    },
+};
 
 /// A type-safe MongoDB query for model `M`.
 ///
@@ -48,7 +58,20 @@ use crate::query::update_expression::UpdateExpression;
 /// [`Query::then_sort_by`] appends an additional sort field.
 ///
 /// Some validation errors, such as invalid pagination, are recorded while the
-/// query is being built and returned when the query is executed.
+/// query is being built and returned when the query is executed. When several
+/// construction errors occur, the first error is preserved.
+///
+/// # Modifier scope
+///
+/// - filters and text searches apply to every execution method;
+/// - sorting applies to [`Query::all`], [`Query::first`],
+///   [`Query::update_one`], and [`Query::delete_one`];
+/// - skipping, limiting, and pagination are applied by [`Query::all`];
+/// - [`Query::count`] ignores sorting, skipping, limiting, and pagination;
+/// - [`Query::update_all`] and [`Query::delete_all`] reject sorting, skipping,
+///   limiting, and pagination;
+/// - array filters are applied by [`Query::update_one`] and
+///   [`Query::update_all`].
 #[must_use = "queries do nothing unless an execution method is called"]
 #[derive(Debug, Clone)]
 pub struct Query<M> {
@@ -67,7 +90,8 @@ impl<M> Query<M> {
     /// Creates an empty query.
     ///
     /// This constructor is used by [`Queryable::query`] and generated model
-    /// code. Applications should normally call `Model::query()` instead.
+    /// code. Applications should normally call `User::query()` on a derived
+    /// model instead.
     #[doc(hidden)]
     pub const fn new() -> Self {
         Self {
@@ -277,7 +301,8 @@ where
 
     /// Limits the number of documents returned by [`Query::all`].
     ///
-    /// A later call replaces the previously configured limit.
+    /// A later call replaces the previously configured limit. The limit is
+    /// applied by [`Query::all`]. Bulk writes reject configured limits.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -302,7 +327,8 @@ where
     /// Skips matching documents before collecting results with
     /// [`Query::all`].
     ///
-    /// A later call replaces the previously configured offset.
+    /// A later call replaces the previously configured offset. The offset is
+    /// applied by [`Query::all`]. Bulk writes reject configured offsets.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -352,8 +378,10 @@ where
     /// - `page_size == 0`
     /// - multiplication overflow while calculating the offset
     ///
-    /// Pagination is not supported by [`Query::update_all`] or
-    /// [`Query::delete_all`].
+    /// Pagination is applied by [`Query::all`] and ignored by
+    /// [`Query::count`]. It is not supported by [`Query::update_all`] or
+    /// [`Query::delete_all`]. Single-document operations select by filter and
+    /// sorting rather than by page.
     pub fn page(mut self, page: u64, page_size: u64) -> Self {
         self.pagination = true;
 
@@ -497,7 +525,8 @@ where
     /// Returns the first document matching this query.
     ///
     /// Sorting can be used to control which matching document is considered
-    /// first.
+    /// first. Skipping, limiting, and pagination are not applied by this
+    /// method.
     ///
     /// ```ignore
     /// let user = User::query()
@@ -647,7 +676,8 @@ where
     /// Deletes and returns the first matching document.
     ///
     /// When sorting is configured, the first document according to that
-    /// ordering is deleted.
+    /// ordering is deleted. Skipping, limiting, and pagination are not applied
+    /// by this method.
     ///
     /// ```ignore
     /// let deleted = User::query()
@@ -767,8 +797,9 @@ where
     /// must produce an [`UpdateExpression`].
     ///
     /// When sorting is configured, the first document according to that
-    /// ordering is updated. The returned document reflects the value after
-    /// the update.
+    /// ordering is updated. Skipping, limiting, and pagination are not applied
+    /// by this method. The returned document reflects the value after the
+    /// update.
     ///
     /// ```ignore
     /// let updated = User::query()
@@ -917,9 +948,10 @@ where
         })
     }
 }
+
 #[cfg(test)]
 mod tests {
-    use crate::error::query_error::QueryError;
+    use crate::error::query_error::{BulkWriteOperation, QueryError, QueryModifier};
     use crate::query::{Field, Query, Queryable, SortExpression, TextSearch};
     use mongodb::bson::doc;
 
@@ -1175,6 +1207,98 @@ mod tests {
                 page: u64::MAX,
                 page_size: 2,
             }),
+        );
+    }
+
+    #[test]
+    fn later_limit_and_skip_calls_replace_previous_values() {
+        let query = User::query().limit(10).limit(20).skip(5).skip(7);
+
+        assert_eq!(query.limit, Some(20));
+        assert_eq!(query.skip, Some(7));
+    }
+
+    #[test]
+    fn later_sort_by_call_replaces_previous_sort() {
+        let query = User::query()
+            .sort_by(|user| user.age.asc())
+            .sort_by(|user| user.role.desc());
+
+        let sort = query.sort.expect("query should contain sorting");
+
+        assert_eq!(
+            sort.into_document(),
+            doc! {
+                "role": -1,
+            },
+        );
+    }
+
+    #[test]
+    fn first_construction_error_is_preserved() {
+        let query = User::query().page(0, 10).page(1, 0);
+
+        assert_eq!(query.error, Some(QueryError::InvalidPageNumber { page: 0 }),);
+    }
+
+    #[test]
+    fn array_filter_calls_accumulate_documents() {
+        let query = User::query()
+            .array_filter(|user| user.active.eq(false))
+            .array_filter(|user| user.age.gte(18));
+
+        assert_eq!(
+            query.array_filters,
+            vec![
+                doc! {
+                    "active": false,
+                },
+                doc! {
+                    "age": {
+                        "$gte": 18,
+                    },
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn bulk_writes_reject_unsupported_modifiers() {
+        let cases = [
+            (true, false, false, false, QueryModifier::Pagination),
+            (false, true, false, false, QueryModifier::Sort),
+            (false, false, true, false, QueryModifier::Skip),
+            (false, false, false, true, QueryModifier::Limit),
+        ];
+
+        for (pagination, has_sort, has_skip, has_limit, modifier) in cases {
+            assert_eq!(
+                Query::<User>::validate_bulk_write_modifiers(
+                    BulkWriteOperation::UpdateAll,
+                    pagination,
+                    has_sort,
+                    has_skip,
+                    has_limit,
+                ),
+                Err(QueryError::UnsupportedBulkWriteModifier {
+                    operation: BulkWriteOperation::UpdateAll,
+                    modifier,
+                }),
+            );
+        }
+    }
+
+    #[test]
+    fn bulk_writes_accept_queries_without_unsupported_modifiers() {
+        assert_eq!(
+            Query::<User>::validate_bulk_write_modifiers(
+                BulkWriteOperation::DeleteAll,
+                false,
+                false,
+                false,
+                false,
+            ),
+            Ok(()),
         );
     }
 

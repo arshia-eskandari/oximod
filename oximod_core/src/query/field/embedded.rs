@@ -3,9 +3,9 @@
 //! This module provides typed query and update methods for model fields whose
 //! values implement [`FieldSchema`](crate::query::FieldSchema).
 //!
-//! Both collection-backed models and models declared with
-//! `#[model(embedded)]` implement `FieldSchema`, allowing their generated
-//! fields to participate in nested MongoDB queries and updates.
+//! Models declared with `#[model(embedded)]` receive a generated field schema.
+//! `Option<T>` forwards the schema of `T`, so required and optional embedded
+//! fields use the same nested API.
 
 use mongodb::bson::Bson;
 
@@ -20,6 +20,9 @@ where
 {
     /// Matches an array containing an embedded model that satisfies the
     /// supplied typed conditions.
+    ///
+    /// The generated fields are relative to the array element, so their paths
+    /// do not include the array field name inside `$elemMatch`.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -91,8 +94,7 @@ where
     where
         F: FnOnce(&T::Fields) -> UpdateExpression,
     {
-        let prefix = format!("{}.$[{}]", self.name(), identifier.as_ref());
-
+        let prefix = format!("{}.$[{}]", self.name(), identifier.as_ref(),);
         let fields = T::fields_with_prefix(&prefix);
 
         build(&fields)
@@ -100,8 +102,8 @@ where
 
     /// Builds a typed MongoDB array-filter condition.
     ///
-    /// The identifier must match the identifier passed to
-    /// [`Field::filtered`].
+    /// The identifier becomes the root prefix of each generated filter path
+    /// and must match the identifier passed to [`Field::filtered`].
     ///
     /// ```ignore
     /// User::query()
@@ -164,5 +166,164 @@ where
         let fields = T::fields_with_prefix(self.name());
 
         build(&fields)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::query::{Field, FieldSchema};
+    use mongodb::bson::doc;
+
+    struct Address;
+
+    struct AddressFields {
+        city: Field<String>,
+        active: Field<bool>,
+    }
+
+    impl FieldSchema for Address {
+        type Fields = AddressFields;
+
+        fn fields_with_prefix(prefix: &str) -> Self::Fields {
+            AddressFields {
+                city: Field::from_prefixed(prefix, "city"),
+                active: Field::from_prefixed(prefix, "active"),
+            }
+        }
+    }
+
+    #[test]
+    fn nested_field_prefixes_embedded_field_paths() {
+        let address = Field::<Address>::new("address");
+
+        let expression =
+            address.nested(|address| address.city.eq("City1") & address.active.eq(true));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "address.city": "City1",
+                    },
+                    {
+                        "address.active": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn optional_nested_field_prefixes_embedded_paths() {
+        let address = Field::<Option<Address>>::new("address");
+
+        let expression =
+            address.nested(|address| address.city.eq("City1") & address.active.eq(true));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "address.city": "City1",
+                    },
+                    {
+                        "address.active": true,
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_model_array_builds_elem_match_expression() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let expression = addresses
+            .elem_match_nested(|address| address.city.eq("City1") & address.active.eq(true));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "addresses": {
+                    "$elemMatch": {
+                        "$and": [
+                            {
+                                "city": "City1",
+                            },
+                            {
+                                "active": true,
+                            },
+                        ],
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_positional_builds_prefixed_update_path() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let update = addresses.positional(|address| address.active.set(true));
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "addresses.$.active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_filtered_builds_identifier_update_path() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let update = addresses.filtered("address", |address| address.active.set(true));
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "addresses.$[address].active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_filtered_combines_multiple_update_paths() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let update = addresses.filtered("address", |address| {
+            address.city.set("City2") & address.active.set(true)
+        });
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "addresses.$[address].city": "City2",
+                    "addresses.$[address].active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn embedded_array_builds_identifier_filter_expression() {
+        let addresses = Field::<Vec<Address>>::new("addresses");
+
+        let expression = addresses.array_filter("address", |address| address.city.eq("City1"));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "address.city": "City1",
+            }
+        );
     }
 }

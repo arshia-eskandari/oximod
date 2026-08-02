@@ -1,8 +1,8 @@
 //! BSON type aliases used by typed `$type` queries.
 //!
-//! MongoDB's `$type` query operator accepts either numeric BSON type codes or
-//! string aliases. OxiMod exposes the string aliases through [`BsonType`] so
-//! queries remain readable and type-safe.
+//! MongoDB's `$type` query operator accepts numeric BSON type codes or string
+//! aliases. OxiMod exposes the string aliases through [`BsonType`] so typed
+//! queries remain readable and avoid raw string literals.
 
 use mongodb::bson::Bson;
 
@@ -35,8 +35,8 @@ use mongodb::bson::Bson;
 /// }
 /// ```
 ///
-/// `$type` checks the BSON representation stored in MongoDB. It does not
-/// perform Rust type conversion or deserialize values before matching.
+/// `$type` inspects the BSON representation stored in MongoDB. It does not
+/// convert Rust values or deserialize documents before matching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BsonType {
     /// A 64-bit IEEE 754 floating-point value.
@@ -49,7 +49,7 @@ pub enum BsonType {
     /// MongoDB alias: `"string"`.
     String,
 
-    /// An embedded BSON document.
+    /// A BSON document.
     ///
     /// MongoDB alias: `"object"`.
     Object,
@@ -132,6 +132,7 @@ pub enum BsonType {
 
 impl BsonType {
     /// Returns MongoDB's canonical string alias for this BSON type.
+    #[must_use]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Double => "double",
@@ -190,51 +191,11 @@ mod tests {
             (BsonType::MaxKey, "maxKey"),
         ];
 
-        for (bson_type, expected) in cases {
-            assert_eq!(bson_type.as_str(), expected,);
-        }
-    }
-
-    #[test]
-    fn bson_type_converts_to_bson_string() {
-        assert_eq!(
-            Bson::from(BsonType::String),
-            Bson::String("string".to_owned(),),
-        );
-
-        assert_eq!(
-            Bson::from(BsonType::Int64),
-            Bson::String("long".to_owned(),),
-        );
-    }
-
-    #[test]
-    fn every_bson_type_converts_to_its_alias() {
-        let cases = [
-            BsonType::Double,
-            BsonType::String,
-            BsonType::Object,
-            BsonType::Array,
-            BsonType::Binary,
-            BsonType::ObjectId,
-            BsonType::Boolean,
-            BsonType::Date,
-            BsonType::Null,
-            BsonType::RegularExpression,
-            BsonType::JavaScript,
-            BsonType::JavaScriptWithScope,
-            BsonType::Int32,
-            BsonType::Timestamp,
-            BsonType::Int64,
-            BsonType::Decimal128,
-            BsonType::MinKey,
-            BsonType::MaxKey,
-        ];
-
-        for bson_type in cases {
+        for (bson_type, expected_alias) in cases {
+            assert_eq!(bson_type.as_str(), expected_alias);
             assert_eq!(
                 Bson::from(bson_type),
-                Bson::String(bson_type.as_str().to_owned(),),
+                Bson::String(expected_alias.to_owned()),
             );
         }
     }

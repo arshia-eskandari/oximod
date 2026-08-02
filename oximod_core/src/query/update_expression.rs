@@ -19,10 +19,11 @@
 //! ```
 //!
 //! Updates using the same MongoDB operator are merged into one operator
-//! document.
+//! document. Different operators remain separate in their insertion order.
+
+use std::ops::BitAnd;
 
 use mongodb::bson::{Bson, Document, doc};
-use std::ops::BitAnd;
 
 /// A type-safe MongoDB update expression.
 ///
@@ -61,7 +62,11 @@ use std::ops::BitAnd;
 /// ```
 ///
 /// The resulting `$set` value for `score` is `20`.
-#[must_use]
+///
+/// OxiMod merges update documents structurally. It does not detect incompatible
+/// updates that target the same field through different operators, such as
+/// `$set` and `$inc`; MongoDB validates the final update document.
+#[must_use = "an update expression must be passed to a query update method"]
 #[derive(Debug, Clone, PartialEq)]
 pub struct UpdateExpression {
     document: Document,
@@ -171,6 +176,7 @@ impl UpdateExpression {
     }
 
     /// Converts this expression into a MongoDB update document.
+    #[must_use]
     pub(crate) fn into_document(self) -> Document {
         self.document
     }
@@ -193,6 +199,9 @@ impl BitAnd for UpdateExpression {
     ///
     /// When both expressions update the same field through the same operator,
     /// the value from the expression on the right takes precedence.
+    ///
+    /// Different operators remain separate. Conflicting same-field operations
+    /// under different operators are not rejected here.
     fn bitand(mut self, rhs: Self) -> Self::Output {
         for (operator, value) in rhs.document {
             match value {
@@ -252,7 +261,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::query::Field;
     use mongodb::bson::doc;
 
     use super::UpdateExpression;
@@ -309,20 +317,6 @@ mod tests {
 
         assert_eq!(
             update.into_document(),
-            doc! {
-                "$unset": {
-                    "nickname": "",
-                },
-            }
-        );
-    }
-
-    #[test]
-    fn optional_field_builds_unset_update_expression() {
-        let nickname = Field::<Option<String>>::new("nickname");
-
-        assert_eq!(
-            nickname.unset().into_document(),
             doc! {
                 "$unset": {
                     "nickname": "",
@@ -399,6 +393,59 @@ mod tests {
     }
 
     #[test]
+    fn combines_push_update_expressions() {
+        let update =
+            UpdateExpression::push("tags", "mongodb") & UpdateExpression::push("scores", 100);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$push": {
+                    "tags": "mongodb",
+                    "scores": 100,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_push_update_expressions() {
+        let update =
+            UpdateExpression::set("active", true) & UpdateExpression::push("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$push": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn push_each_builds_each_update_document() {
+        let update = UpdateExpression::push_each("tags", ["mongodb", "backend"]);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$push": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                        ],
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
     fn add_to_set_builds_add_to_set_update_document() {
         let update = UpdateExpression::add_to_set("tags", "mongodb");
 
@@ -413,12 +460,83 @@ mod tests {
     }
 
     #[test]
+    fn combines_add_to_set_update_expressions() {
+        let update = UpdateExpression::add_to_set("tags", "mongodb")
+            & UpdateExpression::add_to_set("roles", "admin");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": "mongodb",
+                    "roles": "admin",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_add_to_set_update_expressions() {
+        let update =
+            UpdateExpression::set("active", true) & UpdateExpression::add_to_set("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$addToSet": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn add_each_to_set_builds_each_update_document() {
+        let update = UpdateExpression::add_each_to_set("tags", ["mongodb", "backend"]);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                        ],
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
     fn pull_builds_pull_update_document() {
         let update = UpdateExpression::pull("tags", "mongodb");
 
         assert_eq!(
             update.into_document(),
             doc! {
+                "$pull": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_pull_update_expressions() {
+        let update =
+            UpdateExpression::set("active", false) & UpdateExpression::pull("tags", "mongodb");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": false,
+                },
                 "$pull": {
                     "tags": "mongodb",
                 },
@@ -449,6 +567,23 @@ mod tests {
             doc! {
                 "$pop": {
                     "tags": 1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_pop_update_expressions() {
+        let update = UpdateExpression::set("active", true) & UpdateExpression::pop("tags", -1);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$pop": {
+                    "tags": -1,
                 },
             }
         );
@@ -556,6 +691,24 @@ mod tests {
     }
 
     #[test]
+    fn combines_set_and_rename_update_expressions() {
+        let update = UpdateExpression::set("active", true)
+            & UpdateExpression::rename("nickname", "displayAlias");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$rename": {
+                    "nickname": "displayAlias",
+                },
+            }
+        );
+    }
+
+    #[test]
     fn current_date_builds_current_date_update_document() {
         let update = UpdateExpression::current_date("updated_at");
 
@@ -566,6 +719,43 @@ mod tests {
                     "updated_at": {
                         "$type": "date",
                     },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn combines_set_and_current_date_update_expressions() {
+        let update =
+            UpdateExpression::set("active", true) & UpdateExpression::current_date("updated_at");
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+                "$currentDate": {
+                    "updated_at": {
+                        "$type": "date",
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn different_operators_on_the_same_field_are_preserved() {
+        let update = UpdateExpression::set("score", 10) & UpdateExpression::inc("score", 1);
+
+        assert_eq!(
+            update.into_document(),
+            doc! {
+                "$set": {
+                    "score": 10,
+                },
+                "$inc": {
+                    "score": 1,
                 },
             }
         );

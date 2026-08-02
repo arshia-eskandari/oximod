@@ -10,7 +10,8 @@
 //! - `|` creates MongoDB `$or` expressions.
 //!
 //! Bitwise operators are used instead of `&&` and `||` because query
-//! expressions are values rather than Rust Boolean conditions.
+//! expressions are values rather than Rust Boolean conditions. Operand order
+//! is preserved when logical expressions are converted into BSON.
 
 use std::{
     collections::HashSet,
@@ -61,6 +62,7 @@ use mongodb::bson::{Bson, Document, doc};
 /// Repeated operators of the same logical kind are flattened into one logical
 /// expression rather than producing unnecessary nested `$and` or `$or`
 /// documents.
+#[must_use = "query expressions must be passed to a query builder or combined with another expression"]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression {
     pub(crate) kind: ExpressionKind,
@@ -133,6 +135,7 @@ pub(crate) enum ComparisonOperator {
 /// operator document. Repeated operators are represented with `$and` so no
 /// condition is overwritten.
 #[doc(hidden)]
+#[must_use = "element expressions must be returned from an elem_match closure or combined with another expression"]
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementExpression {
     kind: ElementExpressionKind,
@@ -156,6 +159,7 @@ impl ComparisonOperator {
     ///
     /// Equality returns `None` because ordinary field equality uses MongoDB's
     /// abbreviated `{ "field": value }` syntax.
+    #[must_use]
     const fn mongo_name(self) -> Option<&'static str> {
         match self {
             Self::Eq => None,
@@ -198,6 +202,7 @@ impl ElementExpression {
     }
 
     /// Converts this element expression into a MongoDB operator document.
+    #[must_use]
     pub(crate) fn into_document(self) -> Document {
         match self.kind {
             ElementExpressionKind::Comparison { operator, value } => {
@@ -256,6 +261,7 @@ impl Expression {
     }
 
     /// Converts this expression tree into a MongoDB filter document.
+    #[must_use]
     pub(crate) fn into_document(self) -> Document {
         match self.kind {
             ExpressionKind::Comparison {
@@ -497,7 +503,7 @@ fn operator_document(operator: ComparisonOperator, value: Bson) -> Document {
 mod tests {
     use super::{ComparisonOperator, ElementExpression, Expression};
     use crate::query::UpdateExpression;
-    use mongodb::bson::{Bson, Document, doc, oid::ObjectId};
+    use mongodb::bson::{Bson, Document, Regex, doc, oid::ObjectId};
 
     fn comparison(field: &str, operator: ComparisonOperator, value: impl Into<Bson>) -> Expression {
         Expression::comparison(field, operator, value)
@@ -1296,6 +1302,54 @@ mod tests {
     }
 
     #[test]
+    fn not_expression_negates_regular_expression_without_eq_wrapper() {
+        let regex = Regex {
+            pattern: "^User".to_owned(),
+            options: "i".to_owned(),
+        };
+        let expression = Expression::not(Expression::comparison(
+            "name",
+            ComparisonOperator::Eq,
+            Bson::RegularExpression(regex.clone()),
+        ));
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "name": {
+                    "$not": Bson::RegularExpression(regex),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn not_expression_negates_logical_expression_with_nor() {
+        let expression = Expression::not(
+            comparison("active", ComparisonOperator::Eq, true)
+                & comparison("age", ComparisonOperator::Gte, 18),
+        );
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$nor": [
+                    {
+                        "$and": [
+                            { "active": true },
+                            {
+                                "age": {
+                                    "$gte": 18,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn element_and_expression_combines_operators() {
         let expression = ElementExpression::comparison(ComparisonOperator::Gte, 80)
             & ElementExpression::comparison(ComparisonOperator::Lt, 90);
@@ -1305,6 +1359,22 @@ mod tests {
             doc! {
                 "$gte": 80,
                 "$lt": 90,
+            }
+        );
+    }
+
+    #[test]
+    fn element_and_expression_preserves_repeated_operators() {
+        let expression = ElementExpression::comparison(ComparisonOperator::Ne, "blocked")
+            & ElementExpression::comparison(ComparisonOperator::Ne, "deleted");
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "$and": [
+                    { "$ne": "blocked" },
+                    { "$ne": "deleted" },
+                ],
             }
         );
     }

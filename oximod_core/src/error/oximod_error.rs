@@ -5,21 +5,23 @@ use thiserror::Error;
 /// A boxed error type used by OxiMod to preserve underlying sources.
 ///
 /// This keeps OxiMod errors compatible with:
-/// - multi-threaded async runtimes (Send + Sync)
-/// - downstream applications that need error chaining via `source()`
+///
+/// - multithreaded asynchronous runtimes through `Send + Sync`,
+/// - downstream error reporting through [`std::error::Error::source`].
 pub type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 
 /// Represents a validation failure for a specific model field.
 ///
-/// Each `ValidationError` contains:
-/// - the name of the field that failed validation
-/// - a human-readable message describing the violation
+/// Each error records the model field that failed validation and a
+/// human-readable description of the violated rule.
 ///
-/// This type is typically returned as part of
-/// `OxiModError::Validation(Vec<ValidationError>)`.
+/// Validation errors are returned through [`OxiModError::Validation`].
 #[derive(Debug, Default)]
 pub struct ValidationError {
+    /// The model field that failed validation.
     pub field: String,
+
+    /// A human-readable description of the validation failure.
     pub message: String,
 }
 
@@ -30,6 +32,7 @@ impl std::fmt::Display for ValidationError {
 }
 
 impl ValidationError {
+    /// Creates a validation error for `field` with the supplied message.
     pub fn new(field: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             field: field.into(),
@@ -38,11 +41,15 @@ impl ValidationError {
     }
 }
 
-/// Represents all validation errors for all fields on a model
+/// Contains all field-level validation errors collected for a model.
 #[derive(Debug)]
-pub struct ValidationErrors(pub Vec<ValidationError>);
+pub struct ValidationErrors(
+    /// The collected field-level validation errors.
+    pub Vec<ValidationError>,
+);
 
 impl ValidationErrors {
+    /// Creates a collection of validation errors.
     pub fn new(validation_errors: impl Into<Vec<ValidationError>>) -> Self {
         Self(validation_errors.into())
     }
@@ -60,17 +67,11 @@ impl std::fmt::Display for ValidationErrors {
     }
 }
 
-/// Represents all possible errors returned by OxiMod during database operations.
+/// Represents errors returned by OxiMod operations.
 ///
-/// # Design goals
-/// - **Stable Rust compatibility** (no nightly features)
-/// - **Error chaining** via `#[source]` where applicable
-/// - **Human-friendly context** via `msg`
-/// - **Ergonomic construction** via helper constructors
-///
-/// # Downstream usage
-/// Applications can inspect causes via `.source()` and display a full chain using
-/// their preferred error/reporting stack (e.g. `anyhow`, `eyre`, `tracing`).
+/// Driver and runtime failures preserve their underlying source errors, while
+/// validation and query-configuration failures remain directly inspectable
+/// through their dedicated variants and accessor methods.
 #[derive(Debug, Error)]
 pub enum OxiModError {
     /// Failed to connect to the MongoDB server.
@@ -163,8 +164,8 @@ pub enum OxiModError {
     /// - bounds like `min` / `max` violated
     /// - `pattern` mismatch
     ///
-    /// This variant intentionally has no `source` because validation failures
-    /// are domain errors, not driver/system errors.
+    /// This variant has no source error because validation failures describe
+    /// model data rather than a driver or runtime failure.
     #[error("Validation errors: {0}")]
     Validation(ValidationErrors),
 
@@ -217,7 +218,7 @@ pub enum OxiModError {
 }
 
 impl OxiModError {
-    /// Create a `Connection` error with a message and an underlying source error.
+    /// Creates a connection error with a message and underlying source error.
     pub fn connection(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Connection {
             msg: msg.into(),
@@ -225,17 +226,17 @@ impl OxiModError {
         }
     }
 
-    /// Create a `GlobalClientInit` error with a message and an underlying source error.
+    /// Creates a global-client initialization error with a message.
     pub fn global_client_init(msg: impl Into<String>) -> Self {
         Self::GlobalClientInit { msg: msg.into() }
     }
 
-    /// Create a `GlobalClientMissing` error with a message.
+    /// Creates an error indicating that the global client is unavailable.
     pub fn global_client_missing(msg: impl Into<String>) -> Self {
         Self::GlobalClientMissing { msg: msg.into() }
     }
 
-    /// Create a `Serialization` error with a message and an underlying source error.
+    /// Creates a serialization error with a message and underlying source error.
     pub fn serialization(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Serialization {
             msg: msg.into(),
@@ -243,7 +244,7 @@ impl OxiModError {
         }
     }
 
-    /// Create an `Aggregation` error with a message and an underlying source error.
+    /// Creates an aggregation error with a message and underlying source error.
     pub fn aggregation(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Aggregation {
             msg: msg.into(),
@@ -251,7 +252,7 @@ impl OxiModError {
         }
     }
 
-    /// Create an `Index` error with a message and an underlying source error.
+    /// Creates an index error with a message and underlying source error.
     pub fn index(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Index {
             msg: msg.into(),
@@ -269,7 +270,7 @@ impl OxiModError {
         Self::Validation(ValidationErrors(errors))
     }
 
-    /// Create a `Database` error with a message and an underlying source error.
+    /// Creates a database error with a message and underlying source error.
     pub fn database(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Database {
             msg: msg.into(),
@@ -298,8 +299,8 @@ impl OxiModError {
     /// This provides convenient access to the underlying field-level
     /// validation failures without requiring pattern matching.
     ///
-    /// Returns `Some(&[ValidationError])` if the error is of type
-    /// `OxiModError::Validation`, otherwise `None`.
+    /// Returns `Some` for [`OxiModError::Validation`] and `None` for every
+    /// other variant.
     pub fn validation_errors(&self) -> Option<&[ValidationError]> {
         match self {
             Self::Validation(errors) => Some(&errors.0),

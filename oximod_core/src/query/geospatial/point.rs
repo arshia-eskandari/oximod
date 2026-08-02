@@ -1,4 +1,7 @@
 //! GeoJSON point values.
+//!
+//! [`GeoPoint`] stores one longitude-latitude coordinate pair and serializes
+//! directly to MongoDB's GeoJSON point representation.
 
 use mongodb::bson::{Document, doc};
 use serde::de::Error as _;
@@ -6,12 +9,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A GeoJSON point.
 ///
-/// Coordinates are provided in longitude-latitude order.
+/// Coordinates are stored and serialized in longitude-latitude order.
 ///
 /// # Example
 ///
 /// ```
-/// use oximod::GeoPoint;
+/// use oximod_core::query::GeoPoint;
 ///
 /// let point = GeoPoint::new(
 ///     -79.38,
@@ -33,7 +36,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 ///
 /// Coordinate ranges are not validated by OxiMod. MongoDB may reject invalid
 /// geospatial values when they are indexed or queried.
-#[must_use]
+///
+/// [`Default`] returns the origin point `[0.0, 0.0]`.
+#[must_use = "a GeoJSON point should be stored or used in a geospatial query"]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct GeoPoint {
     coordinates: [f64; 2],
@@ -44,8 +49,8 @@ impl GeoPoint {
     ///
     /// # Parameters
     ///
-    /// - `longitude`: The east-west coordinate.
-    /// - `latitude`: The north-south coordinate.
+    /// - `longitude`: the east-west coordinate;
+    /// - `latitude`: the north-south coordinate.
     ///
     /// Longitude must be supplied before latitude.
     pub const fn new(longitude: f64, latitude: f64) -> Self {
@@ -55,15 +60,18 @@ impl GeoPoint {
     }
 
     /// Returns the longitude coordinate.
+    #[must_use]
     pub const fn longitude(self) -> f64 {
         self.coordinates[0]
     }
 
     /// Returns the latitude coordinate.
+    #[must_use]
     pub const fn latitude(self) -> f64 {
         self.coordinates[1]
     }
 
+    #[must_use]
     pub(super) fn into_document(self) -> Document {
         let [longitude, latitude] = self.coordinates;
 
@@ -114,7 +122,7 @@ impl<'de> Deserialize<'de> for GeoPoint {
         if point.kind != "Point" {
             return Err(D::Error::custom(format!(
                 "expected GeoJSON type \
-                     `Point`, found `{}`",
+                 `Point`, found `{}`",
                 point.kind,
             )));
         }
@@ -132,11 +140,33 @@ mod tests {
     use super::GeoPoint;
 
     #[test]
+    fn point_exposes_longitude_and_latitude() {
+        let point = GeoPoint::new(-79.38, 43.65);
+
+        assert_eq!(point.longitude(), -79.38);
+        assert_eq!(point.latitude(), 43.65);
+    }
+
+    #[test]
+    fn point_converts_into_geojson_document() {
+        assert_eq!(
+            GeoPoint::new(-79.38, 43.65).into_document(),
+            doc! {
+                "type": "Point",
+                "coordinates": [
+                    -79.38,
+                    43.65,
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn point_serializes_as_geojson() {
         let point = GeoPoint::new(-79.38, 43.65);
 
         assert_eq!(
-            to_document(&point).expect("point should serialize",),
+            to_document(&point).expect("point should serialize"),
             doc! {
                 "type": "Point",
                 "coordinates": [
@@ -163,15 +193,19 @@ mod tests {
 
     #[test]
     fn point_rejects_wrong_geojson_type() {
-        let result = from_document::<GeoPoint>(doc! {
+        let error = from_document::<GeoPoint>(doc! {
             "type": "Polygon",
             "coordinates": [
                 -79.38,
                 43.65,
             ],
-        });
+        })
+        .expect_err("wrong GeoJSON type should fail");
 
-        assert!(result.is_err());
+        assert!(error.to_string().contains(
+            "expected GeoJSON type `Point`, \
+                 found `Polygon`",
+        ),);
     }
 
     #[test]

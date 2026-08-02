@@ -1,4 +1,8 @@
-//! String and regular-expression queries.
+//! String and regular-expression field queries.
+//!
+//! This module provides raw MongoDB regex matching, typed regex options, and
+//! escaped literal prefix, suffix, and substring helpers for required and
+//! optional string fields.
 
 use mongodb::bson::{Bson, Regex};
 
@@ -8,7 +12,8 @@ use crate::query::expression::{ComparisonOperator, Expression};
 /// A MongoDB regular-expression option.
 ///
 /// Options can be combined by passing an iterable to
-/// [`Field::matches_regex_with_options`].
+/// [`Field::matches_regex_with_options`]. They are serialized in the order
+/// supplied by the caller.
 ///
 /// # Example
 ///
@@ -47,6 +52,7 @@ pub enum RegexOption {
 }
 
 impl RegexOption {
+    #[must_use]
     const fn as_str(self) -> &'static str {
         match self {
             Self::CaseInsensitive => "i",
@@ -77,8 +83,11 @@ where
         self.regex_expression(pattern.into(), String::new())
     }
 
-    /// Matches this string field using a regular expression and MongoDB
-    /// regex options.
+    /// Matches this string field using a regular expression and MongoDB regex
+    /// options.
+    ///
+    /// The pattern is passed to MongoDB unchanged. Options are concatenated in
+    /// iteration order.
     pub fn matches_regex_with_options<I>(
         &self,
         pattern: impl Into<String>,
@@ -108,7 +117,7 @@ where
     /// Matches strings ending with `suffix`.
     ///
     /// The suffix is escaped before being inserted into the generated regular
-    /// expression.
+    /// expression, so regex metacharacters are treated literally.
     pub fn ends_with(&self, suffix: impl AsRef<str>) -> Expression {
         let escaped = regex::escape(suffix.as_ref());
 
@@ -117,8 +126,8 @@ where
 
     /// Matches strings containing `text`.
     ///
-    /// The supplied text is escaped, so this method performs a literal
-    /// substring search rather than accepting a regular-expression pattern.
+    /// The supplied text is escaped, so this performs a literal substring
+    /// search rather than accepting a regular-expression pattern.
     pub fn contains_text(&self, text: impl AsRef<str>) -> Expression {
         self.matches_regex(regex::escape(text.as_ref()))
     }
@@ -129,5 +138,144 @@ where
             ComparisonOperator::Eq,
             Bson::RegularExpression(Regex { pattern, options }),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RegexOption;
+    use crate::query::expression::ComparisonOperator;
+    use crate::query::{Expression, Field};
+    use mongodb::bson::{Bson, Regex, doc};
+
+    #[test]
+    fn string_field_builds_regex_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.matches_regex("^User").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: "^User".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn regex_expression_is_inserted_directly() {
+        let expression = Expression::comparison(
+            "name",
+            ComparisonOperator::Eq,
+            Bson::RegularExpression(Regex {
+                pattern: "^User".to_owned(),
+                options: String::new(),
+            }),
+        );
+
+        assert_eq!(
+            expression.into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: "^User".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_regex_with_options() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.matches_regex_with_options(
+                "^user",
+                [RegexOption::CaseInsensitive, RegexOption::Multiline,],
+            )
+            .into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: "^user".to_owned(),
+                    options: "im".to_owned(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_literal_starts_with_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.starts_with("User.").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: r"^User\.".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_literal_ends_with_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.ends_with(".User").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: r"\.User$".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_builds_literal_contains_text_expression() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.contains_text("User.").into_document(),
+            doc! {
+                "name": Bson::RegularExpression(Regex {
+                    pattern: r"User\.".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn optional_string_field_builds_contains_text_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.contains_text("cool_").into_document(),
+            doc! {
+                "nickname": Bson::RegularExpression(Regex {
+                    pattern: "cool_".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn optional_string_field_escapes_contains_text() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.contains_text("cool.").into_document(),
+            doc! {
+                "nickname": Bson::RegularExpression(Regex {
+                    pattern: r"cool\.".to_owned(),
+                    options: String::new(),
+                }),
+            }
+        );
     }
 }

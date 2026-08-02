@@ -1,4 +1,8 @@
 //! Typed scalar array-element conditions.
+//!
+//! [`ElementField`] represents one unnamed scalar value inside an array
+//! `$elemMatch` expression. Its comparisons produce relative operator
+//! documents such as `{ "$gte": 60 }` rather than named field conditions.
 
 use std::marker::PhantomData;
 
@@ -26,6 +30,7 @@ use crate::query::expression::{ComparisonOperator, ElementExpression};
 /// ```
 #[doc(hidden)]
 #[derive(Debug)]
+#[must_use = "element fields should be used to build an element expression"]
 pub struct ElementField<T> {
     marker: PhantomData<fn() -> T>,
 }
@@ -94,5 +99,59 @@ where
         V: Into<T>,
     {
         self.comparison(ComparisonOperator::Lte, value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ElementField;
+    use mongodb::bson::doc;
+
+    #[test]
+    fn element_field_builds_greater_than_expression() {
+        let element = ElementField::<i32>::new();
+
+        assert_eq!(
+            element.gt(80).into_document(),
+            doc! {
+                "$gt": 80,
+            },
+        );
+    }
+
+    #[test]
+    fn element_field_builds_greater_than_or_equal_expression() {
+        let element = ElementField::<i32>::new();
+
+        assert_eq!(
+            element.gte(80).into_document(),
+            doc! {
+                "$gte": 80,
+            },
+        );
+    }
+
+    #[test]
+    fn element_field_builds_less_than_expression() {
+        let element = ElementField::<i32>::new();
+
+        assert_eq!(
+            element.lt(90).into_document(),
+            doc! {
+                "$lt": 90,
+            },
+        );
+    }
+
+    #[test]
+    fn element_field_builds_less_than_or_equal_expression() {
+        let element = ElementField::<i32>::new();
+
+        assert_eq!(
+            element.lte(90).into_document(),
+            doc! {
+                "$lte": 90,
+            },
+        );
     }
 }

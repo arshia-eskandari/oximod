@@ -1,4 +1,7 @@
 //! MongoDB `$near` query configuration.
+//!
+//! [`NearQuery`] wraps a GeoJSON point and optional minimum and maximum
+//! distances for use with [`crate::query::Field::near`].
 
 use mongodb::bson::{Bson, Document};
 
@@ -14,6 +17,12 @@ use super::GeoPoint;
 /// # Example
 ///
 /// ```ignore
+/// use oximod::{
+///     GeoPoint,
+///     NearQuery,
+///     Queryable,
+/// };
+///
 /// let places = Place::query()
 ///     .filter(|place| {
 ///         place.location.near(
@@ -34,11 +43,14 @@ use super::GeoPoint;
 /// Distances are expressed in metres when querying GeoJSON values through a
 /// `2dsphere` index.
 ///
-/// OxiMod does not validate that minimum distance is less than maximum
-/// distance or that either value is non-negative. MongoDB validates the final
-/// query.
-#[must_use]
+/// Calling [`NearQuery::min_distance`] or [`NearQuery::max_distance`] more
+/// than once replaces the previous value.
+///
+/// OxiMod does not validate that either distance is non-negative or that the
+/// minimum distance does not exceed the maximum distance. MongoDB validates
+/// the final query.
 #[derive(Debug, Clone, PartialEq)]
+#[must_use = "a near query must be passed to Field::near"]
 pub struct NearQuery {
     point: GeoPoint,
     min_distance: Option<f64>,
@@ -46,7 +58,7 @@ pub struct NearQuery {
 }
 
 impl NearQuery {
-    /// Creates a `$near` query around `point`.
+    /// Creates an unrestricted `$near` query around `point`.
     pub const fn new(point: GeoPoint) -> Self {
         Self {
             point,
@@ -56,17 +68,22 @@ impl NearQuery {
     }
 
     /// Sets the minimum distance in metres.
+    ///
+    /// Calling this method again replaces the previous minimum distance.
     pub const fn min_distance(mut self, distance: f64) -> Self {
         self.min_distance = Some(distance);
         self
     }
 
     /// Sets the maximum distance in metres.
+    ///
+    /// Calling this method again replaces the previous maximum distance.
     pub const fn max_distance(mut self, distance: f64) -> Self {
         self.max_distance = Some(distance);
         self
     }
 
+    #[must_use]
     pub(super) fn into_document(self) -> Document {
         let mut document = Document::new();
 
@@ -92,10 +109,9 @@ impl From<GeoPoint> for NearQuery {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
-
     use super::NearQuery;
     use crate::query::GeoPoint;
+    use mongodb::bson::doc;
 
     #[test]
     fn near_query_builds_geometry() {
@@ -118,6 +134,29 @@ mod tests {
         assert_eq!(
             NearQuery::new(GeoPoint::new(0.0, 0.0),)
                 .min_distance(500.0)
+                .max_distance(2_000.0)
+                .into_document(),
+            doc! {
+                "$geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        0.0,
+                        0.0,
+                    ],
+                },
+                "$minDistance": 500.0,
+                "$maxDistance": 2_000.0,
+            }
+        );
+    }
+
+    #[test]
+    fn repeated_distance_setters_replace_previous_values() {
+        assert_eq!(
+            NearQuery::new(GeoPoint::new(0.0, 0.0),)
+                .min_distance(100.0)
+                .min_distance(500.0)
+                .max_distance(1_000.0)
                 .max_distance(2_000.0)
                 .into_document(),
             doc! {

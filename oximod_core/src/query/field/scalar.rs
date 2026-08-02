@@ -1,7 +1,7 @@
 //! Scalar field queries and updates.
 //!
-//! This module implements equality, membership, ordered comparison, null
-//! checks, `$set`, `$unset`, and `$rename`.
+//! This module provides equality, membership, ordered comparison, strict null
+//! checks, and scalar update operations for typed [`Field`] values.
 
 use mongodb::bson::Bson;
 
@@ -121,6 +121,8 @@ where
 
     /// Replaces this field with `value`.
     ///
+    /// This produces MongoDB's `$set` update.
+    ///
     /// ```ignore
     /// User::query()
     ///     .filter(|user| user.name.eq("User1"))
@@ -181,5 +183,252 @@ where
         V: Into<T>,
     {
         self.comparison(ComparisonOperator::Lte, value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::query::{
+        Field,
+        expression::{ComparisonOperator, Expression},
+    };
+    use mongodb::bson::{Bson, doc};
+
+    #[test]
+    fn equality_builds_an_expression() {
+        let active = Field::<bool>::new("active");
+
+        assert_eq!(
+            active.eq(true).into_document(),
+            doc! {
+                "active": true,
+            }
+        );
+    }
+
+    #[test]
+    fn inequality_builds_an_expression() {
+        let status = Field::<String>::new("status");
+
+        assert_eq!(
+            status.ne("deleted").into_document(),
+            doc! {
+                "status": {
+                    "$ne": "deleted",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn string_field_accepts_a_string_slice() {
+        let name = Field::<String>::new("name");
+
+        assert_eq!(
+            name.eq("User1").into_document(),
+            doc! {
+                "name": "User1",
+            }
+        );
+    }
+
+    #[test]
+    fn greater_than_builds_an_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.gt(18).into_document(),
+            doc! {
+                "age": {
+                    "$gt": 18,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn greater_than_or_equal_builds_an_expression() {
+        let age = Field::<i32>::new("age");
+
+        assert_eq!(
+            age.gte(18).into_document(),
+            doc! {
+                "age": {
+                    "$gte": 18,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn less_than_builds_an_expression() {
+        let price = Field::<f64>::new("price");
+
+        assert_eq!(
+            price.lt(99.99).into_document(),
+            doc! {
+                "price": {
+                    "$lt": 99.99,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn less_than_or_equal_builds_an_expression() {
+        let price = Field::<i64>::new("price");
+
+        assert_eq!(
+            price.lte(100_i64).into_document(),
+            doc! {
+                "price": {
+                    "$lte": 100_i64,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_in_expression() {
+        let role = Field::<String>::new("role");
+
+        assert_eq!(
+            role.in_values(["admin", "moderator",]).into_document(),
+            doc! {
+                "role": {
+                    "$in": [
+                        "admin",
+                        "moderator",
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_not_in_expression() {
+        let role = Field::<String>::new("role");
+
+        assert_eq!(
+            role.not_in_values(["admin", "moderator",]).into_document(),
+            doc! {
+                "role": {
+                    "$nin": [
+                        "admin",
+                        "moderator",
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_strict_null_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.is_null().into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "nickname": null,
+                    },
+                    {
+                        "nickname": {
+                            "$exists": true,
+                        },
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_strict_not_null_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.is_not_null().into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "nickname": {
+                            "$ne": null,
+                        },
+                    },
+                    {
+                        "nickname": {
+                            "$exists": true,
+                        },
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn field_builds_set_update_expression() {
+        let active = Field::<bool>::new("active");
+
+        assert_eq!(
+            active.set(true).into_document(),
+            doc! {
+                "$set": {
+                    "active": true,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_field_builds_unset_update_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.unset().into_document(),
+            doc! {
+                "$unset": {
+                    "nickname": "",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_field_builds_rename_update_expression() {
+        let nickname = Field::<Option<String>>::new("nickname");
+        let display_alias = Field::<Option<String>>::new("displayAlias");
+
+        assert_eq!(
+            nickname.rename_to(&display_alias).into_document(),
+            doc! {
+                "$rename": {
+                    "nickname": "displayAlias",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn null_and_exists_expressions_can_be_combined() {
+        let null = Expression::comparison("nickname", ComparisonOperator::Eq, Bson::Null);
+
+        let exists = Expression::comparison("nickname", ComparisonOperator::Exists, true);
+
+        assert_eq!(
+            (null & exists).into_document(),
+            doc! {
+                "$and": [
+                    {
+                        "nickname": null,
+                    },
+                    {
+                        "nickname": {
+                            "$exists": true,
+                        },
+                    },
+                ],
+            }
+        );
     }
 }

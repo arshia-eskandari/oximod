@@ -1,4 +1,7 @@
 //! GeoJSON polygon values.
+//!
+//! [`GeoPolygon`] stores GeoJSON polygon rings and serializes directly to
+//! MongoDB's GeoJSON polygon representation.
 
 use mongodb::bson::{Bson, Document};
 use serde::de::Error as _;
@@ -12,7 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// # Example
 ///
 /// ```
-/// use oximod::GeoPolygon;
+/// use oximod_core::query::GeoPolygon;
 ///
 /// let polygon = GeoPolygon::new([
 ///     [-1.0, -1.0],
@@ -20,6 +23,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 ///     [1.0, 1.0],
 ///     [-1.0, 1.0],
 /// ]);
+///
+/// # let _ = polygon;
 /// ```
 ///
 /// The serialized representation is equivalent to:
@@ -37,12 +42,18 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// }
 /// ```
 ///
-/// OxiMod closes the ring but does not otherwise validate polygon geometry.
-/// MongoDB may reject invalid or self-intersecting polygons.
+/// Coordinates use longitude-latitude order.
 ///
-/// `Default` exists for compatibility with generated model builders. The
+/// OxiMod closes rings created through [`GeoPolygon::new`] but does not
+/// otherwise validate polygon geometry. MongoDB may reject invalid,
+/// underspecified, or self-intersecting polygons.
+///
+/// Deserialization preserves the rings supplied by the stored GeoJSON value
+/// without automatically closing or validating them.
+///
+/// [`Default`] exists for compatibility with generated model builders. The
 /// default polygon is empty and should be replaced before persistence.
-#[must_use]
+#[must_use = "a GeoJSON polygon should be stored or used in a geospatial query"]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GeoPolygon {
     coordinates: Vec<Vec<[f64; 2]>>,
@@ -51,12 +62,12 @@ pub struct GeoPolygon {
 impl GeoPolygon {
     /// Creates a single-ring GeoJSON polygon.
     ///
-    /// The first coordinate is appended to the end when the supplied ring is
-    /// not already closed.
+    /// The first coordinate is appended to the end when the supplied exterior
+    /// ring is not already closed.
     ///
     /// # Parameters
     ///
-    /// - `exterior`: Coordinate pairs in longitude-latitude order.
+    /// - `exterior`: coordinate pairs in longitude-latitude order.
     pub fn new<I>(exterior: I) -> Self
     where
         I: IntoIterator<Item = [f64; 2]>,
@@ -70,6 +81,7 @@ impl GeoPolygon {
         }
     }
 
+    #[must_use]
     pub(super) fn into_document(self) -> Document {
         let rings = self.coordinates.into_iter().map(ring_into_bson).collect();
 
@@ -119,7 +131,7 @@ impl<'de> Deserialize<'de> for GeoPolygon {
         if polygon.kind != "Polygon" {
             return Err(D::Error::custom(format!(
                 "expected GeoJSON type \
-                     `Polygon`, found `{}`",
+                 `Polygon`, found `{}`",
                 polygon.kind,
             )));
         }
@@ -140,6 +152,7 @@ fn close_ring(ring: &mut Vec<[f64; 2]>) {
     }
 }
 
+#[must_use]
 fn ring_into_bson(ring: Vec<[f64; 2]>) -> Bson {
     let positions = ring
         .into_iter()
@@ -157,22 +170,30 @@ mod tests {
 
     use super::GeoPolygon;
 
+    fn exterior_ring() -> [[f64; 2]; 4] {
+        [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]]
+    }
+
+    fn expected_polygon_document() -> mongodb::bson::Document {
+        doc! {
+            "type": "Polygon",
+            "coordinates": [[
+                [-1.0, -1.0],
+                [1.0, -1.0],
+                [1.0, 1.0],
+                [-1.0, 1.0],
+                [-1.0, -1.0],
+            ]],
+        }
+    }
+
     #[test]
     fn polygon_closes_exterior_ring() {
-        let polygon = GeoPolygon::new([[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]]);
+        let polygon = GeoPolygon::new(exterior_ring());
 
         assert_eq!(
-            to_document(&polygon).expect("polygon should serialize",),
-            doc! {
-                "type": "Polygon",
-                "coordinates": [[
-                    [-1.0, -1.0],
-                    [1.0, -1.0],
-                    [1.0, 1.0],
-                    [-1.0, 1.0],
-                    [-1.0, -1.0],
-                ]],
-            }
+            to_document(&polygon).expect("polygon should serialize"),
+            expected_polygon_document(),
         );
     }
 
@@ -187,57 +208,42 @@ mod tests {
         ]);
 
         assert_eq!(
-            to_document(&polygon).expect("polygon should serialize",),
-            doc! {
-                "type": "Polygon",
-                "coordinates": [[
-                    [-1.0, -1.0],
-                    [1.0, -1.0],
-                    [1.0, 1.0],
-                    [-1.0, 1.0],
-                    [-1.0, -1.0],
-                ]],
-            }
+            to_document(&polygon).expect("polygon should serialize"),
+            expected_polygon_document(),
+        );
+    }
+
+    #[test]
+    fn polygon_converts_into_geojson_document() {
+        assert_eq!(
+            GeoPolygon::new(exterior_ring()).into_document(),
+            expected_polygon_document(),
         );
     }
 
     #[test]
     fn polygon_deserializes_from_geojson() {
-        let polygon = from_document::<GeoPolygon>(doc! {
-            "type": "Polygon",
-            "coordinates": [[
-                [-1.0, -1.0],
-                [1.0, -1.0],
-                [1.0, 1.0],
-                [-1.0, 1.0],
-                [-1.0, -1.0],
-            ]],
-        })
-        .expect("polygon should deserialize");
+        let polygon = from_document::<GeoPolygon>(expected_polygon_document())
+            .expect("polygon should deserialize");
 
         assert_eq!(
-            to_document(&polygon).expect("polygon should serialize",),
-            doc! {
-                "type": "Polygon",
-                "coordinates": [[
-                    [-1.0, -1.0],
-                    [1.0, -1.0],
-                    [1.0, 1.0],
-                    [-1.0, 1.0],
-                    [-1.0, -1.0],
-                ]],
-            }
+            to_document(&polygon).expect("polygon should serialize"),
+            expected_polygon_document(),
         );
     }
 
     #[test]
     fn polygon_rejects_wrong_geojson_type() {
-        let result = from_document::<GeoPolygon>(doc! {
+        let error = from_document::<GeoPolygon>(doc! {
             "type": "Point",
             "coordinates": [],
-        });
+        })
+        .expect_err("wrong GeoJSON type should fail");
 
-        assert!(result.is_err());
+        assert!(error.to_string().contains(
+            "expected GeoJSON type `Polygon`, \
+                 found `Point`",
+        ),);
     }
 
     #[test]

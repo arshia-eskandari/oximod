@@ -1,18 +1,24 @@
-//! GeoJSON values and typed geospatial queries.
+//! GeoJSON values and typed MongoDB geospatial queries.
 //!
 //! This module provides:
 //!
-//! - [`GeoPoint`] for GeoJSON point values
-//! - [`GeoPolygon`] for single-ring GeoJSON polygons
-//! - [`NearQuery`] for configuring MongoDB `$near` queries
-//! - Typed [`Field`](crate::query::Field) methods for `$near`,
-//!   `$geoWithin`, and `$geoIntersects`
+//! - [`GeoPoint`] for GeoJSON point values;
+//! - [`GeoPolygon`] for single-ring GeoJSON polygon values;
+//! - [`NearQuery`] for configuring MongoDB `$near` queries;
+//! - typed [`Field`](crate::query::Field) methods for `$near`,
+//!   `$geoWithin`, and `$geoIntersects`.
 //!
 //! GeoJSON coordinates use longitude-latitude order.
 //!
 //! # Example
 //!
 //! ```ignore
+//! use oximod::{
+//!     GeoPoint,
+//!     NearQuery,
+//!     Queryable,
+//! };
+//!
 //! let places = Place::query()
 //!     .filter(|place| {
 //!         place.location.near(
@@ -32,9 +38,11 @@ mod point;
 mod polygon;
 mod traits;
 
+// Public geospatial query values.
 pub use near::NearQuery;
 pub use point::GeoPoint;
 pub use polygon::GeoPolygon;
 
+// Internal marker and conversion traits used by generated typed fields.
 #[doc(hidden)]
 pub use traits::{GeoGeometry, GeoPointQueryValue, GeoQueryValue};

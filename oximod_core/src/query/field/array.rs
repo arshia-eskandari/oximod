@@ -1,4 +1,8 @@
 //! Array field queries and updates.
+//!
+//! This module provides MongoDB array operations for [`Field<Vec<T>>`],
+//! including membership checks, `$all`, `$size`, scalar `$elemMatch`, and
+//! array update operators such as `$push`, `$addToSet`, `$pull`, and `$pop`.
 
 use mongodb::bson::Bson;
 
@@ -139,5 +143,183 @@ impl<T> Field<Vec<T>> {
     /// Removes the last array element using MongoDB `$pop`.
     pub fn pop_last(&self) -> UpdateExpression {
         UpdateExpression::pop(self.name(), 1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::query::Field;
+    use mongodb::bson::{Bson, doc};
+
+    #[test]
+    fn array_field_builds_contains_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.contains("rust").into_document(),
+            doc! {
+                "tags": "rust",
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_contains_all_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.contains_all(["rust", "mongodb"]).into_document(),
+            doc! {
+                "tags": {
+                    "$all": [
+                        "rust",
+                        "mongodb",
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_size_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.has_size(2).into_document(),
+            doc! {
+                "tags": {
+                    "$size": Bson::Int64(2),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_elem_match_expression() {
+        let scores = Field::<Vec<i32>>::new("scores");
+
+        assert_eq!(
+            scores
+                .elem_match(|score| { score.gte(80) & score.lt(90) })
+                .into_document(),
+            doc! {
+                "scores": {
+                    "$elemMatch": {
+                        "$gte": 80,
+                        "$lt": 90,
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_push_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.push("mongodb").into_document(),
+            doc! {
+                "$push": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_add_to_set_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.add_to_set("mongodb").into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_pull_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.pull("mongodb").into_document(),
+            doc! {
+                "$pull": {
+                    "tags": "mongodb",
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_pop_first_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.pop_first().into_document(),
+            doc! {
+                "$pop": {
+                    "tags": -1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_pop_last_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.pop_last().into_document(),
+            doc! {
+                "$pop": {
+                    "tags": 1,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_push_each_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.push_each(["mongodb", "backend"]).into_document(),
+            doc! {
+                "$push": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                        ],
+                    },
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn array_field_builds_add_each_to_set_update_expression() {
+        let tags = Field::<Vec<String>>::new("tags");
+
+        assert_eq!(
+            tags.add_each_to_set(["mongodb", "backend", "systems",])
+                .into_document(),
+            doc! {
+                "$addToSet": {
+                    "tags": {
+                        "$each": [
+                            "mongodb",
+                            "backend",
+                            "systems",
+                        ],
+                    },
+                },
+            }
+        );
     }
 }

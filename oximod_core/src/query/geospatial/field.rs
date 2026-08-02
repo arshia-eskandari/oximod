@@ -1,4 +1,7 @@
 //! Typed geospatial field queries.
+//!
+//! This module adds MongoDB `$near`, `$geoWithin`, and `$geoIntersects`
+//! operations to fields containing supported GeoJSON values.
 
 use mongodb::bson::{Bson, Document};
 
@@ -47,8 +50,8 @@ where
     ///     .await?;
     /// ```
     ///
-    /// The field must have an appropriate geospatial index. MongoDB returns
-    /// `$near` results from nearest to farthest.
+    /// The field must have a compatible geospatial index. MongoDB returns
+    /// matching documents from nearest to farthest.
     pub fn near<N>(&self, query: N) -> Expression
     where
         N: Into<NearQuery>,
@@ -67,7 +70,8 @@ where
 {
     /// Matches values contained within a GeoJSON polygon.
     ///
-    /// This produces MongoDB's `$geoWithin` operator.
+    /// This produces MongoDB's `$geoWithin` operator with a `$geometry`
+    /// document.
     ///
     /// ```ignore
     /// let boundary = GeoPolygon::new([
@@ -93,9 +97,9 @@ where
 
     /// Matches values that intersect the supplied GeoJSON geometry.
     ///
-    /// This produces MongoDB's `$geoIntersects` operator. Supported query
-    /// geometries currently include [`crate::query::GeoPoint`] and
-    /// [`GeoPolygon`].
+    /// This produces MongoDB's `$geoIntersects` operator with a `$geometry`
+    /// document. Supported query geometries currently include
+    /// [`crate::query::GeoPoint`] and [`GeoPolygon`].
     ///
     /// ```ignore
     /// let regions = Region::query()
@@ -131,17 +135,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
-
     use super::*;
     use crate::query::{GeoPoint, GeoPolygon};
+    use mongodb::bson::doc;
 
     #[test]
     fn point_field_builds_near_query() {
         let location = Field::<GeoPoint>::new("location");
 
         assert_eq!(
-            location.near(GeoPoint::new(0.0, 0.0),).into_document(),
+            location.near(GeoPoint::new(0.0, 0.0)).into_document(),
             doc! {
                 "location": {
                     "$near": {
@@ -163,7 +166,7 @@ mod tests {
         let location = Field::<Option<GeoPoint>>::new("location");
 
         assert_eq!(
-            location.near(GeoPoint::new(0.0, 0.0),).into_document(),
+            location.near(GeoPoint::new(0.0, 0.0)).into_document(),
             doc! {
                 "location": {
                     "$near": {
@@ -183,7 +186,6 @@ mod tests {
     #[test]
     fn point_field_builds_geo_within_query() {
         let location = Field::<GeoPoint>::new("location");
-
         let polygon = GeoPolygon::new([[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]]);
 
         assert_eq!(
