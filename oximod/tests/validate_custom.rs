@@ -42,6 +42,10 @@ mod validators {
         Ok(())
     }
 
+    #[allow(
+        clippy::ptr_arg,
+        reason = "the signature intentionally verifies custom validation for Cow fields"
+    )]
     pub fn validate_nickname(value: &Cow<'static, str>) -> Result<(), String> {
         if value.trim().is_empty() {
             return Err("nickname cannot be blank".into());
