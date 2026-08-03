@@ -1,3 +1,11 @@
+//! Parsing and validation of model-level derive attributes.
+//!
+//! Collection models require database and collection names and may configure
+//! hooks, index initialization metadata, and the generated document-ID setter.
+//!
+//! Embedded models do not have independent MongoDB collections, so
+//! collection-specific attributes are rejected for them.
+
 use crate::{helpers::ModelKind, parsers::parse_attr_value_ts};
 use proc_macro2::{Span, TokenStream};
 use syn::{Attribute, spanned::Spanned};
@@ -162,4 +170,177 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
             hooks,
         }),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use proc_macro2::TokenStream;
+    use syn::parse_quote;
+
+    use super::{ModelAttrs, collect_model_attrs};
+    use crate::helpers::ModelKind;
+
+    #[test]
+    fn collection_attributes_are_collected_with_defaults() {
+        let attrs = vec![
+            parse_quote! {
+                #[db("app_db")]
+            },
+            parse_quote! {
+                #[collection("users")]
+            },
+        ];
+
+        let model_attrs = collect_model_attrs(&attrs).expect("collection attributes should parse");
+
+        assert_eq!(model_attrs.kind, ModelKind::Collection);
+
+        let collection = model_attrs
+            .collection
+            .expect("collection model should have configuration");
+
+        assert_eq!(collection.db, "app_db");
+        assert_eq!(collection.collection, "users");
+        assert_eq!(collection.index_max_retries, 3);
+        assert_eq!(collection.index_max_init_seconds, 30);
+        assert_eq!(collection.document_id_setter_ident, "id");
+        assert!(!collection.hooks);
+    }
+
+    #[test]
+    fn collection_attributes_honor_explicit_configuration() {
+        let attrs = vec![
+            parse_quote! {
+                #[db("app_db")]
+            },
+            parse_quote! {
+                #[collection("users")]
+            },
+            parse_quote! {
+                #[index_max_retries(5)]
+            },
+            parse_quote! {
+                #[index_max_init_seconds(45)]
+            },
+            parse_quote! {
+                #[document_id_setter_ident("with_id")]
+            },
+            parse_quote! {
+                #[hooks]
+            },
+        ];
+
+        let model_attrs = collect_model_attrs(&attrs).expect("collection attributes should parse");
+
+        let collection = model_attrs
+            .collection
+            .expect("collection model should have configuration");
+
+        assert_eq!(collection.index_max_retries, 5);
+        assert_eq!(collection.index_max_init_seconds, 45);
+        assert_eq!(collection.document_id_setter_ident, "with_id");
+        assert!(collection.hooks);
+    }
+
+    #[test]
+    fn embedded_models_need_no_collection_configuration() {
+        let attrs = vec![
+            parse_quote! {
+                #[model(embedded)]
+            },
+            parse_quote! {
+                #[serde(rename_all = "camelCase")]
+            },
+        ];
+
+        let model_attrs = collect_model_attrs(&attrs).expect("embedded attributes should parse");
+
+        assert_eq!(model_attrs.kind, ModelKind::Embedded);
+        assert!(model_attrs.collection.is_none());
+    }
+
+    #[test]
+    fn embedded_models_reject_collection_attributes() {
+        let attrs = vec![
+            parse_quote! {
+                #[model(embedded)]
+            },
+            parse_quote! {
+                #[collection("addresses")]
+            },
+        ];
+
+        let error = error_text(
+            collect_model_attrs(&attrs),
+            "embedded collection attribute should fail",
+        );
+
+        assert!(
+            error.contains("`collection` is not supported on embedded models"),
+            "unexpected error tokens: {error}"
+        );
+    }
+
+    #[test]
+    fn collection_models_require_database_and_collection() {
+        let missing_collection = vec![parse_quote! {
+            #[db("app_db")]
+        }];
+
+        let error = error_text(
+            collect_model_attrs(&missing_collection),
+            "missing collection should fail",
+        );
+
+        assert!(
+            error.contains("Missing #[collection(\\\"collection_name\\\")] attribute"),
+            "unexpected error tokens: {error}"
+        );
+
+        let missing_database = vec![parse_quote! {
+            #[collection("users")]
+        }];
+
+        let error = error_text(
+            collect_model_attrs(&missing_database),
+            "missing database should fail",
+        );
+
+        assert!(
+            error.contains("Missing #[db(\\\"db_name\\\")] attribute"),
+            "unexpected error tokens: {error}"
+        );
+    }
+
+    #[test]
+    fn unsupported_model_attributes_are_rejected() {
+        let attrs = vec![
+            parse_quote! {
+                #[db("app_db")]
+            },
+            parse_quote! {
+                #[collection("users")]
+            },
+            parse_quote! {
+                #[unknown]
+            },
+        ];
+
+        let error = error_text(
+            collect_model_attrs(&attrs),
+            "unsupported attribute should fail",
+        );
+
+        assert!(
+            error.contains("Unsupported attribute for #[derive(Model)]"),
+            "unexpected error tokens: {error}"
+        );
+    }
+
+    fn error_text(result: Result<ModelAttrs, TokenStream>, failure_message: &str) -> String {
+        match result {
+            Ok(_) => panic!("{failure_message}"),
+            Err(tokens) => tokens.to_string(),
+        }
+    }
 }
