@@ -1,9 +1,24 @@
+//! Procedural macros for OxiMod models.
+//!
+//! This crate provides the `Model` derive macro. Its expansion is assembled
+//! from focused internal modules responsible for:
+//!
+//! - builder setters and defaults;
+//! - model and field attribute parsing;
+//! - validation;
+//! - MongoDB indexes;
+//! - collection persistence and lifecycle hooks;
+//! - typed query and nested-field schemas.
+//!
+//! Collection-backed models receive the complete persistence and query API.
+//! Models marked with `#[model(embedded)]` receive only behavior that is
+//! meaningful without an independent MongoDB collection.
+
 mod default;
 mod helpers;
 mod index;
-#[macro_use]
-mod parsers;
 mod model_macro;
+mod parsers;
 mod query;
 mod validate;
 
@@ -13,7 +28,7 @@ use helpers::{
 };
 use model_macro::{generate_collection_model_token, generate_model_token};
 use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream as TokenStream2};
 use query::{generate_field_schema_tokens, generate_query_tokens};
 use quote::quote;
 use syn::{DeriveInput, Ident, parse_macro_input};
@@ -88,12 +103,25 @@ use syn::{DeriveInput, Ident, parse_macro_input};
 /// - `#[index_max_init_seconds(...)]`
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+
+    expand_model(&input).unwrap_or_else(|error| error).into()
+}
+
+/// Expands a parsed `Model` derive input.
+///
+/// Keeping expansion separate from the procedural-macro entry point allows the
+/// complete orchestration layer to be tested using `proc_macro2::TokenStream`
+/// without constructing compiler-owned `proc_macro::TokenStream` values.
+///
+/// # Errors
+///
+/// Returns compile-error tokens when model or field attributes are invalid,
+/// the target declaration is unsupported, or an internally inconsistent model
+/// configuration is encountered.
+fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
     let name = &input.ident;
 
-    let ModelAttrs { kind, collection } = match collect_model_attrs(&input.attrs) {
-        Ok(attributes) => attributes,
-        Err(error) => return error.into(),
-    };
+    let ModelAttrs { kind, collection } = collect_model_attrs(&input.attrs)?;
 
     let document_id_setter_ident = collection
         .as_ref()
@@ -104,15 +132,9 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         validations,
         inits,
         setters,
-    } = match generate_field_tokens(&input, kind, document_id_setter_ident) {
-        Ok(token_streams) => token_streams,
-        Err(error) => return error.into(),
-    };
+    } = generate_field_tokens(input, kind, document_id_setter_ident)?;
 
-    let field_schema_tokens = match generate_field_schema_tokens(&input) {
-        Ok(tokens) => tokens,
-        Err(error) => return error.into(),
-    };
+    let field_schema_tokens = generate_field_schema_tokens(input)?;
 
     let model_token = generate_model_token(name, kind, validations);
 
@@ -131,10 +153,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
             let index_once_async_ident =
                 Ident::new(&format!("_INDEX_INIT_{name}"), Span::call_site());
 
-            let query_tokens = match generate_query_tokens(&input) {
-                Ok(tokens) => tokens,
-                Err(error) => return error.into(),
-            };
+            let query_tokens = generate_query_tokens(input)?;
 
             let collection_model_token =
                 generate_collection_model_token(name, &db, &collection, hooks);
@@ -214,7 +233,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
                         match result.inserted_id.as_object_id() {
                             Some(id) => Ok(id),
-
                             None => Err(
                                 ::oximod::OxiModError::database(
                                     "MongoDB returned a non-ObjectId inserted_id",
@@ -238,16 +256,15 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
 
         _ => {
-            return syn::Error::new_spanned(
+            return Err(syn::Error::new_spanned(
                 &input.ident,
                 "internal OxiMod macro error: inconsistent model configuration",
             )
-            .to_compile_error()
-            .into();
+            .to_compile_error());
         }
     };
 
-    let expanded = quote! {
+    Ok(quote! {
         impl #name {
             #[inline]
             pub fn new() -> Self {
@@ -273,7 +290,107 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         #field_schema_tokens
 
         #collection_tokens
-    };
+    })
+}
 
-    expanded.into()
+#[cfg(test)]
+mod tests {
+    use syn::{DeriveInput, parse_quote};
+
+    use super::expand_model;
+
+    #[test]
+    fn derive_expansion_assembles_collection_only_features() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+                name: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("collection model should expand"));
+
+        for expected in [
+            "_INDEX_INIT_User",
+            "ModelCore<::oximod::_feature::model::Collection>forUser",
+            "FieldSchemaforUser",
+            "QueryableforUser",
+            "__oximod_insert_with_client",
+            "_create_indexes",
+        ] {
+            assert!(
+                generated.contains(expected),
+                "expected `{expected}` in generated collection model: \
+                 {generated}"
+            );
+        }
+    }
+
+    #[test]
+    fn derive_expansion_omits_collection_features_for_embedded_models() {
+        let input: DeriveInput = parse_quote! {
+            #[model(embedded)]
+            struct Address {
+                city: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("embedded model should expand"));
+
+        for expected in [
+            "ModelCore<::oximod::_feature::model::Embedded>forAddress",
+            "FieldSchemaforAddress",
+            "pubfnnew()->Self",
+        ] {
+            assert!(
+                generated.contains(expected),
+                "expected `{expected}` in generated embedded model: \
+                 {generated}"
+            );
+        }
+
+        for unexpected in [
+            "_INDEX_INIT_Address",
+            "QueryableforAddress",
+            "__oximod_insert_with_client",
+            "_create_indexes",
+        ] {
+            assert!(
+                !generated.contains(unexpected),
+                "embedded model unexpectedly contained `{unexpected}`: \
+                 {generated}"
+            );
+        }
+    }
+
+    #[test]
+    fn derive_expansion_preserves_compile_error_diagnostics() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            struct User {
+                name: String,
+            }
+        };
+
+        let error = expand_model(&input)
+            .expect_err("missing collection should fail")
+            .to_string();
+
+        assert!(
+            error.contains("compile_error"),
+            "error should remain compile-error tokens: {error}"
+        );
+        assert!(
+            error.contains("Missing") && error.contains("collection_name"),
+            "missing-collection diagnostic should be retained: {error}"
+        );
+    }
+
+    fn compact(tokens: proc_macro2::TokenStream) -> String {
+        tokens.to_string().replace(' ', "")
+    }
 }
