@@ -1,3 +1,8 @@
+//! Integration tests for saving collection-backed models.
+//!
+//! The tests verify that MongoDB generates an object ID when one is absent
+//! and preserves a caller-supplied object ID when one is provided.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::Model;
 use serde::{Deserialize, Serialize};

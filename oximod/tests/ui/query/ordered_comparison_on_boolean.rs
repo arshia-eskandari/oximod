@@ -1,3 +1,8 @@
+//! Compile-fail test for ordered comparisons on boolean fields.
+//!
+//! The test verifies that operators such as `gt()` are unavailable for
+//! `bool` fields.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

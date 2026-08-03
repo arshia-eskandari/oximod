@@ -1,3 +1,8 @@
+//! Integration tests for user-defined field validators.
+//!
+//! The tests cover strings, numbers, `Cow`, collections, enums, nested values,
+//! optional fields, built-in rule combinations, and multiple custom validators.
+
 mod common;
 
 use common::init;

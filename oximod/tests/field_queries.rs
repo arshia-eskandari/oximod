@@ -1,3 +1,8 @@
+//! Integration tests for typed field-level query operators.
+//!
+//! The tests cover Serde field names, existence and null checks, regular
+//! expressions, string helpers, negation, BSON types, modulo, and bitwise predicates.
+
 mod common;
 
 use common::init;

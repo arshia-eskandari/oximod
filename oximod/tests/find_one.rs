@@ -1,3 +1,8 @@
+//! Integration tests for finding one document through raw collection access.
+//!
+//! The tests cover successful and empty lookups using ordinary field filters
+//! and optional email-field filters.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

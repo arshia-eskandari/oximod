@@ -1,3 +1,8 @@
+//! Compile-fail test for unsetting required fields.
+//!
+//! The test verifies that `unset()` is unavailable for a nonoptional
+//! `String` field.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

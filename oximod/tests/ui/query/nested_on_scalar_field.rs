@@ -1,3 +1,7 @@
+//! Compile-fail test for nested queries on scalar fields.
+//!
+//! The test verifies that `nested()` is unavailable for a `String` field.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

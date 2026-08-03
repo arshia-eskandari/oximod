@@ -1,3 +1,8 @@
+//! Integration tests for raw MongoDB aggregation through OxiMod collection access.
+//!
+//! The tests cover matched counts, empty results when a pipeline matches
+//! nothing, and filtering documents when an optional field is absent.
+
 use futures_util::stream::StreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;

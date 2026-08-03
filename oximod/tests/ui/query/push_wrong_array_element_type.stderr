@@ -1,7 +1,7 @@
 error[E0277]: the trait bound `i32: From<&str>` is not satisfied
-  --> tests/ui/query/push_wrong_array_element_type.rs:16:67
+  --> tests/ui/query/push_wrong_array_element_type.rs:21:67
    |
-16 |     let _query = User::query().update_one(|user| user.scores.push("high"));
+21 |     let _query = User::query().update_one(|user| user.scores.push("high"));
    |                                                              ---- ^^^^^^ the trait `From<&str>` is not implemented for `i32`
    |                                                              |
    |                                                              required by a bound introduced by this call

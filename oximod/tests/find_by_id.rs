@@ -1,3 +1,8 @@
+//! Integration tests for finding documents by MongoDB object ID.
+//!
+//! The tests cover direct collection lookup and `Model::find_by_id()` for
+//! existing and nonexistent IDs, including models with optional email fields.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,8 @@
+//! Integration tests for updating individual documents by object ID.
+//!
+//! The tests cover direct collection updates and `Model::update_by_id()`,
+//! malformed update documents, and assigning valid optional email values.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

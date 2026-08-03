@@ -1,3 +1,8 @@
+//! Integration tests for MongoDB indexes generated from `#[index(...)]`.
+//!
+//! The tests cover scalar, unique, sparse, TTL, text, hashed, hidden,
+//! case-insensitive, and geospatial indexes, along with version and retry options.
+
 use futures_util::TryStreamExt;
 use mongodb::{
     IndexModel,

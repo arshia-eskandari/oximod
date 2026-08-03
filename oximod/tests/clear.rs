@@ -1,3 +1,8 @@
+//! Integration test for clearing a model's MongoDB collection.
+//!
+//! The test verifies that `Model::clear()` reports deleted documents and
+//! leaves the collection empty.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

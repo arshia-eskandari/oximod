@@ -1,3 +1,8 @@
+//! Integration tests for finding multiple documents through raw collection access.
+//!
+//! The tests cover matching and empty result sets using ordinary fields and
+//! optional email fields, with cursor results deserialized into model values.
+
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;

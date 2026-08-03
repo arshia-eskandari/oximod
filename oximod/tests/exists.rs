@@ -1,3 +1,8 @@
+//! Integration tests for checking whether matching documents exist.
+//!
+//! The tests cover direct collection lookups and `Model::exists()` with
+//! matching and nonmatching filters against ordinary and optional email fields.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

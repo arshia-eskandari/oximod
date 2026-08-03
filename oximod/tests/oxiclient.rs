@@ -1,3 +1,8 @@
+//! Integration test for explicitly managed `OxiClient` instances.
+//!
+//! The test constructs a client, accesses its MongoDB client, and performs
+//! collection clearing, saving, collection access, and retrieval through it.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::{Model, OxiClient};
 use serde::{Deserialize, Serialize};

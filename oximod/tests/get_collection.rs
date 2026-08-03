@@ -1,3 +1,8 @@
+//! Integration test for direct access to a model's typed MongoDB collection.
+//!
+//! The test creates a manual unique index, persists a model through OxiMod,
+//! and retrieves the stored document through the underlying collection.
+
 use mongodb::{
     IndexModel,
     bson::{doc, oid::ObjectId},

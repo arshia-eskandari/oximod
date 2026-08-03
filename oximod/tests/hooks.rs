@@ -1,3 +1,8 @@
+//! Integration tests for opt-in model lifecycle hooks.
+//!
+//! The tests cover immutable and mutable save hooks, find, update, and delete
+//! hooks, hook-driven state mutation, and pre-hook errors aborting operations.
+
 mod common;
 
 use common::init;

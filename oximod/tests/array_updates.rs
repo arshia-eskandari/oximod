@@ -1,3 +1,8 @@
+//! Integration tests for typed array-update expressions.
+//!
+//! The tests cover `$push`, `$addToSet`, `$pull`, `$pop`, multi-value updates,
+//! and positional or filtered updates within arrays of embedded models.
+
 mod common;
 
 use common::init;

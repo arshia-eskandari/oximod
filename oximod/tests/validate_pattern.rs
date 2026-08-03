@@ -1,3 +1,8 @@
+//! Integration tests for regular-expression pattern validation.
+//!
+//! The tests cover matching and nonmatching values for optional and
+//! nonoptional string fields.
+
 mod common;
 
 use common::init;

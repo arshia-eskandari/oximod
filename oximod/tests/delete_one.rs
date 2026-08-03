@@ -1,3 +1,8 @@
+//! Integration tests for deleting a single document through raw collection access.
+//!
+//! The tests verify that only one matching document is removed and that
+//! nonmatching filters leave the collection unchanged, including email filters.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

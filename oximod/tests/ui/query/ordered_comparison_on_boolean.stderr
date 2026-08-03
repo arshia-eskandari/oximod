@@ -1,7 +1,7 @@
 error[E0599]: the method `gt` exists for struct `Field<bool>`, but its trait bounds were not satisfied
-  --> tests/ui/query/ordered_comparison_on_boolean.rs:16:58
+  --> tests/ui/query/ordered_comparison_on_boolean.rs:21:58
    |
-16 |     let _query = User::query().filter(|user| user.active.gt(true));
+21 |     let _query = User::query().filter(|user| user.active.gt(true));
    |                                                          ^^ method cannot be called on `Field<bool>` due to unsatisfied trait bounds
    |
   ::: $WORKSPACE/oximod_core/src/query/field.rs

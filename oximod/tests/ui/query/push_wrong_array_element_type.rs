@@ -1,3 +1,8 @@
+//! Compile-fail test for mismatched array-update element types.
+//!
+//! The test verifies that `push()` accepts values compatible with the
+//! array's declared element type.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

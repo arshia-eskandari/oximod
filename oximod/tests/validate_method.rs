@@ -1,3 +1,8 @@
+//! Integration tests for the generated inherent `validate()` method.
+//!
+//! The tests verify successful validation, direct error returns without
+//! persistence, and aggregation of failures from multiple fields.
+
 mod common;
 
 use common::init;

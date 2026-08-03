@@ -1,3 +1,8 @@
+//! Compile-fail test for regular-expression queries on numeric fields.
+//!
+//! The test verifies that `matches_regex()` is unavailable for an integer
+//! field.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

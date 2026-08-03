@@ -1,3 +1,8 @@
+//! Integration tests for typed updates to nested embedded-model fields.
+//!
+//! The tests cover setting, unsetting, and incrementing nested values, Serde
+//! field renames, multi-operation updates, and paths with multiple nesting levels.
+
 mod common;
 
 use common::init;

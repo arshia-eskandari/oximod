@@ -1,3 +1,8 @@
+//! Integration tests for typed queries against array fields.
+//!
+//! The tests cover element membership, `$all`, exact array sizes, and scalar
+//! `$elemMatch` predicates.
+
 mod common;
 
 use common::init;

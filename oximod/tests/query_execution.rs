@@ -1,3 +1,8 @@
+//! Integration tests for executing typed queries against MongoDB.
+//!
+//! The tests cover filtering, `all`, `first`, counting, limits, skipping,
+//! multi-field sorting, pagination, membership predicates, and pagination errors.
+
 mod common;
 
 use common::init;

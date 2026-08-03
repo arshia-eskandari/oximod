@@ -1,3 +1,8 @@
+//! Integration tests for typed query write operations.
+//!
+//! The tests cover single and bulk deletes and updates, field-update operators,
+//! returned models and counts, query-error propagation, and rejected bulk modifiers.
+
 mod common;
 
 use common::init;

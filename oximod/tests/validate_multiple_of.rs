@@ -1,3 +1,8 @@
+//! Integration tests for numeric `multiple_of` validation.
+//!
+//! The tests cover accepted and rejected values for signed and unsigned
+//! integer fields.
+
 mod common;
 
 use common::init;

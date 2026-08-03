@@ -1,3 +1,8 @@
+//! Integration tests for typed queries over embedded models.
+//!
+//! The tests cover nested and optional documents, arrays of embedded models,
+//! multiple nesting levels, nested sorting, `$elemMatch`, and Serde-renamed paths.
+
 mod common;
 
 use common::init;

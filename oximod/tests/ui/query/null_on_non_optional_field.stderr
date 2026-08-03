@@ -1,7 +1,7 @@
 error[E0599]: no method named `is_null` found for struct `Field<i32>` in the current scope
-  --> tests/ui/query/null_on_non_optional_field.rs:16:55
+  --> tests/ui/query/null_on_non_optional_field.rs:21:55
    |
-16 |     let _query = User::query().filter(|user| user.age.is_null());
+21 |     let _query = User::query().filter(|user| user.age.is_null());
    |                                                       ^^^^^^^ method not found in `Field<i32>`
    |
    = note: the method was found for

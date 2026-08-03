@@ -1,3 +1,8 @@
+//! Integration tests for counting MongoDB documents.
+//!
+//! The tests cover direct typed-collection counting and `Model::count()` with
+//! matching and empty-result filters, including optional email fields.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

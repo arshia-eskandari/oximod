@@ -1,3 +1,7 @@
+//! Compile-fail test for numeric updates on boolean fields.
+//!
+//! The test verifies that `inc()` is unavailable for a `bool` field.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

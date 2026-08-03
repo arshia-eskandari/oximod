@@ -1,3 +1,8 @@
+//! Integration tests for deleting multiple documents through raw collection access.
+//!
+//! The tests cover matching and nonmatching filters against ordinary fields
+//! and optional email fields, including the resulting deleted and remaining counts.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

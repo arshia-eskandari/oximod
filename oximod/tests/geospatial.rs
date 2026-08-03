@@ -1,3 +1,8 @@
+//! Integration tests for OxiMod geospatial values and typed queries.
+//!
+//! The tests cover GeoJSON point and polygon serialization, `$near` distance
+//! constraints, `$geoWithin`, `$geoIntersects`, combined filters, and optional points.
+
 mod common;
 
 use common::init;

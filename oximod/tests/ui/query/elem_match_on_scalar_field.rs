@@ -1,3 +1,7 @@
+//! Compile-fail test for `$elemMatch` on a scalar field.
+//!
+//! The test verifies that `elem_match()` is unavailable for an integer field.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

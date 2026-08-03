@@ -1,3 +1,8 @@
+//! Compile-fail test for null predicates on required fields.
+//!
+//! The test verifies that `is_null()` is unavailable for a nonoptional
+//! integer field.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

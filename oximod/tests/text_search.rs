@@ -1,3 +1,8 @@
+//! Integration tests for typed MongoDB text searches.
+//!
+//! The tests cover indexed terms, phrases, exclusions, typed filters, language,
+//! case and diacritic sensitivity, combined options, and relevance sorting.
+
 mod common;
 
 use common::init;

@@ -1,3 +1,8 @@
+//! Compile-fail test for nested `$elemMatch` on scalar arrays.
+//!
+//! The test verifies that `elem_match_nested()` is unavailable when an
+//! array's elements are scalar values rather than embedded models.
+
 use mongodb::bson::oid::ObjectId;
 use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};

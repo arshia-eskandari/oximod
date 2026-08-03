@@ -1,3 +1,8 @@
+//! Integration tests for numeric sign validation rules.
+//!
+//! The tests cover positive, negative, non-negative, and non-positive
+//! constraints for integer and floating-point values, including zero boundaries.
+
 mod common;
 
 use common::init;

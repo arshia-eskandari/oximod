@@ -1,3 +1,8 @@
+//! Integration tests for raw single-document updates through collection access.
+//!
+//! The tests verify that only one matching document is updated, malformed
+//! update documents fail, and optional email fields can receive valid values.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

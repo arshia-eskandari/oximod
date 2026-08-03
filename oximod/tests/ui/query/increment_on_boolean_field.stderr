@@ -1,7 +1,7 @@
 error[E0599]: the method `inc` exists for struct `Field<bool>`, but its trait bounds were not satisfied
-  --> tests/ui/query/increment_on_boolean_field.rs:16:62
+  --> tests/ui/query/increment_on_boolean_field.rs:20:62
    |
-16 |     let _query = User::query().update_one(|user| user.active.inc(1));
+20 |     let _query = User::query().update_one(|user| user.active.inc(1));
    |                                                              ^^^ method cannot be called on `Field<bool>` due to unsatisfied trait bounds
    |
    = note: the following trait bounds were not satisfied:
