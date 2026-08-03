@@ -2,28 +2,39 @@
 //!
 //! Schema-aware MongoDB modeling for Rust.
 //!
-//! OxiMod is a lightweight modeling layer built on top of the official
-//! MongoDB Rust driver. It provides builder-style model construction,
-//! validation, defaults, index declarations, and optional lifecycle hooks,
-//! while preserving direct access to the underlying driver when needed.
+//! OxiMod is a modeling layer built on top of the official MongoDB Rust
+//! driver. It adds derive-generated model construction, validation, defaults,
+//! indexes, lifecycle hooks, persistence helpers, and typed queries while
+//! preserving direct access to `mongodb::Collection` whenever the driver is the
+//! better tool.
 //!
-//! ## Features
+//! OxiMod is therefore not a replacement for the MongoDB driver. It is a
+//! model-oriented API that can be used alongside the driver without locking an
+//! application into a reduced MongoDB feature set.
 //!
-//! - derive-based collection and embedded model definitions
-//! - builder-style model construction
-//! - validation and defaults
-//! - index declarations
-//! - optional lifecycle hooks
-//! - global and explicit-client workflows
-//! - typed and raw MongoDB collection access
-//! - type-safe filtering, sorting, pagination, updates, and deletions
-//! - typed text-search and GeoJSON geospatial queries
+//! ## Main capabilities
 //!
-//! ## Quick Start
+//! - collection-backed and embedded models through one [`Model`] derive;
+//! - fluent construction with generated setters and field defaults;
+//! - aggregated field validation and custom validators;
+//! - single-field MongoDB index declarations;
+//! - optional save and `_id`-helper lifecycle hooks;
+//! - global-client and explicit-client model operations;
+//! - typed and raw MongoDB collection access;
+//! - type-aware filters, sorting, pagination, text search, and geospatial
+//!   queries;
+//! - typed single-document and bulk updates and deletions.
+//!
+//! ## Quick start
+//!
+//! Collection-backed models require a database and collection name. Importing
+//! [`Model`] brings both the derive macro and the persistence trait into scope.
+//! Rust keeps macros and traits in separate namespaces, so the shared name is
+//! intentional.
 //!
 //! ```rust,no_run
 //! use mongodb::bson::{doc, oid::ObjectId};
-//! use oximod::{Model, OxiClient};
+//! use oximod::{Model, OxiClient, Queryable};
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Serialize, Deserialize, Model)]
@@ -51,70 +62,402 @@
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
 //!
-//!     User::clear().await?;
-//!
-//!     let user = User::new()
+//!     let id = User::new()
 //!         .email("alice@example.com")
 //!         .name("Alice")
 //!         .age(30)
-//!         .active(true);
-//!
-//!     let id = user.save().await?;
-//!
-//!     if let Some(found) = User::find_by_id(id).await? {
-//!         println!("Found user: {}", found.name);
-//!     }
-//!
-//!     let count = User::count(doc! {}).await?;
-//!     println!("Total users: {}", count);
-//!
-//!     let collection = User::get_collection()?;
-//!
-//!     collection
-//!         .update_one(
-//!             doc! { "_id": id },
-//!             doc! { "$set": { "active": false } },
-//!         )
+//!         .active(true)
+//!         .save()
 //!         .await?;
 //!
+//!     let adults = User::query()
+//!         .filter(|user| user.active.eq(true) & user.age.gte(18))
+//!         .sort_by(|user| user.name.asc())
+//!         .limit(20)
+//!         .all()
+//!         .await?;
+//!
+//!     User::update_by_id(id, doc! { "$set": { "active": true } }).await?;
+//!
+//!     println!("Found {} active adults", adults.len());
 //!     Ok(())
 //! }
 //! ```
 //!
-//! For more complete examples, see the
-//! [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
+//! ## Collection-backed and embedded models
+//!
+//! A collection-backed model owns a MongoDB collection and receives the public
+//! [`Model`] persistence API plus [`Queryable`] typed queries:
+//!
+//! ```rust
+//! use oximod::Model;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("app")]
+//! #[collection("users")]
+//! struct User {
+//!     name: String,
+//!     address: Address,
+//! }
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Address {
+//!     street: String,
+//!     city: String,
+//! }
+//! ```
+//!
+//! An embedded model has no independent collection. It receives generated
+//! construction, defaults, validation, and typed nested-field metadata, but it
+//! does not implement [`Model`] or [`Queryable`] and cannot declare indexes or
+//! lifecycle hooks.
+//!
+//! Embedded fields can still participate in collection-model queries:
+//!
+//! ```rust,ignore
+//! User::query()
+//!     .filter(|user| {
+//!         user.address.nested(|address| {
+//!             address.city.eq("City1")
+//!         })
+//!     })
+//!     .all()
+//!     .await?;
+//! ```
+//!
+//! Generated nested paths honor supported Serde `rename` and `rename_all`
+//! attributes.
+//!
+//! ## Construction and defaults
+//!
+//! Every derived model receives `new()`, [`Default::default`], and a fluent
+//! setter for each field. Ordinary setters accept values through `Into<T>`;
+//! setters for `Option<T>` accept a value convertible into `T` and store it as
+//! `Some(...)`.
+//!
+//! `new()` is not a typestate builder. A field without `#[default(...)]` is
+//! initialized with `Default::default()`. A configured default replaces that
+//! fallback and may be any expression convertible into the field type:
+//!
+//! ```rust
+//! use oximod::Model;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Preferences {
+//!     #[default("Guest")]
+//!     display_name: String,
+//!
+//!     #[default(false)]
+//!     marketing_emails: bool,
+//!
+//!     nickname: Option<String>,
+//! }
+//!
+//! let preferences = Preferences::new().nickname("Al");
+//! assert_eq!(preferences.display_name, "Guest");
+//! assert_eq!(preferences.nickname.as_deref(), Some("Al"));
+//! ```
+//!
+//! For a collection field named `_id`, the generated setter is `id()` by
+//! default and accepts a MongoDB `ObjectId`. Rename it with
+//! `#[document_id_setter_ident("with_id")]` when `id` would conflict with
+//! another generated setter.
+//!
+//! ## Validation
+//!
+//! Both model kinds receive an inherent `validate()` method. Validation checks
+//! every configured field and returns all failures together as
+//! [`OxiModError::Validation`]. Calling [`Model::save`], [`Model::save_mut`],
+//! [`Model::save_from`], or [`Model::save_from_mut`] validates immediately
+//! before insertion, after the corresponding pre-save hook has run.
+//!
+//! ```rust
+//! use oximod::{Model, OxiModError};
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Profile {
+//!     #[validate(min_length = 3, max_length = 32)]
+//!     username: String,
+//!
+//!     #[validate(email)]
+//!     email: String,
+//! }
+//!
+//! let profile = Profile::new()
+//!     .username("ab")
+//!     .email("not-an-email");
+//!
+//! if let Err(error) = profile.validate() {
+//!     for failure in error.validation_errors().unwrap_or_default() {
+//!         println!("{}: {}", failure.field, failure.message);
+//!     }
+//! }
+//! # let _: Option<OxiModError> = None;
+//! ```
+//!
+//! Built-in validation groups include:
+//!
+//! - optional values: `required`;
+//! - lengths: `min_length`, `max_length`, and `non_empty`;
+//! - strings: `email`, `pattern`, `starts_with`, `ends_with`, `includes`, and
+//!   `alphanumeric`;
+//! - numbers: `min`, `max`, exclusive bounds, and sign rules;
+//! - integers: `multiple_of`;
+//! - user functions: `custom(path)`.
+//!
+//! The derive macro rejects incompatible built-in validators at compile time.
+//! Custom validators return `Result<(), String>`. For `Option<T>`, validators
+//! other than `required` operate on the inner value when it is present.
+//!
+//! Model validation is not automatically applied to raw update documents or
+//! typed update expressions. Those operations modify stored documents directly
+//! through MongoDB.
+//!
+//! ## Indexes
+//!
+//! `#[index(...)]` declares a single-field index on a collection model. Common
+//! options include scalar ordering, uniqueness, sparseness, TTL, text, hashed,
+//! wildcard, hidden, collation, and `2d` or `2dsphere` geospatial settings.
+//!
+//! Generated index initialization is attempted before a model is inserted. A
+//! successful initialization is remembered for that model type; after a failed
+//! attempt, a later save can try again.
+//!
+//! Index creation is not triggered merely by constructing a query or obtaining
+//! a collection. Use the MongoDB collection returned by [`Model::get_collection`]
+//! for compound indexes or driver options not represented by `#[index(...)]`.
+//!
+//! ## Clients and collection access
+//!
+//! [`OxiClient::init_global`] installs one process-wide MongoDB client. Model
+//! methods without an `_from` suffix and all typed-query execution methods use
+//! that global client. Global initialization can succeed only once.
+//!
+//! Explicit-client model methods accept `&mongodb::Client`. An [`OxiClient`]
+//! instance is one convenient way to own such a client:
+//!
+//! ```rust,no_run
+//! use mongodb::bson::oid::ObjectId;
+//! use oximod::{Model, OxiClient};
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("app")]
+//! #[collection("users")]
+//! struct User {
+//!     #[serde(skip_serializing_if = "Option::is_none")]
+//!     _id: Option<ObjectId>,
+//!     name: String,
+//! }
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let owner = OxiClient::new("mongodb://localhost:27017".to_string()).await?;
+//! let client = owner.client().expect("OxiClient::new initializes its client");
+//!
+//! let id = User::new().name("Alice").save_from(client).await?;
+//! let user = User::find_by_id_from(id, client).await?;
+//! # let _ = user;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! OxiMod exposes both `mongodb::Collection<Self>` and
+//! `mongodb::Collection<Document>` in global and explicit-client forms. These
+//! escape hatches are intended for aggregation pipelines, driver options,
+//! compound indexes, sessions, and any MongoDB operation outside OxiMod's
+//! convenience APIs.
+//!
+//! ## Typed queries
+//!
+//! Import [`Queryable`] to call `ModelType::query()`. The closure-based API
+//! receives a generated field structure whose methods depend on each field's
+//! Rust type. Incompatible operations therefore fail to compile—for example,
+//! regular expressions are unavailable on integers and array updates are
+//! unavailable on scalar fields.
+//!
+//! Typed queries currently execute through the global [`OxiClient`]. There is
+//! no explicit-client typed-query executor; use the `_from` model methods or an
+//! explicitly obtained MongoDB collection when global state is unsuitable.
+//!
+//! ### Filters and logical expressions
+//!
+//! ```rust,ignore
+//! User::query()
+//!     .filter(|user| {
+//!         user.active.eq(true)
+//!             & user.age.gte(18)
+//!             & (
+//!                 user.role.eq("admin")
+//!                     | user.role.eq("member")
+//!             )
+//!     })
+//! ```
+//!
+//! `&` creates logical AND and `|` creates logical OR; Rust does not permit
+//! overloading `&&` and `||`. Repeated `filter()` calls are also combined with
+//! AND. Field conditions can be negated with `not()`.
+//!
+//! Supported families include equality and membership, ordered comparisons,
+//! existence and BSON-type checks, optional-field null checks, regular
+//! expressions and escaped text helpers, numeric modulo, integer bitwise
+//! predicates, arrays, embedded models, text search, and GeoJSON geospatial
+//! predicates.
+//!
+//! ### Arrays and embedded values
+//!
+//! ```rust,ignore
+//! User::query()
+//!     .filter(|user| {
+//!         user.tags.contains_all(["rust", "mongodb"])
+//!             & user.scores.elem_match(|score| {
+//!                 score.gte(60) & score.lte(100)
+//!             })
+//!             & user.addresses.elem_match_nested(|address| {
+//!                 address.city.eq("City1")
+//!             })
+//!     })
+//! ```
+//!
+//! Arrays support membership, `$all`, exact size, and scalar `$elemMatch`.
+//! Arrays of embedded models add typed nested `$elemMatch` and positional
+//! update helpers.
+//!
+//! ### Sorting, pagination, and execution
+//!
+//! ```rust,ignore
+//! let users = User::query()
+//!     .filter(|user| user.active.eq(true))
+//!     .sort_by(|user| user.role.asc())
+//!     .then_sort_by(|user| user.name.asc())
+//!     .page(2, 25)
+//!     .all()
+//!     .await?;
+//! ```
+//!
+//! Pagination is one-based. `all()` applies sorting, skip, limit, and
+//! pagination. `first()` applies sorting but not skip, limit, or pagination.
+//! `count()` uses only the filter and text search. Invalid pagination and
+//! out-of-range limits are returned as [`QueryError`] when the query executes.
+//!
+//! ### Text and geospatial queries
+//!
+//! Add `$text` with a string or [`TextSearch`] and optionally sort by MongoDB's
+//! relevance score:
+//!
+//! ```rust,ignore
+//! Article::query()
+//!     .text(
+//!         TextSearch::new("\"rust mongodb\" -beginner")
+//!             .language("none"),
+//!     )
+//!     .sort_by_text_score()
+//!     .all()
+//!     .await?;
+//! ```
+//!
+//! Text queries require an appropriate MongoDB text index.
+//!
+//! GeoJSON point and polygon fields support `$near`, `$geoWithin`, and
+//! `$geoIntersects` where their typed field constraints permit:
+//!
+//! ```rust,ignore
+//! Place::query()
+//!     .filter(|place| {
+//!         place.location.near(
+//!             NearQuery::new(GeoPoint::new(-79.38, 43.65))
+//!                 .max_distance(5_000.0),
+//!         )
+//!     })
+//!     .all()
+//!     .await?;
+//! ```
+//!
+//! Coordinates use longitude-latitude order. Distances for GeoJSON `$near`
+//! queries with a `2dsphere` index are expressed in metres.
+//!
+//! ### Typed writes
+//!
+//! `update_one()` and `delete_one()` apply filtering and sorting and return the
+//! affected document. They do not apply skip, limit, or pagination.
+//!
+//! ```rust,ignore
+//! let updated = User::query()
+//!     .filter(|user| user.name.eq("User1"))
+//!     .update_one(|user| {
+//!         user.active.set(true)
+//!             & user.login_count.inc(1)
+//!             & user.nickname.unset()
+//!     })
+//!     .await?;
+//! ```
+//!
+//! `update_all()` and `delete_all()` operate on every matching document and
+//! reject sorting, skipping, limiting, and pagination instead of silently
+//! ignoring them. An unfiltered bulk write affects the entire collection.
+//! Array filters configured with `array_filter()` are applied to typed update
+//! operations.
+//!
+//! ## Lifecycle hooks
+//!
+//! Add `#[hooks]` to a collection model and implement [`Hooks`] to opt into
+//! lifecycle calls. Hooks wrap only these global and explicit-client [`Model`]
+//! helpers:
+//!
+//! - `save` and `save_from`;
+//! - `save_mut` and `save_from_mut`;
+//! - `find_by_id` and `find_by_id_from`;
+//! - `update_by_id` and `update_by_id_from`;
+//! - `delete_by_id` and `delete_by_id_from`.
+//!
+//! They do not wrap typed-query execution, direct collection operations,
+//! `clear`, `exists`, or `count`. A pre-hook error prevents the database
+//! operation. A post-hook error is returned after the database operation has
+//! already succeeded.
+//!
+//! ## Errors
+//!
+//! [`OxiModError`] distinguishes connection, global-client, serialization,
+//! aggregation, index, validation, database, custom, and typed-query failures.
+//! Driver-backed variants retain their source errors. Validation and query
+//! details can be inspected through [`OxiModError::validation_errors`] and
+//! [`OxiModError::query_error`].
+//!
+//! For complete runnable examples, see the
+//! [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples)
+//! directory.
 
-// --- public API ---
+// --- Public errors ---------------------------------------------------------
 
-/// Primary error type used by OxiMod.
+/// Primary error returned by OxiMod operations.
 ///
-/// This type is returned by model operations that fail due to validation,
-/// hook execution, client initialization, or MongoDB driver errors.
+/// The variants distinguish connection setup, missing or duplicate global
+/// clients, serialization, aggregation, index initialization, validation,
+/// database operations, user-defined failures, and invalid typed-query
+/// configuration.
+///
+/// Errors backed by another library retain that error as their source. Use
+/// [`OxiModError::validation_errors`] or [`OxiModError::query_error`] to inspect
+/// structured validation and query failures without pattern matching.
 pub use oximod_core::error::oximod_error::OxiModError;
 
-/// Represents invalid typed-query configuration.
+/// Invalid typed-query configuration detected during construction or execution.
 ///
-/// `QueryError` is used when a query cannot be executed because one or more
-/// builder options are invalid.
-///
-/// Query errors are normally returned through [`OxiModError::Query`].
-/// They can be inspected through pattern matching or with
-/// [`OxiModError::query_error`].
+/// This includes zero page numbers or sizes, pagination overflow, limits that
+/// cannot be represented by the MongoDB driver, and unsupported modifiers on
+/// bulk writes. It is normally returned through [`OxiModError::Query`].
 ///
 /// # Example
 ///
 /// ```rust,no_run
 /// use mongodb::bson::oid::ObjectId;
-/// use oximod::{
-///     Model,
-///     OxiModError,
-///     QueryError,
-///     Queryable,
-/// };
-/// use serde::{
-///     Deserialize,
-///     Serialize,
-/// };
+/// use oximod::{Model, OxiModError, QueryError, Queryable};
+/// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Serialize, Deserialize, Model)]
 /// #[db("app")]
@@ -126,119 +469,127 @@ pub use oximod_core::error::oximod_error::OxiModError;
 /// }
 ///
 /// # async fn run() -> Result<(), OxiModError> {
-/// let result = User::query()
-///     .page(0, 10)
-///     .all()
-///     .await;
-///
-/// match result {
-///     Err(OxiModError::Query(
-///         QueryError::InvalidPageNumber { page },
-///     )) => {
+/// match User::query().page(0, 10).all().await {
+///     Err(OxiModError::Query(QueryError::InvalidPageNumber { page })) => {
 ///         println!("Invalid page number: {page}");
 ///     }
 ///     Err(error) => return Err(error),
 ///     Ok(users) => println!("Found {} users", users.len()),
 /// }
-///
 /// # Ok(())
 /// # }
 /// ```
 pub use oximod_core::error::query_error::QueryError;
 
-/// A typed-query operation that may modify multiple documents.
+/// A typed bulk-write operation named by [`QueryError`].
 pub use oximod_core::error::query_error::BulkWriteOperation;
 
-/// An unsupported query modifier associated with a typed bulk write.
+/// A query modifier rejected by a typed bulk write.
 pub use oximod_core::error::query_error::QueryModifier;
 
-/// Represents a validation failure for a specific model field.
+/// One field-level validation failure.
+///
+/// The public [`ValidationError::field`] and [`ValidationError::message`]
+/// members identify the failed model field and describe the violated rule.
 pub use oximod_core::error::oximod_error::ValidationError;
 
-/// Represents one or more validation failures collected during model validation.
+/// All field-level failures collected during one model validation pass.
+///
+/// The tuple field contains a `Vec<ValidationError>` and is also exposed as a
+/// slice through [`OxiModError::validation_errors`].
 pub use oximod_core::error::oximod_error::ValidationErrors;
+
+// --- Clients and model runtime --------------------------------------------
 
 /// MongoDB client wrapper used by OxiMod.
 ///
-/// `OxiClient` supports both global and explicit-client workflows.
+/// `OxiClient` supports two independent patterns:
 ///
-/// Global usage:
+/// - [`OxiClient::init_global`] and [`OxiClient::global`] manage the single
+///   process-wide client used by ordinary model methods and typed queries;
+/// - [`OxiClient::new`] or [`OxiClient::init_client`] owns an instance-level
+///   client retrievable through [`OxiClient::client`] or
+///   [`OxiClient::client_mut`].
+///
+/// Instance-level clients are useful for tests, dependency injection, and
+/// applications that communicate with more than one MongoDB deployment. Model
+/// `_from` methods take `&mongodb::Client`, not `&OxiClient`.
+///
+/// # Global client
 ///
 /// ```rust,no_run
 /// use oximod::OxiClient;
 ///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
-///     Ok(())
-/// }
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
+/// let client = OxiClient::global()?;
+/// # let _ = client;
+/// # Ok(())
+/// # }
 /// ```
 ///
-/// Explicit usage:
+/// # Instance-level client
 ///
 /// ```rust,no_run
-/// use mongodb::bson::oid::ObjectId;
-/// use oximod::{Model, OxiClient};
-/// use serde::{Deserialize, Serialize};
+/// use oximod::OxiClient;
 ///
-/// #[derive(Debug, Serialize, Deserialize, Model)]
-/// #[db("app")]
-/// #[collection("users")]
-/// struct User {
-///     #[serde(skip_serializing_if = "Option::is_none")]
-///     _id: Option<ObjectId>,
-///     name: String,
-/// }
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     OxiClient::init_global("mongodb://localhost:27017".to_string()).await?;
-///
-///     let user = User::new().name("Alice");
-///     let _id = user.save().await?;
-///
-///     Ok(())
-/// }
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let owner = OxiClient::new("mongodb://localhost:27017".to_string()).await?;
+/// let client = owner.client().expect("new clients are initialized");
+/// # let _ = client;
+/// # Ok(())
+/// # }
 /// ```
 pub use oximod_core::feature::conn::client::OxiClient;
 
-/// Trait for defining lifecycle hooks on collection-backed OxiMod models.
+/// Lifecycle hooks for collection-backed models.
 ///
-/// Hooks allow custom logic to run before and after save, update, delete,
-/// and query operations.
+/// Hooks are enabled with `#[hooks]` and have default no-op implementations.
+/// Override only the methods a model needs.
 ///
-/// Hooks are optional and must be enabled with `#[hooks]` on a
-/// collection-backed model. Embedded models do not support persistence hooks.
+/// The hook surface covers immutable and mutable saves plus `_id`-based find,
+/// update, and delete helpers in both global-client and explicit-client forms.
+/// Hooks do not wrap typed queries or direct MongoDB collection operations.
+///
+/// A pre-hook error aborts the database operation. A post-hook error reports a
+/// post-processing failure after the database operation has succeeded.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// #[async_trait::async_trait]
+/// impl Hooks for User {
+///     async fn pre_save_mut(&mut self) -> Result<(), OxiModError> {
+///         self.email = self.email.trim().to_lowercase();
+///         Ok(())
+///     }
+/// }
+/// ```
 pub use oximod_core::feature::hooks::Hooks;
 
-/// Public trait implemented by collection-backed OxiMod models.
+/// Persistence interface implemented by collection-backed OxiMod models.
 ///
-/// Importing `oximod::Model` brings the derive macro and this trait into scope.
-/// Rust keeps derive macros and traits in separate namespaces, so one import
-/// supports both model declaration and collection persistence.
+/// Importing `oximod::Model` brings this trait and the derive macro of the same
+/// name into scope.
 ///
-/// This trait provides:
+/// The trait provides:
 ///
-/// - typed and raw MongoDB collection access,
-/// - global and explicit-client save operations,
-/// - lookup, update, and deletion by `_id`,
-/// - collection clearing,
-/// - existence checks,
-/// - document counting.
+/// - typed and raw collection access;
+/// - immutable and mutable saves;
+/// - find, update, and delete helpers by MongoDB `ObjectId`;
+/// - collection clearing;
+/// - existence checks and document counts;
+/// - explicit-client counterparts for every operation.
 ///
-/// It is implemented automatically for ordinary `#[derive(Model)]` types.
-/// Models declared with `#[model(embedded)]` do not implement this trait.
-/// Embedded models still receive generated builders, defaults, validation, and
-/// typed nested-field metadata.
+/// Methods without `_from` use the global [`OxiClient`]. Methods ending in
+/// `_from` accept `&mongodb::Client`. Embedded models do not implement this
+/// trait.
 ///
 /// # Example
 ///
 /// ```rust,no_run
-/// use mongodb::bson::oid::ObjectId;
-/// use oximod::{
-///     Model,
-///     OxiModError,
-/// };
+/// use mongodb::bson::{doc, oid::ObjectId};
+/// use oximod::{Model, OxiModError};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Serialize, Deserialize, Model)]
@@ -251,558 +602,170 @@ pub use oximod_core::feature::hooks::Hooks;
 /// }
 ///
 /// # async fn run() -> Result<(), OxiModError> {
-/// let user = User::new().name("Alice");
-/// let id = user.save().await?;
+/// let id = User::new().name("Alice").save().await?;
 /// let found = User::find_by_id(id).await?;
-///
-/// # let _ = found;
+/// let exists = User::exists(doc! { "name": "Alice" }).await?;
+/// # let _ = (found, exists);
 /// # Ok(())
 /// # }
 /// ```
 pub use oximod_core::feature::model::Model;
 
-/// Derive macro for defining collection-backed and embedded OxiMod models.
+/// Derive macro for collection-backed and embedded OxiMod models.
 ///
-/// By default, `#[derive(Model)]` generates a collection-backed model with:
+/// The derive supports named-field structs. All derived fields are initialized
+/// by `new()`, so each field must either implement [`Default`] or define a
+/// compatible `#[default(...)]` expression.
 ///
-/// - fluent builder methods,
-/// - default handling,
-/// - validation support,
-/// - typed-query support,
-/// - index initialization,
-/// - optional hook integration,
-/// - MongoDB collection and persistence support.
+/// # Collection-backed models
 ///
-/// Collection-backed models require `#[db(...)]` and `#[collection(...)]`.
+/// Collection models are the default and require:
 ///
-/// Use `#[model(embedded)]` to generate an embedded model. Embedded models
-/// receive fluent builder methods, default handling, validation support, and
-/// typed nested-field access, but do not receive collection access, querying,
-/// indexes, hooks, or persistence methods.
+/// - `#[db("database_name")]`;
+/// - `#[collection("collection_name")]`.
 ///
-/// # Collection-backed model
+/// They receive construction, defaults, validation, index initialization,
+/// optional hooks, [`Model`] persistence, and [`Queryable`] typed queries.
+/// Optional struct-level attributes are:
+///
+/// - `#[hooks]`;
+/// - `#[document_id_setter_ident("with_id")]`;
+/// - `#[index_max_retries(N)]`;
+/// - `#[index_max_init_seconds(N)]`.
+///
+/// The two index-initialization settings are accepted by the current derive and
+/// stored in its coordinator. The current `run_once` implementation does not
+/// enforce them as hard retry or timeout limits.
+///
+/// # Embedded models
+///
+/// `#[model(embedded)]` creates a value intended to be stored within another
+/// model. Embedded models receive construction, defaults, validation, and
+/// typed nested-field metadata. They do not receive persistence, root queries,
+/// indexes, or hooks.
+///
+/// Collection-only attributes are rejected on embedded models:
+///
+/// - `db` and `collection`;
+/// - `hooks` and `index`;
+/// - `document_id_setter_ident`;
+/// - `index_max_retries` and `index_max_init_seconds`.
+///
+/// # Field attributes
+///
+/// - `#[default(expression)]` replaces `Default::default()` during `new()`;
+/// - `#[validate(...)]` adds compile-time-checked built-in or custom rules;
+/// - `#[index(...)]` adds a single-field MongoDB index to a collection model.
+///
+/// Serde field and container renames are reflected in generated typed paths.
+///
+/// # Example
 ///
 /// ```rust
 /// use oximod::Model;
 /// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[model(embedded)]
+/// #[serde(rename_all = "camelCase")]
+/// struct Address {
+///     street_name: String,
+///     city: String,
+/// }
 ///
 /// #[derive(Debug, Serialize, Deserialize, Model)]
 /// #[db("app")]
 /// #[collection("users")]
 /// struct User {
+///     #[validate(min_length = 2)]
 ///     name: String,
+///
 ///     address: Address,
 /// }
 ///
-/// #[derive(Debug, Serialize, Deserialize, Model)]
-/// #[model(embedded)]
-/// struct Address {
-///     city: String,
-/// }
+/// let user = User::new()
+///     .name("User1")
+///     .address(Address::new().street_name("Main St").city("City1"));
+/// # let _ = user;
 /// ```
-///
-/// # Embedded model
-///
-/// ```rust
-/// use oximod::Model;
-/// use serde::{Deserialize, Serialize};
-///
-/// #[derive(Debug, Serialize, Deserialize, Model)]
-/// #[model(embedded)]
-/// struct Address {
-///     street: String,
-///     city: String,
-/// }
-///
-/// let address = Address::new()
-///     .street("13544 Cane St")
-///     .city("City1");
-/// ```
-///
-/// The following attributes are not supported on embedded models:
-///
-/// - `#[db(...)]`
-/// - `#[collection(...)]`
-/// - `#[hooks]`
-/// - `#[index(...)]`
-/// - `#[document_id_setter_ident(...)]`
-/// - `#[index_max_retries(...)]`
-/// - `#[index_max_init_seconds(...)]`
 pub use oximod_macros::Model;
 
-/// Trait implemented by models that support OxiMod's typed-query API.
+// --- Typed queries ---------------------------------------------------------
+
+/// Trait implemented by collection models that support typed queries.
 ///
-/// This trait is implemented automatically by `#[derive(Model)]`. Importing it
-/// brings [`Queryable::query`] into scope.
+/// `#[derive(Model)]` implements this trait only for collection-backed models.
+/// Importing it brings [`Queryable::query`] into scope. The resulting builder
+/// uses the global [`OxiClient`] when an execution method is called.
 ///
-/// A typed query receives generated model fields whose available operations
-/// depend on their Rust types. This prevents incompatible MongoDB operators
-/// from being applied to fields.
+/// The query closure receives generated fields whose available methods are
+/// determined by their Rust types and whose paths follow supported Serde
+/// renames. Queries can express filtering, sorting, pagination, text and
+/// geospatial search, typed updates, and typed deletion.
+///
+/// # Modifier behavior
+///
+/// - repeated filters are combined with logical AND;
+/// - `sort_by` replaces the primary sort and `then_sort_by` appends;
+/// - `all` applies sort, skip, limit, and one-based pagination;
+/// - `first` applies sorting but ignores skip, limit, and pagination;
+/// - `count` ignores sort, skip, limit, and pagination;
+/// - `update_one` and `delete_one` apply sorting but not skip, limit, or
+///   pagination;
+/// - `update_all` and `delete_all` reject sort, skip, limit, and pagination.
 ///
 /// # Example
 ///
 /// ```rust,no_run
 /// use mongodb::bson::oid::ObjectId;
-/// use oximod::{
-///     Model,
-///     OxiModError,
-///     Queryable,
-/// };
-/// use serde::{
-///     Deserialize,
-///     Serialize,
-/// };
+/// use oximod::{Model, OxiModError, Queryable};
+/// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(
-///     Debug,
-///     Serialize,
-///     Deserialize,
-///     Model,
-/// )]
+/// #[derive(Debug, Serialize, Deserialize, Model)]
 /// #[db("app")]
 /// #[collection("users")]
 /// struct User {
 ///     #[serde(skip_serializing_if = "Option::is_none")]
 ///     _id: Option<ObjectId>,
-///
 ///     name: String,
 ///     age: i32,
 ///     active: bool,
-///     role: String,
 /// }
 ///
 /// # async fn run() -> Result<(), OxiModError> {
 /// let users = User::query()
-///     .filter(|user| {
-///         user.active.eq(true)
-///             & user.age.gte(18)
-///     })
+///     .filter(|user| user.active.eq(true) & user.age.gte(18))
 ///     .sort_by(|user| user.name.asc())
 ///     .limit(20)
 ///     .all()
 ///     .await?;
-///
-/// println!("Found {} users", users.len());
-///
-/// # Ok(())
-/// # }
-/// ```
-///
-/// # Equality and membership
-///
-/// Fields whose values can be represented as BSON support equality and
-/// inequality:
-///
-/// ```rust,ignore
-/// user.name.eq("User1")
-/// user.name.ne("User2")
-/// ```
-///
-/// Match one of several values with `$in`:
-///
-/// ```rust,ignore
-/// user.role.in_values([
-///     "admin",
-///     "member",
-/// ])
-/// ```
-///
-/// Exclude several values with `$nin`:
-///
-/// ```rust,ignore
-/// user.role.not_in_values([
-///     "banned",
-///     "suspended",
-/// ])
-/// ```
-///
-/// # Ordered comparisons
-///
-/// Numeric values, strings, and BSON date-time values support ordered
-/// comparisons:
-///
-/// ```rust,ignore
-/// user.age.gt(18)
-/// user.age.gte(18)
-/// user.age.lt(65)
-/// user.age.lte(65)
-/// ```
-///
-/// # Logical expressions
-///
-/// Combine expressions with `&` for MongoDB `$and` and `|` for `$or`:
-///
-/// ```rust,ignore
-/// user.active.eq(true)
-///     & (
-///         user.role.eq("admin")
-///             | user.role.eq("member")
-///     )
-/// ```
-///
-/// Rust does not allow overloading `&&` and `||`, so typed expressions use
-/// the bitwise operators `&` and `|`.
-///
-/// Negate a field condition with `.not()`:
-///
-/// ```rust,ignore
-/// user.age.not(|age| age.gte(18))
-/// ```
-///
-/// # Field existence, null, and BSON type
-///
-/// Existence checks are available for every field:
-///
-/// ```rust,ignore
-/// user.nickname.exists()
-/// user.nickname.not_exists()
-/// ```
-///
-/// Optional fields support strict null checks:
-///
-/// ```rust,ignore
-/// user.nickname.is_null()
-/// user.nickname.is_not_null()
-/// ```
-///
-/// `is_null()` matches only fields that exist and contain BSON null. It does
-/// not match missing fields.
-///
-/// Query the stored BSON representation with [`BsonType`]:
-///
-/// ```rust,ignore
-/// user.nickname.has_bson_type(
-///     BsonType::String,
-/// )
-/// ```
-///
-/// # Regular expressions
-///
-/// Required and optional string fields support BSON regular-expression
-/// queries:
-///
-/// ```rust,ignore
-/// user.name.matches_regex("^User")
-/// ```
-///
-/// Typed options can be supplied with [`RegexOption`]:
-///
-/// ```rust,ignore
-/// user.name.matches_regex_with_options(
-///     "^user",
-///     [RegexOption::CaseInsensitive],
-/// )
-/// ```
-///
-/// Literal prefix, suffix, and substring helpers are also available:
-///
-/// ```rust,ignore
-/// user.name.starts_with("User")
-/// user.name.ends_with("1")
-/// user.name.contains_text("ser")
-/// ```
-///
-/// These helpers escape regular-expression metacharacters before creating
-/// the query.
-///
-/// # Numeric and bitwise queries
-///
-/// Numeric fields support MongoDB `$mod`:
-///
-/// ```rust,ignore
-/// user.login_count.modulo(2, 0)
-/// ```
-///
-/// Integer fields support all four MongoDB bitwise query operators:
-///
-/// ```rust,ignore
-/// user.permissions.bits_all_set(0b0101)
-/// user.permissions.bits_any_set(0b1100)
-/// user.permissions.bits_all_clear(0b1100)
-/// user.permissions.bits_any_clear(0b1100)
-/// ```
-///
-/// # Array queries
-///
-/// Match an array containing one value:
-///
-/// ```rust,ignore
-/// user.tags.contains("rust")
-/// ```
-///
-/// Match an array containing every supplied value:
-///
-/// ```rust,ignore
-/// user.tags.contains_all([
-///     "rust",
-///     "mongodb",
-/// ])
-/// ```
-///
-/// Match an exact array length:
-///
-/// ```rust,ignore
-/// user.tags.has_size(2)
-/// ```
-///
-/// Scalar arrays support typed `$elemMatch` conditions:
-///
-/// ```rust,ignore
-/// user.scores.elem_match(|score| {
-///     score.gte(60)
-///         & score.lte(100)
-/// })
-/// ```
-///
-/// Arrays of embedded models support generated typed-field access:
-///
-/// ```rust,ignore
-/// user.addresses.elem_match_nested(
-///     |address| {
-///         address.city.eq("City1")
-///             & address.active.eq(true)
-///     },
-/// )
-/// ```
-///
-/// # Embedded models
-///
-/// Derive [`Model`] with `#[model(embedded)]` for nested types and call
-/// `.nested()` to access their generated typed fields:
-///
-/// ```rust,no_run
-/// use mongodb::bson::oid::ObjectId;
-/// use oximod::{
-///     Model,
-///     Queryable,
-/// };
-/// use serde::{
-///     Deserialize,
-///     Serialize,
-/// };
-///
-/// #[derive(
-///     Debug,
-///     Serialize,
-///     Deserialize,
-///     Model,
-/// )]
-/// #[model(embedded)]
-/// #[serde(rename_all = "camelCase")]
-/// struct Address {
-///     city_name: String,
-///     active: bool,
-/// }
-///
-/// #[derive(
-///     Debug,
-///     Serialize,
-///     Deserialize,
-///     Model,
-/// )]
-/// #[db("example")]
-/// #[collection("users")]
-/// struct User {
-///     #[serde(skip_serializing_if = "Option::is_none")]
-///     _id: Option<ObjectId>,
-///
-///     name: String,
-///
-///     #[serde(skip_serializing_if = "Option::is_none")]
-///     address: Option<Address>,
-///
-///     addresses: Vec<Address>,
-/// }
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let users = User::query()
-///     .filter(|user| {
-///         user.address.nested(|address| {
-///             address.city_name.eq("City1")
-///                 & address.active.eq(true)
-///         })
-///     })
-///     .sort_by(|user| {
-///         user.address.nested(|address| {
-///             address.city_name.asc()
-///         })
-///     })
-///     .all()
-///     .await?;
-///
-/// let users_with_matching_address = User::query()
-///     .filter(|user| {
-///         user.addresses.elem_match_nested(
-///             |address| {
-///                 address.city_name.eq("City1")
-///                     & address.active.eq(true)
-///             },
-///         )
-///     })
-///     .all()
-///     .await?;
-///
 /// # let _ = users;
-/// # let _ = users_with_matching_address;
 /// # Ok(())
 /// # }
 /// ```
 ///
-/// Embedded models support required fields, `Option<T>`, `Vec<T>`, and
-/// multiple nesting levels. Nested field paths respect Serde `rename` and
-/// `rename_all` attributes.
+/// # Bulk-write warning
 ///
-/// # Sorting
+/// An unfiltered `update_all()` or `delete_all()` affects every document in the
+/// collection.
+pub use oximod_core::query::Queryable;
+
+/// Option accepted by typed MongoDB regular-expression queries.
 ///
-/// Set a primary sort with `.sort_by()`:
+/// The variants map to MongoDB's `i`, `m`, `s`, and `x` options:
+/// case-insensitive, multiline, dot-matches-newline, and ignore-whitespace.
+/// Multiple options can be supplied to `matches_regex_with_options()`.
+pub use oximod_core::query::RegexOption;
+
+/// Type-safe MongoDB update document assembled from generated fields.
 ///
-/// ```rust,ignore
-/// User::query()
-///     .sort_by(|user| user.age.desc())
-/// ```
+/// Update expressions are returned by field helpers such as `set`, `unset`,
+/// `inc`, `push`, and positional array updates. Combine independent operations
+/// with `&`. Documents using the same MongoDB operator are merged; when the same
+/// operator writes the same path more than once, the right-hand expression
+/// takes precedence.
 ///
-/// Append secondary fields with `.then_sort_by()`:
-///
-/// ```rust,ignore
-/// User::query()
-///     .sort_by(|user| user.role.asc())
-///     .then_sort_by(|user| user.age.desc())
-///     .then_sort_by(|user| user.name.asc())
-/// ```
-///
-/// Sort precedence follows insertion order.
-///
-/// # Limiting and pagination
-///
-/// Skip and limit matching results:
-///
-/// ```rust,ignore
-/// User::query()
-///     .skip(20)
-///     .limit(10)
-/// ```
-///
-/// Pagination is one-based:
-///
-/// ```rust,ignore
-/// User::query()
-///     .page(2, 10)
-/// ```
-///
-/// This calculates an offset of `10` and a limit of `10`.
-///
-/// Invalid page numbers, page sizes, and pagination overflow are returned as
-/// [`QueryError`] when the query is executed.
-///
-/// # Text search
-///
-/// Collections with a text index can be searched with `.text()`:
-///
-/// ```rust,ignore
-/// Article::query()
-///     .text("rust mongodb")
-///     .sort_by_text_score()
-///     .all()
-///     .await?
-/// ```
-///
-/// Use [`TextSearch`] to configure language, case sensitivity, and diacritic
-/// sensitivity:
-///
-/// ```rust,ignore
-/// Article::query()
-///     .text(
-///         TextSearch::new("Café")
-///             .language("none")
-///             .case_sensitive(true)
-///             .diacritic_sensitive(true),
-///     )
-///     .all()
-///     .await?
-/// ```
-///
-/// Text-search strings may also contain quoted phrases and excluded terms:
-///
-/// ```rust,ignore
-/// Article::query()
-///     .text("\"rust mongodb\" -beginner")
-/// ```
-///
-/// # Geospatial queries
-///
-/// GeoJSON point fields with a `2dsphere` index support `$near`:
-///
-/// ```rust,ignore
-/// Place::query()
-///     .filter(|place| {
-///         place.location.near(
-///             GeoPoint::new(
-///                 -79.38,
-///                 43.65,
-///             ),
-///         )
-///     })
-///     .all()
-///     .await?
-/// ```
-///
-/// Use [`NearQuery`] for distance limits:
-///
-/// ```rust,ignore
-/// place.location.near(
-///     NearQuery::new(
-///         GeoPoint::new(
-///             -79.38,
-///             43.65,
-///         ),
-///     )
-///     .min_distance(500.0)
-///     .max_distance(5_000.0),
-/// )
-/// ```
-///
-/// GeoJSON values also support `$geoWithin` and `$geoIntersects`:
-///
-/// ```rust,ignore
-/// place.location.geo_within(boundary)
-/// region.boundary.geo_intersects(point)
-/// ```
-///
-/// Coordinates use longitude-latitude order. Distances for GeoJSON `$near`
-/// queries are expressed in metres.
-///
-/// # Execution
-///
-/// Retrieve all matching models:
-///
-/// ```rust,ignore
-/// User::query()
-///     .filter(|user| user.active.eq(true))
-///     .all()
-///     .await?
-/// ```
-///
-/// Retrieve the first matching model:
-///
-/// ```rust,ignore
-/// User::query()
-///     .sort_by(|user| user.created_at.asc())
-///     .first()
-///     .await?
-/// ```
-///
-/// Count matching documents:
-///
-/// ```rust,ignore
-/// User::query()
-///     .filter(|user| user.active.eq(true))
-///     .count()
-///     .await?
-/// ```
-///
-/// # Typed updates
-///
-/// Update and return the first matching document:
+/// # Example
 ///
 /// ```rust,ignore
 /// User::query()
@@ -810,247 +773,65 @@ pub use oximod_macros::Model;
 ///     .update_one(|user| {
 ///         user.active.set(true)
 ///             & user.login_count.inc(1)
-///     })
-///     .await?
-/// ```
-///
-/// Update every matching document:
-///
-/// ```rust,ignore
-/// User::query()
-///     .filter(|user| user.active.eq(false))
-///     .update_all(|user| {
-///         user.status.set("inactive")
-///     })
-///     .await?
-/// ```
-///
-/// Supported typed update helpers include:
-///
-/// ```rust,ignore
-/// user.name.set("User1")
-/// user.nickname.unset()
-/// user.login_count.inc(1)
-/// user.score.mul(2)
-/// user.score.min(10)
-/// user.score.max(100)
-/// user.nickname.rename_to(
-///     &user.display_name,
-/// )
-/// user.updated_at.current_date()
-/// ```
-///
-/// Array update helpers include:
-///
-/// ```rust,ignore
-/// user.tags.push("rust")
-/// user.tags.push_each(["rust", "mongodb"])
-/// user.tags.add_to_set("rust")
-/// user.tags.add_each_to_set(["rust", "mongodb"])
-/// user.tags.pull("deprecated")
-/// user.tags.pop_first()
-/// user.tags.pop_last()
-/// ```
-///
-/// Array elements in embedded-document arrays can be updated through the
-/// positional `$` and filtered positional `$[identifier]` operators.
-///
-/// Bulk updates reject sorting, skipping, limiting, and pagination.
-///
-/// # Typed deletions
-///
-/// Delete and return the first matching document:
-///
-/// ```rust,ignore
-/// User::query()
-///     .filter(|user| user.active.eq(false))
-///     .sort_by(|user| user.created_at.asc())
-///     .delete_one()
-///     .await?
-/// ```
-///
-/// Delete all matching documents:
-///
-/// ```rust,ignore
-/// User::query()
-///     .filter(|user| user.active.eq(false))
-///     .delete_all()
-///     .await?
-/// ```
-///
-/// Bulk deletions reject sorting, skipping, limiting, and pagination.
-///
-/// An unfiltered `.update_all()` or `.delete_all()` operation affects every
-/// document in the model's collection.
-pub use oximod_core::query::Queryable;
-
-/// An option that modifies MongoDB regular-expression matching.
-///
-/// Multiple options can be combined when calling
-/// `matches_regex_with_options()`.
-///
-/// # Variants
-///
-/// - [`RegexOption::CaseInsensitive`] uses MongoDB option `"i"`.
-/// - [`RegexOption::Multiline`] uses MongoDB option `"m"`.
-/// - [`RegexOption::DotMatchesNewLine`] uses MongoDB option `"s"`.
-/// - [`RegexOption::IgnoreWhitespace`] uses MongoDB option `"x"`.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use mongodb::bson::oid::ObjectId;
-/// use oximod::{
-///     Model,
-///     OxiModError,
-///     Queryable,
-///     RegexOption,
-/// };
-/// use serde::{
-///     Deserialize,
-///     Serialize,
-/// };
-///
-/// #[derive(
-///     Debug,
-///     Serialize,
-///     Deserialize,
-///     Model,
-/// )]
-/// #[db("app")]
-/// #[collection("users")]
-/// struct User {
-///     #[serde(skip_serializing_if = "Option::is_none")]
-///     _id: Option<ObjectId>,
-///
-///     name: String,
-/// }
-///
-/// # async fn run() -> Result<(), OxiModError> {
-/// let users = User::query()
-///     .filter(|user| {
-///         user.name.matches_regex_with_options(
-///             "^user",
-///             [RegexOption::CaseInsensitive],
-///         )
-///     })
-///     .all()
-///     .await?;
-///
-/// println!("Found {} users", users.len());
-///
-/// # Ok(())
-/// # }
-/// ```
-pub use oximod_core::query::RegexOption;
-
-/// A type-safe MongoDB update expression.
-///
-/// Update expressions are produced by methods on generated model fields and
-/// returned from the closures passed to `.update_one()` and `.update_all()`.
-///
-/// Expressions can be combined with `&`. Updates using the same MongoDB
-/// operator are merged into one operator document.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// let updated_user = User::query()
-///     .filter(|user| {
-///         user.name.eq("User1")
-///     })
-///     .update_one(|user| {
-///         user.active.set(true)
-///             & user.login_count.inc(1)
 ///             & user.nickname.unset()
 ///     })
 ///     .await?;
 /// ```
-///
-/// When the same operator updates the same field more than once, the
-/// expression on the right takes precedence.
 pub use oximod_core::query::UpdateExpression;
 
-/// A BSON type accepted by MongoDB's `$type` query operator.
+/// BSON type accepted by a generated field's `$type` predicate.
 ///
-/// Each variant maps to MongoDB's canonical string alias, such as `"string"`,
-/// `"objectId"`, `"date"`, or `"long"`.
-///
-/// `$type` checks the BSON representation stored in MongoDB. It does not
-/// deserialize or convert the value before matching.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// let users = User::query()
-///     .filter(|user| {
-///         user.nickname.has_bson_type(
-///             BsonType::String,
-///         )
-///     })
-///     .all()
-///     .await?;
-/// ```
+/// Each variant maps to a MongoDB canonical string alias. The check is applied
+/// to the BSON value stored in MongoDB; no Rust deserialization or conversion
+/// happens before matching.
 pub use oximod_core::query::BsonType;
 
-/// Configuration for a MongoDB `$text` search.
+/// Configuration for a MongoDB `$text` query.
 ///
-/// A string can be passed directly to `.text()` for a basic search. Use
-/// `TextSearch` when language, case-sensitivity, or diacritic-sensitivity
-/// options are required.
+/// Pass a string directly to `query().text(...)` for a basic search. Use this
+/// type to configure language, case sensitivity, or diacritic sensitivity.
+/// MongoDB phrase and excluded-term syntax can be included in the search text.
 ///
 /// # Example
 ///
 /// ```rust
 /// use oximod::TextSearch;
 ///
-/// let search = TextSearch::new(
-///     "\"rust mongodb\" -beginner",
-/// )
-/// .language("none")
-/// .case_sensitive(true)
-/// .diacritic_sensitive(true);
+/// let search = TextSearch::new("\"rust mongodb\" -beginner")
+///     .language("none")
+///     .case_sensitive(true)
+///     .diacritic_sensitive(true);
+/// # let _ = search;
 /// ```
 ///
-/// The collection must have an appropriate MongoDB text index before the query
-/// can be executed.
+/// The target collection must have an appropriate text index.
 pub use oximod_core::query::TextSearch;
 
-/// A GeoJSON point.
+/// GeoJSON point stored as longitude and latitude.
 ///
-/// Coordinates must be provided in longitude-latitude order.
+/// Its serialized representation is a GeoJSON object with type `"Point"` and
+/// coordinates `[longitude, latitude]`. OxiMod does not validate coordinate
+/// ranges.
 ///
 /// # Example
 ///
 /// ```rust
 /// use oximod::GeoPoint;
 ///
-/// let point = GeoPoint::new(
-///     -79.38,
-///     43.65,
-/// );
-///
+/// let point = GeoPoint::new(-79.38, 43.65);
 /// assert_eq!(point.longitude(), -79.38);
 /// assert_eq!(point.latitude(), 43.65);
 /// ```
-///
-/// The serialized BSON representation is equivalent to:
-///
-/// ```text
-/// {
-///     "type": "Point",
-///     "coordinates": [-79.38, 43.65]
-/// }
-/// ```
-///
-/// OxiMod does not validate coordinate ranges.
 pub use oximod_core::query::GeoPoint;
 
-/// A single-ring GeoJSON polygon.
+/// Single-ring GeoJSON polygon.
 ///
-/// [`GeoPolygon::new`] accepts the exterior ring in longitude-latitude order.
-/// When the supplied ring is not already closed, its first coordinate is
-/// appended automatically.
+/// [`GeoPolygon::new`] accepts an exterior ring in longitude-latitude order and
+/// appends its first coordinate when the ring is not closed. OxiMod does not
+/// otherwise validate the polygon's geometry.
+///
+/// `GeoPolygon::default()` is an empty polygon provided so generated model
+/// construction remains possible. Replace it before persistence.
 ///
 /// # Example
 ///
@@ -1063,46 +844,32 @@ pub use oximod_core::query::GeoPoint;
 ///     [1.0, 1.0],
 ///     [-1.0, 1.0],
 /// ]);
+/// # let _ = polygon;
 /// ```
-///
-/// OxiMod closes the exterior ring but does not otherwise validate polygon
-/// geometry.
-///
-/// `GeoPolygon::default()` exists for generated model-builder compatibility
-/// and represents an empty polygon. Replace it before persistence.
 pub use oximod_core::query::GeoPolygon;
 
-/// Configuration for a MongoDB `$near` query.
+/// Configuration for a typed MongoDB `$near` query.
 ///
-/// Pass a [`GeoPoint`] directly to `.near()` for a basic proximity query. Use
-/// `NearQuery` to configure minimum or maximum distance.
+/// A [`GeoPoint`] can be passed directly to `near()` for a basic query. This
+/// type adds optional minimum and maximum distances. With GeoJSON and a
+/// `2dsphere` index, distances are expressed in metres.
 ///
-/// Distances are expressed in metres for GeoJSON queries using a MongoDB
-/// `2dsphere` index.
+/// OxiMod does not validate that distances are non-negative or that the minimum
+/// does not exceed the maximum; MongoDB validates the resulting query.
 ///
 /// # Example
 ///
 /// ```rust
-/// use oximod::{
-///     GeoPoint,
-///     NearQuery,
-/// };
+/// use oximod::{GeoPoint, NearQuery};
 ///
-/// let query = NearQuery::new(
-///     GeoPoint::new(
-///         -79.38,
-///         43.65,
-///     ),
-/// )
-/// .min_distance(500.0)
-/// .max_distance(5_000.0);
+/// let query = NearQuery::new(GeoPoint::new(-79.38, 43.65))
+///     .min_distance(500.0)
+///     .max_distance(5_000.0);
+/// # let _ = query;
 /// ```
-///
-/// OxiMod does not validate that distances are non-negative or that the
-/// minimum does not exceed the maximum. MongoDB validates the resulting query.
 pub use oximod_core::query::NearQuery;
 
-// --- Internal API ---
+// --- Generated-code support ----------------------------------------------
 
 #[doc(hidden)]
 pub use async_trait as _async_trait;
@@ -1120,7 +887,7 @@ pub use oximod_core::feature as _feature;
 pub use oximod_core::helpers as _helpers;
 
 #[doc(hidden)]
-pub use regex as _regex; // removes the need of importing the trait
+pub use regex as _regex;
 
 #[doc(hidden)]
 pub mod _query {
