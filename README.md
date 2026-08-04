@@ -1,164 +1,160 @@
 # OxiMod
 
 <p align="center">
-  <strong>Schema-aware MongoDB modeling for Rust</strong>
+  <strong>Schema-aware MongoDB modeling and typed queries for Rust</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/crates/v/oximod">
-  <img src="https://img.shields.io/crates/d/oximod">
-  <img src="https://img.shields.io/badge/license-MIT-blue">
+  <a href="https://crates.io/crates/oximod"><img src="https://img.shields.io/crates/v/oximod" alt="Crates.io"></a>
+  <a href="https://docs.rs/oximod"><img src="https://docs.rs/oximod/badge.svg" alt="Documentation"></a>
+  <a href="https://crates.io/crates/oximod"><img src="https://img.shields.io/crates/d/oximod" alt="Downloads"></a>
+  <a href="https://github.com/arshia-eskandari/oximod/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
 </p>
 
 ---
 
 ## Overview
 
-OxiMod is a schema-based modeling layer for MongoDB, designed for Rust developers who want a more expressive way to define models without giving up direct access to the MongoDB driver.
-
-Inspired by ODM-style workflows, OxiMod provides:
-
-- derive-based schema configuration  
-- builder-style model construction  
-- field-level validations, defaults, and indexes
-- convenient model helpers  
-- global and explicit-client workflows  
-- optional lifecycle hooks  
-
-At the same time, it preserves MongoDB’s native power by exposing:
-
-- `mongodb::Collection<Self>`
-- `mongodb::Collection<Document>`
+OxiMod is a schema-aware modeling layer built on top of the official MongoDB Rust driver. It adds model-oriented ergonomics—derive-generated construction, validation, defaults, indexes, lifecycle hooks, persistence helpers, and typed queries—without hiding MongoDB or restricting access to the driver.
 
 OxiMod is best understood as:
 
-> **MongoDB with stronger model ergonomics**, not a replacement for the driver.
+> **MongoDB with stronger model ergonomics, not a replacement for the driver.**
 
-This ensures:
-- zero feature lock-in  
-- full MongoDB flexibility  
-- long-term maintainability  
+Use OxiMod when you want concise, expressive model code and compile-time guidance for common MongoDB workflows, while retaining direct access to:
+
+* `mongodb::Collection<Model>`;
+* `mongodb::Collection<Document>`;
+* raw BSON filters and updates;
+* aggregation pipelines;
+* sessions, compound indexes, and advanced driver options.
+
+### Highlights
+
+* One `Model` derive for collection-backed and embedded models
+* Fluent generated builders with `Into<T>` setters
+* Field defaults expressed as ordinary Rust expressions
+* Aggregated built-in and custom validation
+* Declarative single-field MongoDB indexes
+* Global-client and explicit-client persistence workflows
+* Type-aware filters, sorting, pagination, text search, and geospatial queries
+* Typed single-document and bulk updates and deletions
+* Typed nested paths for embedded documents and arrays of embedded models
+* Optional lifecycle hooks for save and `_id` helper operations
+* Structured validation and typed-query errors
+* Full MongoDB driver escape hatches
+
 ---
 
-## Example
+## Installation
+
+Add OxiMod and the dependencies used by your models and async runtime:
+
+```bash
+cargo add oximod mongodb
+cargo add serde --features derive
+cargo add tokio --features macros,rt-multi-thread
+```
+
+Add `async-trait` when implementing lifecycle hooks:
+
+```bash
+cargo add async-trait
+```
+
+A MongoDB server and connection URI are required for persistence and query execution.
+
+---
+
+## Quick start
+
+Collection-backed models require a database name and collection name. Importing `oximod::Model` brings both the derive macro and the runtime persistence trait into scope; Rust keeps macro and type namespaces separate, so the shared name is intentional.
 
 ```rust
-use mongodb::bson::{doc, oid::ObjectId};
-use oximod::{Hooks, Model, OxiClient, OxiModError};
+use mongodb::bson::oid::ObjectId;
+use oximod::{Model, OxiClient, Queryable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Model)]
 #[db("my_app_db")]
 #[collection("users")]
-#[document_id_setter_ident("id_setter")]
-#[hooks]
 struct User {
     #[serde(skip_serializing_if = "Option::is_none")]
     _id: Option<ObjectId>,
 
-    #[index(unique, name = "email_idx", case_insensitive)]
+    #[index(unique, name = "email_idx")]
     #[validate(email)]
     email: String,
 
     #[validate(min_length = 3, max_length = 32)]
     name: String,
 
-    #[validate(non_negative, min = 18)]
+    #[validate(non_negative)]
     age: i32,
 
-    #[default(false)]
+    #[default(true)]
     active: bool,
-}
-
-#[async_trait::async_trait]
-impl Hooks for User {
-    async fn pre_save_mut(&mut self) -> Result<(), OxiModError> {
-        self.email = self.email.trim().to_lowercase();
-        self.name = self.name.trim().to_string();
-        Ok(())
-    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::dotenv().ok();
-    let uri = std::env::var("MONGODB_URI")?;
-    OxiClient::init_global(uri).await?;
+    OxiClient::init_global(
+        "mongodb://localhost:27017".to_string(),
+    )
+    .await?;
 
-    User::clear().await?;
+    let user_id = User::new()
+        .email("user1@example.com")
+        .name("User1")
+        .age(30)
+        .save()
+        .await?;
 
-    // Builder API with Into<T> support and defaults
-    let mut user = User::new()
-        .email("  ALICE@EXAMPLE.COM  ")
-        .name("Alice")
-        .age(30);
+    let active_adults = User::query()
+        .filter(|user| {
+            user.active.eq(true) & user.age.gte(18)
+        })
+        .sort_by(|user| user.name.asc())
+        .limit(20)
+        .all()
+        .await?;
 
-    // save_mut() runs mutable hooks before persistence
-    let id = user.save_mut().await?;
-    println!("Inserted user: {}", id);
+    let saved_user = User::find_by_id(user_id).await?;
 
-    let found = User::find_by_id(id).await?;
-    println!("Found user: {found:#?}");
-
-    User::update_by_id(id, doc! { "$set": { "active": true } }).await?;
-
-    let active_exists = User::exists(doc! { "active": true }).await?;
-    let total = User::count(doc! {}).await?;
-    println!("Any active users? {}", active_exists);
-    println!("Total users: {}", total);
-
-    // Access the typed MongoDB collection directly when needed
-    let collection = User::get_collection()?;
-    let active_users = collection.count_documents(doc! { "active": true }).await?;
-    println!("Active users counted via driver: {}", active_users);
+    println!("Found {} active adults", active_adults.len());
+    println!("Saved user: {saved_user:#?}");
 
     Ok(())
 }
 ```
 
-For more examples, feel free to check out the [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
+For complete runnable examples, see the [`oximod/examples`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples) directory.
 
 ---
 
-## Model API
+## Model kinds
 
-The following methods are automatically generated when deriving the `Model` macro and provide a typed interface for interacting with your MongoDB collection.
+OxiMod uses the same derive for two distinct model kinds.
 
-### Core
+### Collection-backed models
 
-| Method/Associated Function | Signature | Description |
-|------|-----------|------------|
-| `save()` | `async fn save(&self) -> Result<ObjectId, OxiModError>` | Inserts the current model instance into the database. Runs validation and non-mutable hooks, and returns the inserted document’s `_id`. |
-| `save_mut()` | `async fn save_mut(&mut self) -> Result<ObjectId, OxiModError>` | Inserts the model while allowing mutable hooks to modify it before persistence. Returns the inserted document’s `_id`. |
-| `clear()` | `async fn clear() -> Result<DeleteResult, OxiModError>` | Deletes all documents in the model’s collection. Returns a `DeleteResult` indicating how many documents were removed. |
-| `validate()` | `fn validate(&self) -> Result<(), OxiModError>` | Validates the model instance against all defined validation rules. Returns `Ok(())` if valid, or a `Validation` error containing all field violations. |
-| `get_collection()` | `fn get_collection() -> Result<Collection<Self>, OxiModError>` | Returns the typed `mongodb::Collection<Self>` for performing advanced or custom queries. |
-| `get_document_collection()` | `fn get_document_collection() -> Result<Collection<Document>, OxiModError>` | Returns the raw `mongodb::Collection<Document>` for working directly with BSON when full flexibility is needed. |
+Collection models are stored independently in MongoDB and require both:
 
+```rust
+#[db("database_name")]
+#[collection("collection_name")]
+```
 
-### Identity Helpers
+They receive:
 
-| Associated Function | Signature | Description |
-|------|-----------|------------|
-| `find_by_id()` | `async fn find_by_id(id: ObjectId) -> Result<Option<Self>, OxiModError>` | Fetches a document by its `_id`. Returns `Some(model)` if found, otherwise `None`. |
-| `update_by_id()` | `async fn update_by_id(id: ObjectId, update: Document) -> Result<UpdateResult, OxiModError>` | Updates a document by `_id` using a MongoDB update document (e.g., `$set`). Returns an `UpdateResult` describing the operation. |
-| `delete_by_id()` | `async fn delete_by_id(id: ObjectId) -> Result<DeleteResult, OxiModError>` | Deletes a document by `_id`. Returns a `DeleteResult` indicating whether a document was removed. |
-
-
-### Utilities
-
-| Associated Function | Signature | Description |
-|------|-----------|------------|
-| `exists()` | `async fn exists(filter: Document) -> Result<bool, OxiModError>` | Checks if at least one document matches the given filter. Returns `true` if a match exists. |
-| `count()` | `async fn count(filter: Document) -> Result<u64, OxiModError>` | Counts the number of documents matching the given filter and returns the total. |
-
----
-
-## Builder API
-
-OxiMod generates builder-style setter methods for models, making it easier to construct documents in a fluent and readable way.
-
-By default, the generated `_id` setter is named `id()`. If you want a different name, you can customize it with the `#[document_id_setter_ident("id_setter")]` attribute.
+* generated `new()` and `Default` construction;
+* fluent field setters;
+* an inherent `validate()` method;
+* field defaults and validation;
+* lazy index initialization;
+* optional lifecycle hooks;
+* the `Model` persistence API;
+* the `Queryable` typed-query API.
 
 ```rust
 use mongodb::bson::oid::ObjectId;
@@ -166,494 +162,1123 @@ use oximod::Model;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Model)]
-#[db("my_app_db")]
+#[db("app")]
 #[collection("users")]
-#[document_id_setter_ident("id_setter")]
 struct User {
     #[serde(skip_serializing_if = "Option::is_none")]
     _id: Option<ObjectId>,
     name: String,
-    age: i32,
-    active: bool,
+    address: Address,
 }
 ```
 
-Once derived, you can build a model instance like this:
+### Embedded models
+
+Embedded models are values stored inside another model:
+
+```rust
+use oximod::Model;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[model(embedded)]
+#[serde(rename_all = "camelCase")]
+struct Address {
+    street_name: String,
+    city: String,
+}
+```
+
+Embedded models receive:
+
+* generated construction and setters;
+* defaults;
+* validation;
+* typed nested-field metadata.
+
+They do **not** receive:
+
+* an independent MongoDB collection;
+* `Model` persistence methods;
+* root `Queryable` queries;
+* indexes;
+* lifecycle hooks.
+
+Embedded values remain fully queryable through a collection model:
+
+```rust
+let users = User::query()
+    .filter(|user| {
+        user.address.nested(|address| {
+            address.city.eq("City1")
+        })
+    })
+    .all()
+    .await?;
+```
+
+Generated field paths honor supported Serde `rename` and `rename_all` attributes, including nested paths.
+
+---
+
+## Generated builder API
+
+Every derived model receives:
+
+* `ModelType::new()`;
+* `Default::default()`;
+* a fluent setter for each field.
+
+Ordinary setters accept values through `Into<T>`. Setters for `Option<T>` accept a value convertible into `T` and store it as `Some(...)`.
 
 ```rust
 let user = User::new()
-    .id_settter(ObjectId::new())
-    .name("Alice")
+    .name("User1")
+    .email("user1@example.com")
     .age(30)
     .active(true);
 ```
 
-The builder API provides a fluent and ergonomic way to construct model instances with type-safe setters generated at compile time.
+### Construction is not typestate
 
-### Features
+OxiMod does not require every setter to be called. During `new()`:
 
-- **Flexible input types (`Into<T>`)**  
-  Setter methods accept any type that can be converted into the field type, such as `&str` for a `String` field, which helps reduce unnecessary boilerplate.
+* fields with `#[default(...)]` use that expression;
+* all other fields use `Default::default()`.
 
-- **Automatic type conversion**  
-  Values are converted into their target field types internally, allowing concise and expressive model construction.
+This means a required application field such as `String` begins as an empty string unless it has a configured default or is set through the builder. Use validation to enforce domain requirements.
 
-- **Default value support**  
-  Fields annotated with `#[default(...)]` are automatically populated if they are not explicitly set by the builder.
+### Defaults
 
-- **Optional and required fields**  
-  The builder supports both `Option<T>` and required fields, making it suitable for a wide range of model definitions.
+`#[default(...)]` accepts an ordinary Rust expression convertible into the field type:
 
-- **Customizable `_id` setter**  
-  By default, the generated setter for `_id` is `id()`. You can rename it with `#[document_id_setter_ident("id_setter")]` when a custom method name better fits your API.
+```rust
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[model(embedded)]
+struct Preferences {
+    #[default(String::from("en-CA"))]
+    language: String,
+
+    #[default(true)]
+    notifications: bool,
+
+    #[default(25_u32)]
+    page_size: u32,
+
+    nickname: Option<String>,
+}
+```
+
+```rust
+let preferences = Preferences::new().nickname("User1");
+
+assert_eq!(preferences.language, "en-CA");
+assert!(preferences.notifications);
+assert_eq!(preferences.page_size, 25);
+assert_eq!(preferences.nickname.as_deref(), Some("User1"));
+```
+
+Defaults are evaluated during construction and remain overridable through generated setters. Numeric literals should be suffixed when Rust's default literal type cannot convert into the field type.
+
+### MongoDB `_id` setter
+
+For a collection field named `_id`, the generated builder setter is `id()` by default:
+
+```rust
+let user = User::new()
+    .id(ObjectId::new())
+    .name("User1");
+```
+
+Rename it when needed:
+
+```rust
+#[document_id_setter_ident("with_id")]
+```
+
+```rust
+let user = User::new()
+    .with_id(ObjectId::new())
+    .name("User1");
+```
 
 ---
 
-## Client Usage
+## Validation
 
-OxiMod supports two client access patterns: a **global client** for simple application-wide usage, and an **explicit client** for cases where you want more control over how connections are managed.
-
-The global client is ideal when your application uses a single MongoDB connection shared across model operations. Explicit clients are better when you want to avoid global state or pass a client directly into your models and queries.
-
-### Global
-
-Use the global client when your application has a single primary MongoDB connection and you want OxiMod methods like `save()`, `find_by_id()`, and `count()` to work without manually passing a client every time.
-
-Initialize it once, typically during application startup:
+Both collection and embedded models receive an inherent `validate()` method. OxiMod evaluates all configured rules and returns the failures together rather than stopping at the first invalid field.
 
 ```rust
-OxiClient::init_global(uri).await?;
-user.save().await?;
+let user = User::new()
+    .email("not-an-email")
+    .name("ab")
+    .age(-1);
+
+if let Err(error) = user.validate() {
+    if let Some(errors) = error.validation_errors() {
+        for failure in errors {
+            println!("{}: {}", failure.field, failure.message);
+        }
+    }
+}
 ```
 
-After the global client has been initialized, model methods that do not take a client explicitly will automatically use it internally.
+Validation also runs automatically before:
 
-### Explicit
+* `save()`;
+* `save_mut()`;
+* `save_from()`;
+* `save_from_mut()`.
 
-Use the explicit-client API when you want to pass a specific MongoDB client into each operation instead of relying on global state.
+For hook-enabled saves, the corresponding pre-save hook runs before validation, allowing mutable hooks to normalize or populate values before they are checked.
+
+### Built-in validators
+
+#### Optional values
+
+| Validator  | Description                    |
+| ---------- | ------------------------------ |
+| `required` | Rejects `None` on `Option<T>`. |
+
+Other validators on `Option<T>` run only when the option contains a value.
+
+#### Length
+
+| Validator        | Description                                                                |
+| ---------------- | -------------------------------------------------------------------------- |
+| `min_length = N` | Requires a length of at least `N`.                                         |
+| `max_length = N` | Requires a length of at most `N`.                                          |
+| `non_empty`      | Rejects empty collections and empty or whitespace-only string-like values. |
+
+Length validation supports string-like values, arrays, sequential collections, sets, and maps where supported by the derive.
+
+#### Strings
+
+| Validator             | Description                           |
+| --------------------- | ------------------------------------- |
+| `email`               | Requires a valid basic email shape.   |
+| `pattern = "..."`     | Matches a regular expression.         |
+| `starts_with = "..."` | Requires the prefix.                  |
+| `ends_with = "..."`   | Requires the suffix.                  |
+| `includes = "..."`    | Requires the substring.               |
+| `alphanumeric`        | Allows ASCII letters and digits only. |
+
+String validation supports `String`, `str`-like values, and supported `Cow<str>` forms.
+
+#### Numbers
+
+| Validator       | Description                                     |
+| --------------- | ----------------------------------------------- |
+| `min = N`       | Inclusive minimum by default.                   |
+| `max = N`       | Inclusive maximum by default.                   |
+| `min_exclusive` | Changes `min` to a strict lower bound.          |
+| `max_exclusive` | Changes `max` to a strict upper bound.          |
+| `positive`      | Requires a value greater than zero.             |
+| `negative`      | Requires a value less than zero.                |
+| `non_negative`  | Requires a value greater than or equal to zero. |
+| `non_positive`  | Requires a value less than or equal to zero.    |
+
+#### Integers
+
+| Validator         | Description                         |
+| ----------------- | ----------------------------------- |
+| `multiple_of = N` | Requires exact divisibility by `N`. |
+
+### Custom validators
+
+A custom validator is an ordinary function referenced by path:
 
 ```rust
-user.save_from(&client).await?;
+fn validate_username(value: &String) -> Result<(), &'static str> {
+    if value.eq_ignore_ascii_case("admin") {
+        return Err("username is reserved");
+    }
+
+    Ok(())
+}
 ```
 
-This pattern is useful when you need tighter control over connection lifetimes or when different parts of your application may use different database clients.
+```rust
+#[validate(custom(crate::validate_username))]
+username: String,
+```
 
-Used for:
-- tests
-- multi-tenant applications
-- dependency injection
-- scoped or non-global connection management
+The function receives `&T` and may return any error implementing `ToString`. For `Option<T>`, it receives `&T` and runs only for `Some(value)`.
 
-### OxiClient API
+### Validation and updates
 
-| Method/Associated Function | Signature | Description |
-|------|-----------|------------|
-| `new()` | `async fn new(url: String) -> Result<OxiClient, OxiModError>` | Creates a new `OxiClient` instance by connecting to MongoDB using the provided connection string. The resulting client stores a local `mongodb::Client` internally. |
-| `init_client()` | `async fn init_client(&mut self, mongo_uri: String) -> Result<(), OxiModError>` | Initializes or replaces the local MongoDB client stored inside an existing `OxiClient` instance. |
-| `client()` | `fn client(&self) -> Option<&Client>` | Returns a reference to the local inner `mongodb::Client` if one has been initialized. |
-| `client_mut()` | `fn client_mut(&mut self) -> Option<&Client>` | Returns access to the local inner `mongodb::Client` if initialized, for advanced driver-level usage. |
-| `init_global()` | `async fn init_global(mongo_uri: String) -> Result<(), OxiModError>` | Initializes the global MongoDB client used by OxiMod APIs that do not receive an explicit client. This should typically be called once at application startup. |
-| `global()` | `fn global() -> Result<Arc<Client>, OxiModError>` | Returns the globally initialized MongoDB client. Fails if `init_global()` has not been called yet. |
+Validation is **not** automatically applied to:
 
-### Choosing between global and explicit clients
+* raw MongoDB update documents;
+* typed `update_one()` or `update_all()` expressions;
+* direct collection operations.
 
-| Pattern | Best for |
-|------|----------|
-| Global client | Applications with a single shared MongoDB connection and a simpler setup. |
-| Explicit client | Tests, multi-tenant systems, dependency injection, and cases where you want to avoid relying on global state. |
+These operations modify stored documents through MongoDB. Application code remains responsible for choosing values that preserve model invariants.
 
 ---
 
-## Collections
+## Typed queries
 
-OxiMod provides two ways to access MongoDB collections: **typed collections** for type-safe operations and **raw collections** for full flexibility.
+Import `Queryable` to call `ModelType::query()`:
 
-### Typed
+```rust
+use oximod::Queryable;
+```
+
+The derive generates a typed field structure for each collection model. Every field exposes only operations supported by its Rust type, so incompatible code fails to compile. For example:
+
+* regex methods are unavailable on integer fields;
+* ordered comparisons are unavailable on booleans;
+* `unset()` is unavailable on required fields;
+* array operations are unavailable on scalar fields;
+* nested operations require embedded-model field metadata.
+
+Typed queries currently execute through the global `OxiClient`.
+
+### Filters and logical expressions
+
+```rust
+let users = User::query()
+    .filter(|user| {
+        user.active.eq(true)
+            & user.age.gte(18)
+            & (
+                user.name.eq("User1")
+                    | user.name.eq("User2")
+            )
+    })
+    .all()
+    .await?;
+```
+
+Use:
+
+* `&` for logical AND;
+* `|` for logical OR;
+* `not(...)` for field-level negation.
+
+Rust does not allow overloading `&&` or `||`. Repeated `filter()` calls are also combined with AND:
+
+```rust
+let users = User::query()
+    .filter(|user| user.active.eq(true))
+    .filter(|user| user.age.gte(18))
+    .all()
+    .await?;
+```
+
+### Query-operation families
+
+Depending on the field type, generated fields support families such as:
+
+* equality: `eq`, `ne`;
+* membership: `in_values`, `not_in_values`;
+* ordered comparisons: `gt`, `gte`, `lt`, `lte`;
+* field presence: `exists`, `not_exists`;
+* optional null checks such as `is_null`;
+* BSON type checks;
+* regex and escaped string helpers;
+* modulo and integer bitwise predicates;
+* arrays and `$elemMatch`;
+* embedded-model paths;
+* GeoJSON geospatial predicates.
+
+The Rust field name does not have to match the stored MongoDB field name. Generated paths follow supported Serde renames:
+
+```rust
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[serde(rename_all = "camelCase")]
+#[db("app")]
+#[collection("work_items")]
+struct WorkItem {
+    team_name: String,
+}
+```
+
+```rust
+WorkItem::query()
+    .filter(|item| item.team_name.eq("Team1"))
+    .all()
+    .await?;
+```
+
+The generated query targets `teamName` in MongoDB.
+
+### Sorting
+
+```rust
+let users = User::query()
+    .sort_by(|user| user.age.desc())
+    .then_sort_by(|user| user.name.asc())
+    .all()
+    .await?;
+```
+
+* `sort_by()` establishes or replaces the primary sort;
+* `then_sort_by()` appends another sort field.
+
+Use deterministic secondary sorting when several documents may share the same primary value.
+
+### Limits, skipping, and pagination
+
+```rust
+let page = User::query()
+    .filter(|user| user.active.eq(true))
+    .sort_by(|user| user.name.asc())
+    .page(2, 25)
+    .all()
+    .await?;
+```
+
+Pagination is one-based. Page `2` with size `25` skips the first `25` matching documents.
+
+Invalid pagination values and limits that cannot be represented by the MongoDB driver are returned as typed query errors when the query executes.
+
+### Read execution semantics
+
+| Method    | Result          | Filter | Sort | Skip | Limit / page |
+| --------- | --------------- | -----: | ---: | ---: | -----------: |
+| `all()`   | `Vec<Model>`    |    Yes |  Yes |  Yes |          Yes |
+| `first()` | `Option<Model>` |    Yes |  Yes |   No |           No |
+| `count()` | `u64`           |    Yes |   No |   No |           No |
+
+`count()` uses the filter and configured text search, but ignores result-ordering and result-window modifiers.
+
+### Arrays
+
+Array fields support typed membership and update operations:
+
+```rust
+let users = User::query()
+    .filter(|user| {
+        user.tags.contains_all(["rust", "mongodb"])
+            & user.scores.elem_match(|score| {
+                score.gte(60) & score.lte(100)
+            })
+    })
+    .all()
+    .await?;
+```
+
+Query helpers include:
+
+* element membership;
+* `$all`;
+* exact `$size`;
+* scalar `$elemMatch`.
+
+Typed array updates include:
+
+* `$push` and multi-value `$push`;
+* `$addToSet` and multi-value `$addToSet`;
+* `$pull`;
+* first- and last-element `$pop`;
+* positional and filtered updates for arrays of embedded models.
+
+### Embedded documents
+
+```rust
+let users = User::query()
+    .filter(|user| {
+        user.address.nested(|address| {
+            address.city.eq("City1")
+        })
+    })
+    .all()
+    .await?;
+```
+
+Optional embedded models support the same nested field schema when present. Arrays of embedded models add typed nested `$elemMatch`:
+
+```rust
+let users = User::query()
+    .filter(|user| {
+        user.addresses.elem_match_nested(|address| {
+            address.city.eq("City1")
+                & address.active.eq(true)
+        })
+    })
+    .all()
+    .await?;
+```
+
+Nested fields may also be used for sorting and typed updates where supported.
+
+### String and regex queries
+
+String fields support regular expressions and escaped convenience helpers:
+
+```rust
+use oximod::RegexOption;
+
+let users = User::query()
+    .filter(|user| {
+        user.name.matches_regex_with_options(
+            "^user",
+            [RegexOption::CaseInsensitive],
+        )
+    })
+    .all()
+    .await?;
+```
+
+`RegexOption` maps to MongoDB's common regex options:
+
+* case-insensitive;
+* multiline;
+* dot matches newline;
+* ignore pattern whitespace.
+
+Convenience helpers such as prefix, suffix, and contained-text checks escape their input before constructing the regex.
+
+### Text search
+
+Text search requires an appropriate MongoDB text index:
+
+```rust
+#[index(text)]
+content: String,
+```
+
+Use a string for a basic search:
+
+```rust
+let articles = Article::query()
+    .text("rust mongodb")
+    .all()
+    .await?;
+```
+
+Use `TextSearch` for additional options:
+
+```rust
+use oximod::TextSearch;
+
+let articles = Article::query()
+    .text(
+        TextSearch::new("\"rust mongodb\" -beginner")
+            .language("none")
+            .case_sensitive(false)
+            .diacritic_sensitive(false),
+    )
+    .sort_by_text_score()
+    .all()
+    .await?;
+```
+
+MongoDB phrase and excluded-term syntax can be included in the search string.
+
+### Geospatial queries
+
+OxiMod provides typed GeoJSON values:
+
+* `GeoPoint`;
+* `GeoPolygon`;
+* `NearQuery`.
+
+```rust
+use oximod::{GeoPoint, NearQuery};
+
+let places = Place::query()
+    .filter(|place| {
+        place.location.near(
+            NearQuery::new(
+                GeoPoint::new(-79.38, 43.65),
+            )
+            .max_distance(5_000.0),
+        )
+    })
+    .all()
+    .await?;
+```
+
+GeoJSON coordinates use longitude-latitude order. With a `2dsphere` index, GeoJSON `$near` distances are expressed in metres.
+
+Typed geospatial predicates include `$near`, `$geoWithin`, and `$geoIntersects` where supported by the field geometry.
+
+OxiMod serializes the geometry but does not fully validate coordinate ranges, polygon validity, or distance relationships; MongoDB remains the final authority for the query.
+
+---
+
+## Typed updates
+
+Typed update expressions are built from the same generated fields used for filters:
+
+```rust
+let updated = User::query()
+    .filter(|user| user.email.eq("user1@example.com"))
+    .update_one(|user| {
+        user.active.set(true)
+            & user.age.inc(1)
+            & user.nickname.unset()
+            & user.tags.add_to_set("verified")
+    })
+    .await?;
+```
+
+Combine independent update expressions with `&`. Updates using the same MongoDB operator are merged into one operator document.
+
+Supported families include:
+
+* scalar `$set`;
+* optional-field `$unset`;
+* numeric `$inc`, `$mul`, `$min`, and `$max`;
+* field rename and current-date updates;
+* array push, set-like addition, pull, and pop operations;
+* positional and array-filtered updates for embedded arrays.
+
+### Single-document update
+
+```rust
+let updated = User::query()
+    .filter(|user| user.active.eq(false))
+    .sort_by(|user| user.age.asc())
+    .update_one(|user| user.active.set(true))
+    .await?;
+```
+
+`update_one()`:
+
+* applies the filter;
+* applies sorting to choose one match;
+* returns the document after the update as `Option<Model>`;
+* ignores skip, limit, and pagination.
+
+### Bulk update
+
+```rust
+let result = User::query()
+    .filter(|user| user.active.eq(false))
+    .update_all(|user| user.active.set(true))
+    .await?;
+```
+
+`update_all()` returns MongoDB's `UpdateResult` and rejects sorting, skipping, limiting, and pagination instead of silently ignoring them.
+
+> **Warning:** An unfiltered `update_all()` affects every document in the collection.
+
+---
+
+## Typed deletion
+
+### Single-document deletion
+
+```rust
+let deleted = User::query()
+    .filter(|user| user.active.eq(false))
+    .sort_by(|user| user.age.asc())
+    .delete_one()
+    .await?;
+```
+
+`delete_one()`:
+
+* applies the filter;
+* applies sorting to choose one match;
+* returns the deleted document as `Option<Model>`;
+* ignores skip, limit, and pagination.
+
+### Bulk deletion
+
+```rust
+let result = User::query()
+    .filter(|user| user.active.eq(false))
+    .delete_all()
+    .await?;
+```
+
+`delete_all()` returns MongoDB's `DeleteResult` and rejects sorting, skipping, limiting, and pagination.
+
+> **Warning:** An unfiltered `delete_all()` affects every document in the collection.
+
+---
+
+## Model persistence API
+
+The `Model` trait is implemented only for collection-backed models.
+
+### Global-client methods
+
+| Method                      | Description                                                                                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `save()`                    | Validates and inserts `&self`, returning the inserted `ObjectId`. Runs immutable save hooks when enabled. |
+| `save_mut()`                | Runs mutable pre-save logic, validates, inserts, and then runs the mutable post-save hook.                |
+| `find_by_id(id)`            | Returns `Option<Model>` for a MongoDB `ObjectId`.                                                         |
+| `update_by_id(id, update)`  | Applies a raw MongoDB update document and returns `UpdateResult`.                                         |
+| `delete_by_id(id)`          | Deletes by `ObjectId` and returns `DeleteResult`.                                                         |
+| `exists(filter)`            | Returns whether at least one raw BSON filter match exists.                                                |
+| `count(filter)`             | Counts documents matching a raw BSON filter.                                                              |
+| `clear()`                   | Deletes every document in the model's collection.                                                         |
+| `get_collection()`          | Returns `mongodb::Collection<Model>`.                                                                     |
+| `get_document_collection()` | Returns `mongodb::Collection<Document>`.                                                                  |
+
+> **Warning:** `clear()` removes the entire collection contents.
+
+### Explicit-client counterparts
+
+Every persistence or collection-access operation has an explicit-client counterpart:
+
+* `save_from()`;
+* `save_from_mut()`;
+* `find_by_id_from()`;
+* `update_by_id_from()`;
+* `delete_by_id_from()`;
+* `exists_from()`;
+* `count_from()`;
+* `clear_from()`;
+* `get_collection_from()`;
+* `get_document_collection_from()`.
+
+These methods accept `&mongodb::Client` and do not require the global client.
+
+---
+
+## Client management
+
+OxiMod supports two independent client patterns.
+
+### Global client
+
+Initialize the process-wide client once during application startup:
+
+```rust
+OxiClient::init_global(
+    "mongodb://localhost:27017".to_string(),
+)
+.await?;
+```
+
+Methods without an `_from` suffix and all typed-query execution methods use this client.
+
+```rust
+let user_id = user.save().await?;
+let users = User::query().all().await?;
+```
+
+`OxiClient::global()` returns an `Arc<mongodb::Client>` and fails when global initialization has not completed. A second successful initialization is not allowed.
+
+### Instance-level client
+
+```rust
+let owner = OxiClient::new(
+    "mongodb://localhost:27017".to_string(),
+)
+.await?;
+
+let client = owner
+    .client()
+    .expect("OxiClient::new initializes its client");
+
+let user_id = user.save_from(client).await?;
+```
+
+Instance-level clients are useful for:
+
+* dependency injection;
+* integration tests;
+* multi-tenant systems;
+* multiple MongoDB deployments;
+* code that deliberately avoids global state.
+
+`OxiClient::default()` starts without an inner client. Initialize it later with `init_client()`.
+
+### `OxiClient` API
+
+| Method             | Description                                          |
+| ------------------ | ---------------------------------------------------- |
+| `new(uri)`         | Creates an initialized instance-level wrapper.       |
+| `init_client(uri)` | Initializes or replaces the wrapper's client.        |
+| `client()`         | Returns `Option<&mongodb::Client>`.                  |
+| `client_mut()`     | Returns `Option<&mut mongodb::Client>`.              |
+| `init_global(uri)` | Initializes the process-wide client once.            |
+| `global()`         | Returns the shared client as `Arc<mongodb::Client>`. |
+
+### Typed-query limitation
+
+Typed query builders currently execute only through the global client. There is no explicit-client typed-query executor yet. In an explicit-client workflow, use:
+
+* the `_from` model helpers;
+* `get_collection_from()`;
+* `get_document_collection_from()`.
+
+---
+
+## Direct MongoDB collection access
+
+OxiMod intentionally preserves access to the official driver.
+
+### Typed collection
 
 ```rust
 let collection = User::get_collection()?;
 ```
 
-Returns `mongodb::Collection<Self>`, enabling type-safe queries and automatic (de)serialization. This is the recommended approach for most use cases.
+Returns:
 
-#### API
+```rust
+mongodb::Collection<User>
+```
 
-| Method/Associated Function | Signature | Description |
-|------|-----------|------------|
-| `get_collection()` | `fn get_collection() -> Result<Collection<Self>, OxiModError>` | Gets the typed collection using the global client. |
-| `get_collection_from()` | `fn get_collection_from(client: &Client) -> Result<Collection<Self>, OxiModError>` | Gets the typed collection using an explicit client. |
+Use it for:
 
-### Raw
+* raw BSON queries with typed deserialization;
+* aggregation;
+* driver-specific options;
+* sessions;
+* operations not represented by OxiMod's helpers.
+
+### Raw document collection
 
 ```rust
 let collection = User::get_document_collection()?;
 ```
 
-Returns `mongodb::Collection<Document>`, allowing direct interaction with BSON documents.
+Returns:
 
-#### API
+```rust
+mongodb::Collection<mongodb::bson::Document>
+```
 
-| Associated Function | Signature | Description |
-|------|-----------|------------|
-| `get_document_collection()` | `fn get_document_collection() -> Result<Collection<Document>, OxiModError>` | Gets the raw collection using the global client. |
-| `get_document_collection_from()` | `fn get_document_collection_from(client: &Client) -> Result<Collection<Document>, OxiModError>` | Gets the raw collection using an explicit client. |
+Use it when the document shape is dynamic or when working directly with BSON.
 
-### When to use each
+### Aggregation example
 
-| Type | Best for |
-|------|----------|
-| Typed | Everyday usage with type safety |
-| Raw | Advanced queries and dynamic data |
+```rust
+use futures_util::TryStreamExt;
+use mongodb::bson::doc;
+
+let collection = User::get_collection()?;
+
+let pipeline = vec![
+    doc! {
+        "$match": {
+            "active": true,
+        },
+    },
+    doc! {
+        "$group": {
+            "_id": "$role",
+            "count": {
+                "$sum": 1,
+            },
+        },
+    },
+];
+
+let results = collection
+    .aggregate(pipeline)
+    .await?
+    .try_collect::<Vec<_>>()
+    .await?;
+```
+
+Raw filters and pipelines must use serialized MongoDB field names. Unlike typed queries, the compiler cannot verify those paths or operator compatibility.
 
 ---
 
-## Attributes
+## Indexes
 
-OxiMod uses attributes to configure how your models behave at compile time.  
-Struct-level attributes define how your model maps to MongoDB and how certain features (like indexes and hooks) behave.
-
-### Struct-level
-
-| Attribute | Description |
-|----------|------------|
-| `#[db("name")]` | **Required**. Specifies the MongoDB database name where this model will be stored. This is required for resolving the correct database at runtime. |
-| `#[collection("name")]` | **Required**. Defines the MongoDB collection name associated with the model. All operations (save, query, delete) will target this collection. |
-| `#[document_id_setter_ident("id_setter")]` | Renames the generated builder setter for the `_id` field. By default, the setter is `id()`, but this allows you to customize it (e.g., `id_setter()`). |
-| `#[index_max_retries(N)]` | Sets how many times OxiMod will retry index creation during initialization. Useful for handling transient database issues during startup. |
-| `#[index_max_init_seconds(N)]` | Specifies the maximum time (in seconds) allowed for index initialization before timing out. Helps prevent long startup delays. |
-| `#[hooks]` | Enables lifecycle hooks (e.g., pre/post save). Without this attribute, hook-related logic is not generated, avoiding unnecessary overhead. |
-
-#### Example
+Declare a single-field MongoDB index directly on a collection-model field:
 
 ```rust
-#[derive(Model)]
-#[db("my_app_db")]
-#[collection("users")]
-#[document_id_setter_ident("id_setter")]
-#[index_max_retries(3)]
-#[index_max_init_seconds(10)]
-#[hooks]
-struct User {
-    _id: Option<ObjectId>,
-    name: String,
-}
+#[index(unique, name = "email_idx")]
+email: String,
 ```
 
-### Field-level
+Generated indexes are initialized lazily before model insertion. A successful initialization is remembered for that model type within the process. Merely constructing a query or obtaining a collection does not create indexes.
 
-#### Indexing
+Use direct collection access for compound indexes and advanced options not represented by `#[index(...)]`.
 
-Use `#[index(...)]` on a field to declare a MongoDB index directly in your model.  
-These options let you define common index behavior close to the field itself, without dropping down to the full driver API.
+### Core options
 
-```rust
-#[index(...)]
-```
+| Option                     | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `unique`                   | Enforces unique values.                          |
+| `sparse`                   | Excludes documents where the field is missing.   |
+| `hidden`                   | Hides the index from the query planner.          |
+| `name = "..."`             | Assigns an explicit index name.                  |
+| `order = 1` / `order = -1` | Creates an ascending or descending scalar index. |
+| `expire_after_secs = N`    | Creates a TTL index.                             |
+| `background`               | Forwards MongoDB's background option.            |
 
-##### Core
+### Specialized index types
 
-| Attribute | Description |
-|----------|------------|
-| `unique` | Creates a unique index, preventing duplicate values for the indexed field. |
-| `sparse` | Excludes documents where the field is missing from the index. |
-| `hidden` | Creates the index but hides it from the query planner unless explicitly hinted. |
-| `name = "..."` | Assigns a custom name to the index instead of using MongoDB’s generated name. |
-| `order = 1/-1` | Sets ascending (`1`) or descending (`-1`) order for a standard scalar index. |
-| `expire_after_secs = N` | Creates a TTL index so documents expire automatically after `N` seconds. |
-| `background` | Builds the index in the background to reduce disruption to database operations. |
+| Option         | Description                     |
+| -------------- | ------------------------------- |
+| `text`         | Creates a text index.           |
+| `hashed`       | Creates a hashed index.         |
+| `wildcard`     | Creates a wildcard field index. |
+| `geo_2dsphere` | Creates a `2dsphere` index.     |
+| `geo_2d`       | Creates a planar `2d` index.    |
 
-##### Advanced Types
+### Advanced options
 
-| Attribute | Description |
-|----------|------------|
-| `text` | Creates a text index for MongoDB text search. |
-| `hashed` | Creates a hashed index, useful for hashed lookups and some sharding strategies. |
-| `wildcard` | Creates a wildcard-style index for dynamic or document-like fields. |
-| `geo_2dsphere` | Creates a 2dsphere geospatial index for spherical location queries. |
-| `geo_2d` | Creates a 2d geospatial index for planar coordinate queries. |
+| Option                           | Description                                                   |
+| -------------------------------- | ------------------------------------------------------------- |
+| `version = N`                    | Selects a standard index version or custom version value.     |
+| `text_index_version = N`         | Selects the text-index version.                               |
+| `geo_2dsphere_index_version = N` | Selects the `2dsphere` index version.                         |
+| `weight = N`                     | Sets the field's text-index weight.                           |
+| `default_language = "..."`       | Sets the text index's default language.                       |
+| `language_override = "..."`      | Sets the document field used to override language.            |
+| `case_insensitive`               | Applies OxiMod's English secondary-strength collation preset. |
+| `bits = N`                       | Sets `2d` precision.                                          |
+| `min = N`                        | Sets the lower `2d` coordinate bound.                         |
+| `max = N`                        | Sets the upper `2d` coordinate bound.                         |
 
-##### Advanced Options
+Text-specific options such as `weight`, `default_language`, `language_override`, and `text_index_version` imply a text index.
 
-| Attribute | Description |
-|----------|------------|
-| `version = N` | Sets the version of a standard index structure when supported by MongoDB. |
-| `text_index_version = N` | Sets the version of a text index. Only meaningful with `text`. |
-| `geo_2dsphere_index_version = N` | Sets the version of a 2dsphere index. Only meaningful with `geo_2dsphere`. |
-| `weight = N` | Assigns a weight to a text-indexed field to influence text search scoring. |
-| `default_language = "..."` | Sets the default language used by a text index. |
-| `language_override = "..."` | Specifies the document field that overrides the default text index language. |
-| `case_insensitive` | Applies a case-insensitive collation preset for string-based lookups. |
-| `bits = N` | Sets precision for a `geo_2d` index. |
-| `min = N` | Sets the lower bound for a `geo_2d` index. |
-| `max = N` | Sets the upper bound for a `geo_2d` index. |
-
-##### Example
+### Index examples
 
 ```rust
 #[index(unique, sparse, name = "email_idx")]
-email: String,
+email: Option<String>,
 
 #[index(text, weight = 10, default_language = "english")]
 title: String,
 
 #[index(geo_2dsphere)]
-location: GeoJsonPoint,
+location: GeoPoint,
+
+#[index(expire_after_secs = 3600)]
+expires_at: mongodb::bson::DateTime,
 ```
 
-##### Notes
+### Index-initialization attributes
 
-- These options are meant to cover common field-level index needs in a compact way.
-- Specialized index types such as `text`, `hashed`, `wildcard`, `geo_2dsphere`, and `geo_2d` are generally used one at a time per field.
-- Some options only make sense with specific index types. For example, `weight` applies to `text`, while `bits`, `min`, and `max` apply to `geo_2d`.
-
-#### Validation
-
-Use `#[validate(...)]` to attach field-level validation rules directly to your model fields.
-
-These validators are checked before persistence, helping you catch invalid data close to the model itself. OxiMod also performs compile-time checks to prevent validators from being applied to incompatible field types. For example, string validators are restricted to string-like fields, numeric validators to numeric fields, and `required` to `Option<T>` fields.
+The derive currently accepts:
 
 ```rust
-#[validate(...)]
+#[index_max_retries(N)]
+#[index_max_init_seconds(N)]
 ```
 
-##### Length
+These values are stored in the generated index coordinator, but the current runtime does not enforce them as hard retry or timeout limits. Do not rely on them as operational guarantees yet.
 
-These validators apply to types with a length, such as `String`, `Vec<T>`, arrays, and map/set types.
+---
 
-| Validator | Description |
-|----------|------------|
-| `min_length = N` | Requires the value length to be at least `N`. |
-| `max_length = N` | Requires the value length to be at most `N`. |
-| `non_empty` | Requires the value to contain at least one element or character. Equivalent to `min_length = 1`. |
+## Lifecycle hooks
 
-##### String
-
-These validators apply to string-like fields.
-
-| Validator | Description |
-|----------|------------|
-| `starts_with = "..."` | Requires the string to start with the given prefix. |
-| `ends_with = "..."` | Requires the string to end with the given suffix. |
-| `includes = "..."` | Requires the string to contain the given substring. |
-| `alphanumeric` | Restricts the value to ASCII letters and digits only. |
-| `email` | Requires the value to match a basic email format. |
-| `pattern = "..."` | Validates the value against a custom regular expression. |
-
-##### Numeric
-
-These validators apply to numeric fields. OxiMod supports inclusive range bounds through `min` and `max`, and also supports exclusive bounds with `min_exclusive` and `max_exclusive`.
-
-| Validator | Description |
-|----------|------------|
-| `min = N` / `max = N` | Sets inclusive lower and upper bounds for the value. |
-| `min_exclusive` / `max_exclusive` | Makes `min` strictly greater than and/or `max` strictly less than. |
-| `positive` | Requires the value to be greater than `0`. |
-| `negative` | Requires the value to be less than `0`. |
-| `non_negative` | Requires the value to be greater than or equal to `0`. |
-| `non_positive` | Requires the value to be less than or equal to `0`. |
-
-##### Integer
-
-These validators apply only to integer fields.
-
-| Validator | Description |
-|----------|------------|
-| `multiple_of = N` | Requires the value to be evenly divisible by `N`. |
-
-##### Optional
-
-These validators apply to `Option<T>` fields.
-
-| Validator | Description |
-|----------|------------|
-| `required` | Rejects `None` and requires the field to contain `Some(...)`. |
-
-##### Custom
-
-You can also provide your own validator function:
+Lifecycle hooks are optional. Enable them on a collection model with `#[hooks]`, then implement `Hooks`:
 
 ```rust
-#[validate(custom(fn_name))]
-```
+use oximod::{Hooks, Model, OxiModError};
 
-Custom validators run after the built-in validations. The function receives a reference to the validated field type and must return `Result<(), String>`. For optional fields, OxiMod validates the inner type, so a custom validator on `Option<String>` receives `&String`, not `&Option<String>`. This keeps custom validation ergonomic and flexible.
-
-```rust
-fn validate_name(value: &String) -> Result<(), String> {
-    if value == "admin" {
-        return Err("reserved name".into());
-    }
-    Ok(())
-}
-```
-
-Because your validator receives a reference to the field's effective validated type, you can keep the function focused on the actual value being checked. This works naturally alongside OxiMod's builder conversions and typed model fields.
-
-##### Example
-
-```rust
-#[derive(Model)]
-struct User {
-    #[validate(required, min_length = 3, max_length = 30)]
-    username: Option<String>,
-
-    #[validate(email)]
-    email: String,
-
-    #[validate(non_negative, max = 100)]
-    score: i64,
-
-    #[validate(custom(validate_name))]
-    name: String,
-}
-```
-
-#### Defaults
-
-Use `#[default(...)]` to assign a default value to a field when it is not explicitly set through the builder.
-
-This allows you to define fallback values directly in your model, keeping initialization logic simple and centralized.
-
-```rust
-#[default(...)]
-```
-
-When a field is not provided during construction, OxiMod automatically applies the specified default before validation and persistence.
-
-##### Examples
-
-```rust
-#[default("Guest")]
-name: String,
-
-#[default(42)]
-score: i32,
-
-#[default(false)]
-active: bool,
-```
-
-##### Behavior
-
-- **Applied during model construction**  
-  Defaults are applied if the field is not set via the builder API.
-
-- **Works with builder setters (`Into<T>`)**  
-  Since setters accept `Into<T>`, defaults integrate seamlessly with flexible inputs (e.g., `&str` → `String`).
-
-- **Supports optional and required fields**  
-  - For required fields, the default acts as a fallback value.  
-  - For `Option<T>`, defaults can still be applied if no value is provided.
-
-- **Type-safe at compile time**  
-  The default value must match the field type, ensuring correctness at compile time.
-
-##### Example
-
-```rust
-#[derive(Model)]
-struct User {
-    #[default("Guest")]
-    name: String,
-
-    #[default(false)]
-    active: bool,
-}
-```
-
-```rust
-let user = User::new();
-// name = "Guest", active = false
-```
-
-##### Notes
-
-- Defaults reduce boilerplate by eliminating the need to manually initialize common values.
-- They are applied before validation, so validation rules still apply to defaulted values.
-
-#### Hooks
-
-```rust
-#[hooks]
-```
-
-Hooks provide lifecycle extension points for model operations such as saving, querying, updating, and deleting documents.
-
-They allow you to inject custom logic directly into your model workflows without modifying the core database logic.
-
-Hooks are optional and must be enabled at the struct level using `#[hooks]`.
-
-##### Save Hooks
-
-| Hook | Signature | Description |
-|----------|-----------|------------|
-| `pre_save` | `async fn pre_save(&self) -> Result<(), OxiModError>` | Runs before `save()`. Use for validation or checks without mutation. |
-| `post_save` | `async fn post_save(&self) -> Result<(), OxiModError>` | Runs after `save()`. Useful for logging or side effects. |
-| `pre_save_mut` | `async fn pre_save_mut(&mut self) -> Result<(), OxiModError>` | Runs before `save_mut()`. Allows modifying the model before persistence. |
-| `post_save_mut` | `async fn post_save_mut(&mut self) -> Result<(), OxiModError>` | Runs after `save_mut()`. Can modify in-memory state (not auto-persisted). |
-
-##### Query Hooks
-
-| Hook | Signature | Description |
-|----------|-----------|------------|
-| `pre_find` | `async fn pre_find(id: ObjectId) -> Result<(), OxiModError>` | Runs before `find_by_id()`. Useful for access control or logging. |
-| `post_find` | `async fn post_find(result: &Option<Self>) -> Result<(), OxiModError>` | Runs after `find_by_id()`. Allows inspection of the fetched result. |
-
-##### Mutation Hooks
-
-| Hook | Signature | Description |
-|----------|-----------|------------|
-| `pre_update` | `async fn pre_update(id: ObjectId, update: &Document) -> Result<(), OxiModError>` | Runs before `update_by_id()`. Can abort based on custom logic. |
-| `post_update` | `async fn post_update(id: ObjectId, update: &Document) -> Result<(), OxiModError>` | Runs after `update_by_id()`. Useful for logging or events. |
-| `pre_delete` | `async fn pre_delete(id: ObjectId) -> Result<(), OxiModError>` | Runs before `delete_by_id()`. Can prevent deletion. |
-| `post_delete` | `async fn post_delete(id: ObjectId) -> Result<(), OxiModError>` | Runs after `delete_by_id()`. Useful for cleanup or logging. |
-
-##### Behavior
-
-- **Opt-in feature**  
-  Hooks are only generated when `#[hooks]` is present.
-
-- **Model-level only**  
-  Hooks run only for OxiMod model APIs (not raw collections).
-
-- **Default no-op**  
-  All hooks default to `Ok(())`; implement only what you need.
-
-- **Error handling**  
-  - Pre-hook errors abort operations  
-  - Post-hook errors indicate post-processing failure
-
-
-##### Example
-
-```rust
-use oximod::{Hooks, Model};
-
-#[derive(Model)]
+#[derive(Debug, Serialize, Deserialize, Model)]
 #[db("app")]
-#[collection("logs")]
+#[collection("users")]
 #[hooks]
-struct Log {
-    message: String,
+struct User {
+    email: String,
+    name: String,
 }
 
 #[async_trait::async_trait]
-impl Hooks for Log {
-    async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
-        println!("Saving log");
+impl Hooks for User {
+    async fn pre_save_mut(
+        &mut self,
+    ) -> Result<(), OxiModError> {
+        self.email = self.email.trim().to_lowercase();
+        self.name = self.name.trim().to_string();
         Ok(())
     }
+}
+```
 
-    async fn pre_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
-        self.message = self.message.trim().to_string();
-        Ok(())
+Every hook has a default no-op implementation. Override only the events the model needs.
+
+### Save hooks
+
+| Hook            | Runs for                    | Behavior                                                                             |
+| --------------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| `pre_save`      | `save`, `save_from`         | Immutable check before validation and insertion.                                     |
+| `post_save`     | `save`, `save_from`         | Runs after insertion.                                                                |
+| `pre_save_mut`  | `save_mut`, `save_from_mut` | May mutate the model before validation and insertion.                                |
+| `post_save_mut` | `save_mut`, `save_from_mut` | May mutate in-memory state after insertion; changes are not automatically persisted. |
+
+### `_id` helper hooks
+
+| Hook                         | Runs for                            |
+| ---------------------------- | ----------------------------------- |
+| `pre_find` / `post_find`     | `find_by_id`, `find_by_id_from`     |
+| `pre_update` / `post_update` | `update_by_id`, `update_by_id_from` |
+| `pre_delete` / `post_delete` | `delete_by_id`, `delete_by_id_from` |
+
+### Hook boundaries
+
+Hooks do **not** wrap:
+
+* typed-query reads, updates, or deletions;
+* direct typed or raw collection operations;
+* `clear`;
+* `exists`;
+* `count`;
+* collection accessors.
+
+A pre-hook error prevents the associated database operation. A post-hook error is returned after the database operation has already succeeded.
+
+---
+
+## Attributes reference
+
+### Struct-level attributes
+
+| Attribute                             | Applies to        | Description                                                        |
+| ------------------------------------- | ----------------- | ------------------------------------------------------------------ |
+| `#[model(embedded)]`                  | Embedded models   | Marks a model as embedded instead of collection-backed.            |
+| `#[db("name")]`                       | Collection models | Required database name.                                            |
+| `#[collection("name")]`               | Collection models | Required collection name.                                          |
+| `#[document_id_setter_ident("name")]` | Collection models | Renames the generated `_id` setter.                                |
+| `#[hooks]`                            | Collection models | Generates lifecycle-hook calls.                                    |
+| `#[index_max_retries(N)]`             | Collection models | Accepted and stored; not currently enforced as a hard retry limit. |
+| `#[index_max_init_seconds(N)]`        | Collection models | Accepted and stored; not currently enforced as a hard timeout.     |
+
+### Field-level attributes
+
+| Attribute                | Description                                                          |
+| ------------------------ | -------------------------------------------------------------------- |
+| `#[default(expression)]` | Replaces the field's `Default::default()` initialization expression. |
+| `#[validate(...)]`       | Adds built-in or custom validation rules.                            |
+| `#[index(...)]`          | Adds a generated single-field MongoDB index on a collection model.   |
+
+Serde field and container renames are used when generating typed query paths.
+
+---
+
+## Error handling
+
+Most OxiMod operations return `OxiModError`. Its variants distinguish failures involving:
+
+* MongoDB client construction;
+* missing or duplicate global-client initialization;
+* serialization and deserialization;
+* aggregation;
+* index initialization;
+* model validation;
+* database operations;
+* user-defined custom errors;
+* typed-query configuration.
+
+Driver-backed variants retain their source errors.
+
+### Validation errors
+
+```rust
+if let Err(error) = user.validate() {
+    if let Some(errors) = error.validation_errors() {
+        for error in errors {
+            println!("{}: {}", error.field, error.message);
+        }
     }
+}
+```
+
+Each `ValidationError` exposes:
+
+* `field`;
+* `message`.
+
+Several rules may produce several messages for the same field.
+
+### Query errors
+
+Typed-query configuration failures are exposed through `OxiModError::Query` and `query_error()`. They include:
+
+* zero page numbers;
+* zero page sizes;
+* pagination overflow;
+* limits outside the driver's supported integer range;
+* unsupported sort, skip, limit, or pagination modifiers on bulk writes.
+
+```rust
+use oximod::{OxiModError, QueryError};
+
+match User::query().page(0, 20).all().await {
+    Err(OxiModError::Query(
+        QueryError::InvalidPageNumber { page },
+    )) => {
+        println!("Invalid page number: {page}");
+    }
+    Err(error) => return Err(error.into()),
+    Ok(users) => println!("Found {} users", users.len()),
 }
 ```
 
 ---
 
+## Choosing the right API
+
+| Goal                                               | Recommended API                      |
+| -------------------------------------------------- | ------------------------------------ |
+| Construct and validate a model                     | Generated builder and `validate()`   |
+| Save or work by `_id`                              | `Model` methods                      |
+| Type-safe filters, sorting, pagination, and writes | `Queryable`                          |
+| Explicit-client persistence                        | `_from` model methods                |
+| Raw filters with typed model results               | `Collection<Model>`                  |
+| Dynamic BSON documents                             | `Collection<Document>`               |
+| Aggregation pipelines                              | Direct MongoDB collection access     |
+| Compound indexes or unsupported index options      | MongoDB driver index API             |
+| Sessions and advanced driver features              | Direct MongoDB collection/client API |
+
+OxiMod is designed so these approaches can coexist in the same application.
+
+---
+
+## Examples
+
+The repository includes focused runnable examples covering:
+
+* aggregation;
+* basic persistence;
+* `_id` workflows;
+* custom validation;
+* defaults;
+* typed deletion;
+* lifecycle hooks;
+* raw MongoDB queries;
+* typed queries;
+* typed updates;
+* explicit-client workflows;
+* structured validation errors;
+* built-in validation.
+
+Browse them in [`oximod/examples`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples).
+
+Run an example with:
+
+```bash
+cargo run -p oximod --example typed_query
+```
+
+MongoDB-backed examples read `MONGODB_URI` from the environment or a `.env` file.
+
+---
+
+## Current behavioral notes
+
+* Typed-query execution currently requires the global client.
+* Typed and raw update operations do not automatically run model validation.
+* Generated indexes are single-field and are initialized lazily during saves.
+* Compound indexes require the MongoDB driver API.
+* Lifecycle hooks wrap only save and `_id` helper methods.
+* `clear()`, unfiltered `update_all()`, and unfiltered `delete_all()` can affect an entire collection.
+* `GeoPoint`, `GeoPolygon`, and `NearQuery` construct MongoDB geometry and query documents but do not perform complete geospatial validity checks.
+* `index_max_retries` and `index_max_init_seconds` are accepted but are not currently enforced as hard limits.
+
+---
+
+## Documentation
+
+* [API documentation on docs.rs](https://docs.rs/oximod)
+* [Repository](https://github.com/arshia-eskandari/oximod)
+* [Runnable examples](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples)
+* [Crate on crates.io](https://crates.io/crates/oximod)
+
+---
+
 ## License
 
-MIT
+OxiMod is licensed under the [MIT License](https://github.com/arshia-eskandari/oximod/blob/main/LICENSE).
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in OxiMod shall be licensed under the MIT License without additional terms or conditions.
 
