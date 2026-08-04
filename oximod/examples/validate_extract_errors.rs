@@ -1,114 +1,160 @@
-//! Validation error extraction example for the oximod crate
+//! Extract structured field errors from OxiMod validation failures.
 //!
-//! Run with: `cargo run --example validate_extract_errors`
+//! Run with:
 //!
-//! This demonstrates how to:
-//! - Connect to MongoDB
-//! - Use the `Model` derive macro
-//! - Validate a model without saving it
-//! - Extract structured validation errors
-//! - Simulate returning frontend-friendly error messages
+//! ```text
+//! cargo run -p oximod --example validate_extract_errors
+//! ```
+//!
+//! This example demonstrates how to:
+//!
+//! - validate a model without connecting to MongoDB;
+//! - distinguish validation failures from other OxiMod errors;
+//! - access individual [`oximod::ValidationError`] values;
+//! - group several messages under the same field;
+//! - build a response shape suitable for an HTTP API or user interface;
+//! - validate corrected input successfully.
+//!
+//! Validation is independent from persistence. An embedded model is used here
+//! because the example represents submitted application data rather than an
+//! independently stored MongoDB document.
 
-use mongodb::bson::oid::ObjectId;
-use oximod::{Model, OxiClient, ValidationError};
+use std::collections::BTreeMap;
+
+use oximod::{Model, OxiModError, ValidationError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-enum Role {
-    Admin,
-    User,
-    Guest,
+enum AccountRole {
+    Member,
+    Manager,
 }
 
+// Submitted registration data.
+//
+// Embedded models receive generated constructors, setters, and `validate()`,
+// but do not own a MongoDB collection.
 #[derive(Debug, Serialize, Deserialize, Model)]
-#[db("validation_example_db")]
-#[collection("users_extract_errors")]
-struct User {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    _id: Option<ObjectId>,
-
-    #[validate(min_length = 3, max_length = 15)]
+#[model(embedded)]
+struct RegistrationInput {
+    #[validate(min_length = 3, max_length = 20, alphanumeric)]
     username: String,
 
     #[validate(email)]
-    #[index(unique)]
     email: String,
 
-    #[validate(positive)]
+    #[validate(min = 18, max = 120)]
     age: i32,
 
     #[validate(non_empty)]
     bio: Option<String>,
 
-    #[validate(pattern = r"^SKU-[0-9]{4}$")]
-    sku: Option<String>,
-
-    #[validate(non_negative)]
-    points: i32,
+    #[validate(pattern = r"^REF-[0-9]{4}$")]
+    referral_code: Option<String>,
 
     #[validate(required)]
-    role: Option<Role>,
-
-    #[default(false)]
-    active: bool,
+    role: Option<AccountRole>,
 }
 
-fn print_frontend_errors(errors: &[ValidationError]) {
-    println!("📤 Simulated frontend response:");
-    println!("{{");
-    println!(r#"  "success": false,"#);
-    println!(r#"  "message": "The submitted data is invalid.","#);
-    println!(r#"  "errors": {{"#);
+/// A transport-friendly representation of model validation failures.
+///
+/// A field maps to a vector rather than one string because OxiMod may report
+/// more than one failed rule for the same field.
+#[derive(Debug)]
+struct ValidationResponse {
+    success: bool,
+    message: &'static str,
+    errors: BTreeMap<String, Vec<String>>,
+}
 
-    for (index, error) in errors.iter().enumerate() {
-        let comma = if index + 1 == errors.len() { "" } else { "," };
-        println!(r#"    "{}": "{}"{}"#, error.field, error.message, comma);
+impl ValidationResponse {
+    fn from_errors(errors: &[ValidationError]) -> Self {
+        let mut grouped_errors = BTreeMap::<String, Vec<String>>::new();
+
+        for error in errors {
+            grouped_errors
+                .entry(error.field.clone())
+                .or_default()
+                .push(error.message.clone());
+        }
+
+        Self {
+            success: false,
+            message: "The submitted registration is invalid.",
+            errors: grouped_errors,
+        }
     }
 
-    println!("  }}");
-    println!("}}");
-}
+    fn print(&self) {
+        println!("success: {}", self.success);
+        println!("message: {}", self.message);
+        println!("errors:");
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::dotenv().ok();
-    let mongodb_uri = std::env::var("MONGODB_URI")
-        .expect("MONGODB_URI must be set in your .env file or environment");
+        for (field, messages) in &self.errors {
+            println!("  {field}:");
 
-    OxiClient::init_global(mongodb_uri).await?;
-
-    User::clear().await?;
-
-    println!("⚠️ Validating invalid user input...");
-
-    let user = User::new()
-        .username("ab") // too short
-        .email("not-an-email")
-        .age(-1) // not positive
-        .bio("   ") // empty
-        .sku("WRONGSKU") // invalid pattern
-        .points(-3) // not non-negative
-        .active(true);
-
-    match user.validate() {
-        Ok(()) => {
-            println!("✅ Validation passed.");
-            user.save().await?;
-            println!("✅ User saved successfully.");
-        }
-        Err(error) => {
-            if let Some(errors) = error.validation_errors() {
-                println!("🛑 Validation failed:");
-                println!("{error:#}");
-
-                println!();
-                print_frontend_errors(errors);
-            } else {
-                println!("❌ Unexpected error:");
-                println!("{error:#}");
+            for message in messages {
+                println!("    - {message}");
             }
         }
     }
+}
+
+fn main() -> Result<(), OxiModError> {
+    let invalid_input = RegistrationInput::new()
+        .username("ab")
+        .email("not-an-email")
+        .age(16)
+        .bio("   ")
+        .referral_code("WELCOME");
+
+    println!("Invalid registration");
+    println!("--------------------");
+
+    match invalid_input.validate() {
+        Ok(()) => {
+            println!("The invalid example unexpectedly passed.");
+        }
+        Err(error) => {
+            // The accessor avoids coupling application code to the internal
+            // layout of the `OxiModError::Validation` enum variant.
+            let errors = error
+                .validation_errors()
+                .ok_or_else(|| OxiModError::custom("validation returned a non-validation error"))?;
+
+            println!("OxiMod collected {} field-level errors.", errors.len());
+            println!();
+
+            let response = ValidationResponse::from_errors(errors);
+
+            response.print();
+        }
+    }
+
+    println!();
+    println!("Corrected registration");
+    println!("----------------------");
+
+    let valid_input = RegistrationInput::new()
+        .username("User1")
+        .email("user1@example.com")
+        .age(28)
+        .bio("Backend developer learning OxiMod")
+        .referral_code("REF-2048")
+        .role(AccountRole::Member);
+
+    valid_input.validate()?;
+
+    println!("The corrected input passed validation.");
+
+    // `validation_errors()` is selective: unrelated OxiMod errors do not
+    // expose field-level validation details.
+    let unrelated_error = OxiModError::custom("an unrelated application error");
+
+    println!(
+        "A custom error contains validation details: {}",
+        unrelated_error.validation_errors().is_some()
+    );
 
     Ok(())
 }
