@@ -1,19 +1,7 @@
-error[E0599]: no method named `elem_match` found for struct `Field<i32>` in the current scope
+error[E0599]: no method named `elem_match` found for struct `oximod::_query::Field<i32>` in the current scope
   --> tests/ui/query/elem_match_on_scalar_field.rs:20:55
    |
 20 |     let _query = User::query().filter(|user| user.age.elem_match(|age| age.gte(18)));
-   |                                                       ^^^^^^^^^^ method not found in `Field<i32>`
+   |                                                       ^^^^^^^^^^ method not found in `oximod::_query::Field<i32>`
    |
-   = note: the method was found for
-           - `Field<Vec<T>>`
-
-error[E0282]: type annotations needed
-  --> tests/ui/query/elem_match_on_scalar_field.rs:20:67
-   |
-20 |     let _query = User::query().filter(|user| user.age.elem_match(|age| age.gte(18)));
-   |                                                                   ^^^  --- type must be known at this point
-   |
-help: consider giving this closure parameter an explicit type
-   |
-20 |     let _query = User::query().filter(|user| user.age.elem_match(|age: /* Type */| age.gte(18)));
-   |                                                                      ++++++++++++
+   = note: the method was found for `oximod::_query::Field<Vec<T>>`

@@ -365,28 +365,22 @@ mod tests {
     use std::{
         cell::Cell,
         future::{Future, ready},
-        sync::Arc,
-        task::{Context, Poll, Wake, Waker},
+        task::{Context, Poll, Waker},
         time::Duration,
     };
-
-    struct NoopWake;
-
-    impl Wake for NoopWake {
-        fn wake(self: Arc<Self>) {}
-    }
 
     fn block_on_ready<F>(future: F) -> F::Output
     where
         F: Future,
     {
-        let waker = Waker::from(Arc::new(NoopWake));
-        let mut context = Context::from_waker(&waker);
+        let mut context = Context::from_waker(Waker::noop());
         let mut future = std::pin::pin!(future);
 
         match future.as_mut().poll(&mut context) {
             Poll::Ready(output) => output,
-            Poll::Pending => panic!("test future unexpectedly returned Pending"),
+            Poll::Pending => {
+                panic!("test future unexpectedly returned Pending")
+            }
         }
     }
 

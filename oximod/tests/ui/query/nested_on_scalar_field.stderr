@@ -1,24 +1,13 @@
-error[E0599]: the method `nested` exists for struct `Field<std::string::String>`, but its trait bounds were not satisfied
+error[E0599]: the method `nested` exists for struct `oximod::_query::Field<std::string::String>`, but its trait bounds were not satisfied
   --> tests/ui/query/nested_on_scalar_field.rs:20:56
    |
 20 |     let _query = User::query().filter(|user| user.name.nested(|name| name.eq("User1")));
-   |                                                        ^^^^^^ method cannot be called on `Field<std::string::String>` due to unsatisfied trait bounds
+   |                                                        ^^^^^^ method cannot be called on `oximod::_query::Field<std::string::String>` due to unsatisfied trait bounds
    |
   ::: $RUST/alloc/src/string.rs
    |
    | pub struct String {
-   | ----------------- doesn't satisfy `std::string::String: FieldSchema`
+   | ----------------- doesn't satisfy `std::string::String: oximod::_query::FieldSchema`
    |
    = note: the following trait bounds were not satisfied:
-           `std::string::String: FieldSchema`
-
-error[E0282]: type annotations needed
-  --> tests/ui/query/nested_on_scalar_field.rs:20:64
-   |
-20 |     let _query = User::query().filter(|user| user.name.nested(|name| name.eq("User1")));
-   |                                                                ^^^^  ---- type must be known at this point
-   |
-help: consider giving this closure parameter an explicit type
-   |
-20 |     let _query = User::query().filter(|user| user.name.nested(|name: /* Type */| name.eq("User1")));
-   |                                                                    ++++++++++++
+           `std::string::String: oximod::_query::FieldSchema`

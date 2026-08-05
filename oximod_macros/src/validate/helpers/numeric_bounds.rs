@@ -199,7 +199,7 @@ pub fn rhs_for_numeric_bound(
             | PrimitiveNum::U64
             | PrimitiveNum::U128
             | PrimitiveNum::Usize,
-            &LitNum::Float { lit: _, .. },
+            &LitNum::Float { .. },
         ) => {
             compile_errors.push(quote_spanned! { field_ident.span() =>
                 compile_error!("float literal is not allowed for integer field in `#[validate(min)]`/`max`");
