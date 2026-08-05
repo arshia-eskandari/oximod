@@ -1,0 +1,31 @@
+error[E0277]: the trait bound `i32: From<&str>` is not satisfied
+  --> tests/ui/query/push_wrong_array_element_type.rs:21:67
+   |
+21 |     let _query = User::query().update_one(|user| user.scores.push("high"));
+   |                                                              ---- ^^^^^^ the trait `From<&str>` is not implemented for `i32`
+   |                                                              |
+   |                                                              required by a bound introduced by this call
+   |
+   = help: `i32` implements trait `From<T>`:
+             From<bool>
+             From<deranged::RangedI32<MIN, MAX>>
+             From<errno::Errno>
+             From<i16>
+             From<i8>
+             From<socket2::Domain>
+             From<socket2::Protocol>
+             From<socket2::Type>
+             From<tokio::signal::unix::SignalKind>
+             From<u16>
+             From<u8>
+             From<zerocopy::byteorder::I16<O>>
+             From<zerocopy::byteorder::I32<O>>
+   = note: required for `&str` to implement `Into<i32>`
+note: required by a bound in `oximod_core::query::field::array::<impl oximod::_query::Field<Vec<T>>>::push`
+  --> $WORKSPACE/oximod_core/src/query/field/array.rs
+   |
+   |     pub fn push<V>(&self, value: V) -> UpdateExpression
+   |            ---- required by a bound in this associated function
+   |     where
+   |         V: Into<T>,
+   |            ^^^^^^^ required by this bound in `oximod_core::query::field::array::<impl Field<Vec<T>>>::push`

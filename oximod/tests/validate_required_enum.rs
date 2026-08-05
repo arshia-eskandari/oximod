@@ -1,3 +1,8 @@
+//! Integration tests for required optional fields and enum values.
+//!
+//! The tests cover missing required email and enum fields, along with
+//! successful persistence when both values are present and valid.
+
 mod common;
 
 use common::init;

@@ -1,3 +1,15 @@
+//! Field-validation token coordination.
+//!
+//! This module connects parsed `ValidateArgs` with the specialized validation
+//! builders. For each field, it:
+//!
+//! - rejects rules that require incompatible field-type groups;
+//! - verifies numeric, string, length, integer, signed, and optional types;
+//! - generates compile-time diagnostics for unsupported combinations;
+//! - collects runtime validation rules;
+//! - groups optional-field rules behind `Some(value)` checks;
+//! - preserves direct checks such as `required`.
+
 use super::args::{BuiltChecks, ValidateArgs};
 use super::build_checks::{
     custom_checks::build_custom_check,
@@ -187,4 +199,297 @@ pub fn generate_validate_model_tokens(
     }
 
     build_checks.checks
+}
+
+#[cfg(test)]
+mod tests {
+    use proc_macro2::TokenStream;
+    use quote::format_ident;
+    use syn::{Type, parse_quote};
+
+    use crate::validate::args::{LitNum, ValidateArgs};
+
+    use super::generate_validate_model_tokens;
+
+    #[test]
+    fn empty_validation_arguments_generate_no_tokens() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("name");
+        let field_ty: Type = parse_quote!(String);
+
+        let generated = generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            ValidateArgs::default(),
+        );
+
+        assert!(
+            generated.is_empty(),
+            "fields without validation rules should generate no checks"
+        );
+    }
+
+    #[test]
+    fn incompatible_validation_groups_generate_compile_error() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("value");
+        let field_ty: Type = parse_quote!(String);
+
+        let args = ValidateArgs {
+            email: true,
+            min: Some(LitNum::Int {
+                lit: parse_quote!(1),
+                neg: false,
+            }),
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("compile_error!"),
+            "type collisions should generate a compile error: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("cannotapplyvalidationsfromdifferenttypegroups"),
+            "compile error should explain the type collision: \
+             {generated}"
+        );
+    }
+
+    #[test]
+    fn numeric_rules_reject_non_numeric_fields() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("age");
+        let field_ty: Type = parse_quote!(String);
+
+        let args = ValidateArgs {
+            min: Some(LitNum::Int {
+                lit: parse_quote!(18),
+                neg: false,
+            }),
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("compile_error!"),
+            "numeric validation on String should fail: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("usesnumericvalidationrules,butitstypeisnotnumeric"),
+            "diagnostic should identify numeric type mismatch: \
+             {generated}"
+        );
+    }
+
+    #[test]
+    fn string_rules_reject_non_string_fields() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("email");
+        let field_ty: Type = parse_quote!(i32);
+
+        let args = ValidateArgs {
+            email: true,
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("compile_error!"),
+            "string validation on i32 should fail: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("usesstringvalidationrules,butitstypeisnotStringor&str"),
+            "diagnostic should identify string type mismatch: \
+             {generated}"
+        );
+    }
+
+    #[test]
+    fn required_rule_rejects_non_optional_fields() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("nickname");
+        let field_ty: Type = parse_quote!(String);
+
+        let args = ValidateArgs {
+            required: true,
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("compile_error!"),
+            "required validation should require Option<T>: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("usesoptionvalidationrules,butitstypeisnotOption<T>"),
+            "diagnostic should identify optional type mismatch: \
+             {generated}"
+        );
+    }
+
+    #[test]
+    fn required_rule_generates_direct_optional_check() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("nickname");
+        let field_ty: Type = parse_quote! {
+            Option<String>
+        };
+
+        let args = ValidateArgs {
+            required: true,
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("ifself.nickname.is_none()"),
+            "required validation should inspect the Option directly: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("\"isrequired\""),
+            "required validation should generate its error message: \
+             {generated}"
+        );
+
+        assert!(
+            !generated.contains("compile_error!"),
+            "valid required rule should not generate compile errors: \
+             {generated}"
+        );
+    }
+
+    #[test]
+    fn optional_field_rules_run_only_when_value_is_present() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("nickname");
+        let field_ty: Type = parse_quote! {
+            Option<String>
+        };
+
+        let args = ValidateArgs {
+            min_length: Some(3),
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("ifletSome(val)=&self.nickname"),
+            "optional field rules should run only for Some: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("ifval.len()<"),
+            "minimum-length check should be generated: \
+             {generated}"
+        );
+
+        assert!(
+            !generated.contains("compile_error!"),
+            "valid optional length rule should compile: \
+             {generated}"
+        );
+    }
+
+    #[test]
+    fn valid_numeric_bounds_generate_runtime_checks() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("age");
+        let field_ty: Type = parse_quote!(i32);
+
+        let args = ValidateArgs {
+            min: Some(LitNum::Int {
+                lit: parse_quote!(18),
+                neg: false,
+            }),
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains("letv=*val;"),
+            "numeric checks should copy the primitive value: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("ifv<18"),
+            "minimum bound should generate a comparison: \
+             {generated}"
+        );
+
+        assert!(
+            generated.contains("\"age\""),
+            "generated validation error should retain the field name: \
+             {generated}"
+        );
+
+        assert!(
+            !generated.contains("compile_error!"),
+            "valid numeric rules should not generate compile errors: \
+             {generated}"
+        );
+    }
+
+    fn compact(tokens: &[TokenStream]) -> String {
+        tokens
+            .iter()
+            .map(TokenStream::to_string)
+            .collect::<String>()
+            .replace(' ', "")
+    }
 }

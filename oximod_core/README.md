@@ -1,13 +1,27 @@
 # OxiMod Core
 
-Core runtime library for OxiMod, providing essential definitions including the Model trait, error types, and other shared components used throughout the Monoxide ecosystem.
+Core runtime library for [OxiMod](https://github.com/arshia-eskandari/oximod), a schema-aware MongoDB modeling library for Rust.
+
+`oximod_core` provides the shared runtime components used by the main `oximod` crate and its derive macros, including:
+
+* collection-backed and embedded model infrastructure,
+* MongoDB client management,
+* lifecycle hooks,
+* model validation errors,
+* typed filters, sorting, pagination, updates, and deletions,
+* nested-document and array operations,
+* text-search and GeoJSON query support,
+* internal asynchronous initialization helpers.
+
+Most applications should depend on the main `oximod` crate rather than using `oximod_core` directly. The main crate exposes the supported public API together with the `Model` derive macro.
 
 ## License
 
-This project is licensed under the [MIT license](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
 
-### Contribution
+## Contributions
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in OxiMod by you, shall be licensed as MIT, without any additional
-terms or conditions.
+for inclusion in OxiMod by you is licensed under the MIT License without
+additional terms or conditions.
+

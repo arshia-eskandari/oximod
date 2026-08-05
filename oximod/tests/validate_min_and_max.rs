@@ -1,3 +1,8 @@
+//! Integration tests for numeric minimum and maximum validation.
+//!
+//! The tests cover inclusive and exclusive bounds, values outside either
+//! boundary, and successful persistence when all numeric fields are valid.
+
 mod common;
 
 use common::init;

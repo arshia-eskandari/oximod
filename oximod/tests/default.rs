@@ -1,3 +1,8 @@
+//! Integration tests for generated field defaults.
+//!
+//! The tests verify string, numeric, and enum defaults during persistence and
+//! confirm that fluent setters override configured default expressions.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

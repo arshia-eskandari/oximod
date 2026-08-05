@@ -1,3 +1,8 @@
+//! Integration tests for user-defined field validators.
+//!
+//! The tests cover strings, numbers, `Cow`, collections, enums, nested values,
+//! optional fields, built-in rule combinations, and multiple custom validators.
+
 mod common;
 
 use common::init;
@@ -42,6 +47,10 @@ mod validators {
         Ok(())
     }
 
+    #[allow(
+        clippy::ptr_arg,
+        reason = "the signature intentionally verifies custom validation for Cow fields"
+    )]
     pub fn validate_nickname(value: &Cow<'static, str>) -> Result<(), String> {
         if value.trim().is_empty() {
             return Err("nickname cannot be blank".into());
@@ -163,7 +172,7 @@ async fn test_custom_string_validation_valid() -> TestResult {
 
     User::clear().await?;
 
-    let user = User::default().name("Arshia");
+    let user = User::default().name("User1");
 
     let result = user.save().await?;
     assert_ne!(result, ObjectId::default());

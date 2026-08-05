@@ -1,3 +1,8 @@
+//! Integration tests for email-address validation.
+//!
+//! The tests cover valid and malformed addresses for optional and nonoptional
+//! string fields, including missing `@` signs and incomplete domains.
+
 mod common;
 
 use common::init;

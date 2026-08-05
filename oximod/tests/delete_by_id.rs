@@ -1,3 +1,8 @@
+//! Integration tests for deleting documents by MongoDB object ID.
+//!
+//! The tests cover direct collection deletion and `Model::delete_by_id()` for
+//! existing and nonexistent IDs, including models with optional email fields.
+
 use mongodb::bson::{doc, oid::ObjectId};
 use oximod::Model;
 use serde::{Deserialize, Serialize};

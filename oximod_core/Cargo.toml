@@ -1,13 +1,13 @@
 [package]
 name = "oximod_core"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2024"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
-description = "The core logic and error handling for OxiMod, a MongoDB ODM for Rust."
+description = "Core runtime components for OxiMod, a schema-aware MongoDB modeling library for Rust."
 license = "MIT"
 repository = "https://github.com/arshia-eskandari/oximod"
 readme = "README.md"
-keywords = ["mongodb", "odm", "mongoose", "rust"]
+keywords = ["mongodb", "odm", "database", "async", "modeling"]
 categories = ["database", "asynchronous"]
 
 [dependencies]
@@ -16,6 +16,11 @@ mongodb = "3.5.1"
 thiserror = "2.0.18"
 serde = "1.0.228"
 
+[dependencies.regex]
+version = "1.12.3"
+default-features = false
+features = ["std"]
+
 [features]
-# enables diagnostics in release builds
+# Enables diagnostic output in release builds.
 debug-print = []

@@ -1,3 +1,8 @@
+//! Integration tests for minimum and maximum length validation.
+//!
+//! The tests cover strings, `Cow`, arrays, optional values, sequential
+//! collections, sets, and maps across valid, too-short, and too-long cases.
+
 mod common;
 
 use common::init;

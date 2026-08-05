@@ -1,3 +1,8 @@
+//! Integration test for global MongoDB client initialization.
+//!
+//! The test verifies that shared setup establishes a client retrievable
+//! through `OxiClient::global()`.
+
 use oximod::OxiClient;
 use testresult::TestResult;
 

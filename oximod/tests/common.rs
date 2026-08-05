@@ -1,3 +1,8 @@
+//! Shared setup for MongoDB-backed integration tests.
+//!
+//! This module loads environment variables, reads `MONGODB_URI`, and
+//! initializes OxiMod's global client.
+
 use oximod::OxiClient;
 use oximod_core::error::oximod_error::OxiModError;
 

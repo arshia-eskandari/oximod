@@ -1,80 +1,101 @@
+//! Runtime traits for collection-backed and embedded OxiMod models.
+//!
+//! The public [`Model`] trait exposes persistence operations for models backed
+//! by their own MongoDB collections. Generated code uses the hidden
+//! [`ModelCore`] trait and mode markers to share validation behavior with
+//! models declared using `#[model(embedded)]`.
+
 use crate::error::oximod_error::OxiModError;
 use crate::feature::conn::client::OxiClient;
-use async_trait;
-use mongodb::Client;
+use async_trait::async_trait;
 use mongodb::{
-    Collection,
-    bson::{Document, doc, oid::ObjectId},
+    Client, Collection as MongoCollection,
+    bson::{Document, oid::ObjectId},
     results::{DeleteResult, UpdateResult},
 };
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
-/// Core async model interface for OxiMod-backed MongoDB documents.
+/// Internal mode marker for a model backed by its own MongoDB collection.
 ///
-/// This trait is typically implemented automatically via `#[derive(Model)]`.
-/// Provides a minimal typed API for:
+/// This is the default mode used by [`ModelCore`]. Collection-backed models
+/// also implement the public [`Model`] persistence trait.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Collection;
+
+/// Internal mode marker for a model embedded inside another document.
 ///
-/// - accessing a model's MongoDB collection,
-/// - saving a model instance,
-/// - clearing all documents from a model's collection,
-/// - querying documents by `_id`,
-/// - deleting and updating documents by `_id`,
-/// - checking document existence,
-/// - counting documents,
-/// - working either with an explicit [`mongodb::Client`] or the globally
-///   initialized [`OxiClient`].
+/// Embedded models receive generated construction, fluent setters, defaults,
+/// validation, and typed nested-field metadata, but they do not implement the
+/// public [`Model`] persistence trait.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Embedded;
+
+/// Internal marker implemented by OxiMod's supported model modes.
 ///
-/// # Design
+/// This trait is public only because it appears in the public bound on
+/// [`ModelCore`]. It is intended for OxiMod-generated code.
+#[doc(hidden)]
+pub trait ModelMode: Send + Sync + 'static {}
+
+impl ModelMode for Collection {}
+impl ModelMode for Embedded {}
+
+/// Internal interface shared by collection-backed and embedded models.
 ///
-/// `Model` is intentionally lightweight. OxiMod provides schema-awareness,
-/// builder-style ergonomics, and validation, while still exposing the underlying
-/// MongoDB driver patterns when needed.
+/// `#[derive(Model)]` implements this trait using one of two modes:
 ///
-/// In practice:
+/// - [`Collection`] for ordinary models declared with `#[db(...)]` and
+///   `#[collection(...)]`;
+/// - [`Embedded`] for models declared with `#[model(embedded)]`.
 ///
-/// - use [`Model::save`] and [`Model::clear`] for common persistence operations,
-/// - use helpers like [`Model::find_by_id`], [`Model::delete_by_id`],
-///   [`Model::update_by_id`], [`Model::exists`], and [`Model::count`] for
-///   common convenience workflows,
-/// - use [`Model::get_collection`] when you want direct access to
-///   `mongodb::Collection<Self>`,
-/// - use [`Model::get_document_collection`] when you want a raw
-///   `mongodb::Collection<Document>` for untyped operations.
+/// The derive macro also generates an inherent `validate()` method, so
+/// application code does not need to import this internal trait.
+#[doc(hidden)]
+pub trait ModelCore<M = Collection>: Send + Sync + Sized
+where
+    M: ModelMode,
+{
+    /// Runs the inline and user-defined validators generated for this model.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] when one or more configured validations fail.
+    fn validate(&self) -> Result<(), OxiModError>;
+}
+
+/// Public persistence interface for collection-backed OxiMod models.
 ///
-/// # Global vs explicit client usage
+/// This trait is implemented automatically by `#[derive(Model)]` for ordinary
+/// models declared with `#[db(...)]` and `#[collection(...)]`. Importing
+/// `oximod::Model` brings its persistence methods into scope. Models declared
+/// with `#[model(embedded)]` do not implement this trait.
 ///
-/// The trait supports two access patterns:
+/// The trait provides:
 ///
-/// ## 1. Global client
+/// - typed and raw MongoDB collection access;
+/// - global-client and explicit-client save operations;
+/// - lookup, update, and deletion by `_id`;
+/// - collection clearing;
+/// - existence checks;
+/// - document counting.
 ///
-/// Methods like [`Model::save`], [`Model::clear`], [`Model::get_collection`],
-/// [`Model::find_by_id`], and [`Model::count`] use the globally initialized
-/// [`OxiClient`].
+/// # Global and explicit clients
 ///
-/// ## 2. Explicit client
+/// Methods such as [`Model::save`], [`Model::clear`], and
+/// [`Model::find_by_id`] use the globally initialized [`OxiClient`]. Methods
+/// ending in `_from`, such as [`Model::save_from`] and
+/// [`Model::find_by_id_from`], use a caller-provided [`Client`].
 ///
-/// Methods ending in `_from`, such as [`Model::save_from`] and
-/// [`Model::find_by_id_from`], operate on a caller-provided [`mongodb::Client`].
-///
-/// This is useful for:
-///
-/// - tests,
-/// - scoped client lifetimes,
-/// - multi-client or multi-database setups,
-/// - avoiding reliance on global state.
-///
-/// # Typed vs raw collections
+/// # Typed and raw collections
 ///
 /// [`Model::get_collection`] and [`Model::get_collection_from`] return
-/// `Collection<Self>`, which is the preferred typed API.
+/// `MongoCollection<Self>`. [`Model::get_document_collection`] and
+/// [`Model::get_document_collection_from`] return
+/// `MongoCollection<Document>` for raw BSON operations.
 ///
-/// [`Model::get_document_collection`] and
-/// [`Model::get_document_collection_from`] return `Collection<Document>`,
-/// which is useful when you need to work with raw BSON documents.
-///
-/// # Implementors
-///
-/// This trait is generally not implemented manually. Instead, derive it:
+/// # Example
 ///
 /// ```ignore
 /// use mongodb::bson::oid::ObjectId;
@@ -82,29 +103,61 @@ use serde::de::DeserializeOwned;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Serialize, Deserialize, Model)]
-/// #[db("app_db")]
+/// #[db("app")]
 /// #[collection("users")]
 /// struct User {
 ///     #[serde(skip_serializing_if = "Option::is_none")]
 ///     _id: Option<ObjectId>,
 ///     name: String,
-///     age: i32,
 /// }
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// User::clear().await?;
+///
+/// let id = User::new()
+///     .name("User1")
+///     .save()
+///     .await?;
+///
+/// let user = User::find_by_id(id).await?;
+/// # let _ = user;
+/// # Ok(())
+/// # }
 /// ```
 ///
-/// # Thread-safety
+/// # Embedded models
 ///
-/// Implementors must be:
+/// Embedded models use the same derive macro without receiving persistence
+/// methods:
 ///
-/// - [`Send`]
-/// - [`Sync`]
-/// - [`Sized`]
+/// ```ignore
+/// use oximod::Model;
+/// use serde::{Deserialize, Serialize};
 ///
-/// so model operations can safely participate in async workflows.
-#[async_trait::async_trait]
-pub trait Model
-where
-    Self: DeserializeOwned + Send + Sync + Sized,
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[model(embedded)]
+/// struct Address {
+///     street: String,
+/// }
+///
+/// let address = Address::new()
+///     .street("13544 Cane St");
+///
+/// address.validate()?;
+/// # Ok::<(), oximod::OxiModError>(())
+/// ```
+///
+/// # Implementors
+///
+/// Applications generally should not implement this trait manually. Generated
+/// collection-backed implementations also use the hidden
+/// `ModelCore<Collection>` validation implementation.
+///
+/// Implementors must be [`Serialize`], [`DeserializeOwned`], [`Send`],
+/// [`Sync`], and [`Sized`].
+#[async_trait]
+pub trait Model:
+    ModelCore<Collection> + Serialize + DeserializeOwned + Send + Sync + Sized
 {
     /// Returns the typed MongoDB collection for this model using an explicit client.
     ///
@@ -125,13 +178,13 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`OxiModError`] if the collection cannot be resolved.
-    fn get_collection_from(client: &mongodb::Client) -> Result<Collection<Self>, OxiModError>;
+    /// Returns [`OxiModError`] if the collection cannot be provided.
+    fn get_collection_from(client: &Client) -> Result<MongoCollection<Self>, OxiModError>;
 
     /// Returns the raw BSON document collection for this model using an explicit client.
     ///
     /// This is a convenience wrapper around [`Model::get_collection_from`] that
-    /// converts the typed collection into `Collection<Document>`.
+    /// converts the typed collection into `MongoCollection<Document>`.
     ///
     /// This is useful when you want to work directly with raw BSON documents
     /// instead of strongly typed model instances.
@@ -146,17 +199,17 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`OxiModError`] if the underlying typed collection cannot be resolved.
+    /// Returns [`OxiModError`] if the underlying typed collection cannot be provided.
     fn get_document_collection_from(
-        client: &mongodb::Client,
-    ) -> Result<Collection<Document>, OxiModError> {
+        client: &Client,
+    ) -> Result<MongoCollection<Document>, OxiModError> {
         Ok(Self::get_collection_from(client)?.clone_with_type::<Document>())
     }
 
     /// Persists this model instance using an explicit MongoDB client.
     ///
     /// Implementations are expected to serialize and insert `self` into the model's
-    /// configured collection, returning the inserted document's [`ObjectId`].
+    /// configured collection, and return the inserted document's [`ObjectId`].
     ///
     /// This method is the explicit-client counterpart to [`Model::save`].
     ///
@@ -172,18 +225,19 @@ where
     ///
     /// Returns [`OxiModError`] if validation, serialization, collection access,
     /// or insertion fails.
-    async fn save_from(&self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
+    async fn save_from(&self, client: &Client) -> Result<ObjectId, OxiModError>;
 
     /// Persists this model instance using an explicit MongoDB client with mutable access.
     ///
     /// Implementations are expected to serialize and insert `self` into the model's
-    /// configured collection, returning the inserted document's [`ObjectId`].
+    /// configured collection, and return the inserted document's [`ObjectId`].
     ///
     /// This method is the explicit-client counterpart to [`Model::save_mut`].
     ///
     /// Unlike [`Model::save_from`], this method allows mutable access to the model
     /// before persistence. This enables lifecycle hooks such as
-    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and [`crate::feature::hooks::Hooks::post_save_mut`] to modify or observe
+    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and
+    /// [`crate::feature::hooks::Hooks::post_save_mut`] to modify or observe
     /// the model during the save workflow.
     ///
     /// This is useful when the save operation needs to perform normalization
@@ -201,7 +255,7 @@ where
     ///
     /// Returns [`OxiModError`] if validation, serialization, collection access,
     /// hook execution, or insertion fails.
-    async fn save_from_mut(&mut self, client: &mongodb::Client) -> Result<ObjectId, OxiModError>;
+    async fn save_from_mut(&mut self, client: &Client) -> Result<ObjectId, OxiModError>;
 
     /// Deletes all documents in this model's collection using an explicit client.
     ///
@@ -225,7 +279,7 @@ where
     /// # Warning
     ///
     /// This removes **all documents** from the model's collection.
-    async fn clear_from(client: &mongodb::Client) -> Result<DeleteResult, OxiModError>;
+    async fn clear_from(client: &Client) -> Result<DeleteResult, OxiModError>;
 
     /// Finds a document by its `_id` using an explicit client.
     ///
@@ -251,10 +305,7 @@ where
     /// # Errors
     ///
     /// Returns [`OxiModError`] if collection resolution or the query fails.
-    async fn find_by_id_from(
-        id: ObjectId,
-        client: &mongodb::Client,
-    ) -> Result<Option<Self>, OxiModError>;
+    async fn find_by_id_from(id: ObjectId, client: &Client) -> Result<Option<Self>, OxiModError>;
 
     /// Deletes a document by its `_id` using an explicit client.
     ///
@@ -279,10 +330,7 @@ where
     /// # Errors
     ///
     /// Returns [`OxiModError`] if collection resolution or deletion fails.
-    async fn delete_by_id_from(
-        id: ObjectId,
-        client: &mongodb::Client,
-    ) -> Result<DeleteResult, OxiModError>;
+    async fn delete_by_id_from(id: ObjectId, client: &Client) -> Result<DeleteResult, OxiModError>;
 
     /// Updates a document by its `_id` using an explicit client.
     ///
@@ -317,7 +365,7 @@ where
     async fn update_by_id_from(
         id: ObjectId,
         update: Document,
-        client: &mongodb::Client,
+        client: &Client,
     ) -> Result<UpdateResult, OxiModError>;
 
     /// Checks whether any document matching `filter` exists using an explicit client.
@@ -338,12 +386,12 @@ where
     /// # Errors
     ///
     /// Returns [`OxiModError`] if collection resolution or the query fails.
-    async fn exists_from(filter: Document, client: &mongodb::Client) -> Result<bool, OxiModError> {
+    async fn exists_from(filter: Document, client: &Client) -> Result<bool, OxiModError> {
         let collection = Self::get_collection_from(client)?;
         let found = collection
             .find_one(filter)
             .await
-            .map_err(|e| OxiModError::database("Failed to check document existence", e))?;
+            .map_err(|error| OxiModError::database("Failed to check document existence", error))?;
         Ok(found.is_some())
     }
 
@@ -363,12 +411,12 @@ where
     /// # Errors
     ///
     /// Returns [`OxiModError`] if collection resolution or the count operation fails.
-    async fn count_from(filter: Document, client: &mongodb::Client) -> Result<u64, OxiModError> {
+    async fn count_from(filter: Document, client: &Client) -> Result<u64, OxiModError> {
         let collection = Self::get_collection_from(client)?;
         collection
             .count_documents(filter)
             .await
-            .map_err(|e| OxiModError::database("Failed to count matching documents", e))
+            .map_err(|error| OxiModError::database("Failed to count matching documents", error))
     }
 
     /// Returns the typed MongoDB collection for this model using the global [`OxiClient`].
@@ -386,7 +434,7 @@ where
     ///
     /// - the global client has not been initialized,
     /// - or the collection cannot be resolved.
-    fn get_collection() -> Result<Collection<Self>, OxiModError> {
+    fn get_collection() -> Result<MongoCollection<Self>, OxiModError> {
         let client_arc = OxiClient::global()?;
         let client: &Client = client_arc.as_ref();
         Self::get_collection_from(client)
@@ -407,7 +455,7 @@ where
     ///
     /// - the global client has not been initialized,
     /// - or the collection cannot be resolved.
-    fn get_document_collection() -> Result<Collection<Document>, OxiModError> {
+    fn get_document_collection() -> Result<MongoCollection<Document>, OxiModError> {
         Ok(Self::get_collection()?.clone_with_type::<Document>())
     }
 
@@ -442,7 +490,8 @@ where
     ///
     /// Unlike [`Model::save`], this method allows mutable access to the model
     /// before persistence. This enables lifecycle hooks such as
-    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and [`crate::feature::hooks::Hooks::post_save_mut`] to modify or observe
+    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and
+    /// [`crate::feature::hooks::Hooks::post_save_mut`] to modify or observe
     /// the model during the save workflow.
     ///
     /// This is useful when the save operation needs to perform normalization
@@ -624,18 +673,4 @@ where
         let client: &Client = client_arc.as_ref();
         Self::count_from(filter, client).await
     }
-
-    /// Performs validation on a model instance using inline checks and user-defined validators.
-    ///
-    /// # Returns
-    ///
-    /// The unit value () if all validations pass.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`OxiModError`] if:
-    ///
-    /// - inlines checks fail
-    /// - user-defined validators fail
-    fn validate(&self) -> Result<(), OxiModError>;
 }

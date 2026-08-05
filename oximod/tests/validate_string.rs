@@ -1,3 +1,8 @@
+//! Integration tests for built-in string validation rules.
+//!
+//! The tests cover prefix, suffix, inclusion, alphanumeric, non-empty, length,
+//! and pattern constraints for both optional and nonoptional string fields.
+
 mod common;
 
 use common::init;

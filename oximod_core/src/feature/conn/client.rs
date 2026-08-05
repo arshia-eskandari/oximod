@@ -1,86 +1,113 @@
+//! MongoDB client management for OxiMod.
+//!
+//! [`OxiClient`] supports a globally initialized MongoDB client for ordinary
+//! model operations and instance-level clients for explicit-client workflows.
+
 use crate::error::oximod_error::OxiModError;
 use mongodb::Client;
 use std::sync::{Arc, OnceLock};
 
 static CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
 
-/// Lightweight wrapper around a MongoDB [`Client`].
+/// Wrapper around a MongoDB [`Client`].
 ///
 /// `OxiClient` supports two usage patterns:
 ///
-/// - **Global client** initialized once with [`OxiClient::init_global`]
-/// - **Local client** stored inside an instance created with [`OxiClient::new`]
+/// - a global client initialized once with [`OxiClient::init_global`];
+/// - an instance-level client created with [`OxiClient::new`] or initialized
+///   later with [`OxiClient::init_client`].
 ///
-/// The global client is used by OxiMod APIs when no explicit client is provided,
-/// while local clients allow more control for tests, multi-tenant applications,
-/// or dependency injection.
+/// The global client is used by collection-backed model operations when no
+/// explicit MongoDB client is supplied. Instance-level clients are useful for
+/// tests, dependency injection, and applications that work with multiple
+/// MongoDB deployments.
+#[derive(Default)]
 pub struct OxiClient {
     inner: Option<Client>,
 }
 
 impl OxiClient {
-    /// Creates a new [`OxiClient`] by connecting to MongoDB.
+    /// Creates an initialized client wrapper from a MongoDB connection URI.
     ///
-    /// # Arguments
-    /// * `url` — MongoDB connection string (for example `"mongodb://localhost:27017"`).
+    /// # Parameters
+    ///
+    /// - `mongo_uri`: A MongoDB connection URI, such as
+    ///   `"mongodb://localhost:27017"`.
     ///
     /// # Errors
-    /// Returns [`crate::error::oximod_error::OxiModError::Connection`] if the client cannot be created.
-    pub async fn new(url: String) -> Result<Self, OxiModError> {
-        let client = Self::connect(url).await?;
-        Ok(OxiClient {
+    ///
+    /// Returns [`OxiModError::Connection`](crate::error::oximod_error::OxiModError::Connection)
+    /// if the MongoDB driver cannot create a client from the supplied URI.
+    pub async fn new(mongo_uri: String) -> Result<Self, OxiModError> {
+        let client = Self::connect(mongo_uri).await?;
+
+        Ok(Self {
             inner: Some(client),
         })
     }
 
-    /// Establishes a MongoDB connection.
+    /// Creates a MongoDB driver client from a connection URI.
     ///
-    /// Used internally by [`OxiClient::new`] and [`OxiClient::init_client`].
+    /// This helper is shared by [`OxiClient::new`],
+    /// [`OxiClient::init_client`], and [`OxiClient::init_global`].
     async fn connect(mongo_uri: String) -> Result<Client, OxiModError> {
-        let client = Client::with_uri_str(&mongo_uri).await.map_err(|e| {
-            OxiModError::connection("Unable to establish MongoDB client from provided URI", e)
-        })?;
-
-        Ok(client)
+        Client::with_uri_str(&mongo_uri).await.map_err(|error| {
+            OxiModError::connection(
+                "Unable to establish MongoDB client from provided URI",
+                error,
+            )
+        })
     }
 
-    /// Initializes or replaces the inner MongoDB client for this instance.
+    /// Initializes or replaces this wrapper's MongoDB client.
     ///
-    /// This allows creating an `OxiClient` first and connecting later,
-    /// or switching the connection used by this instance.
+    /// A wrapper created with [`OxiClient::default`] has no client until this
+    /// method succeeds.
+    ///
+    /// # Parameters
+    ///
+    /// - `mongo_uri`: The MongoDB connection URI used to create the client.
     ///
     /// # Errors
-    /// Returns [`crate::error::oximod_error::OxiModError::Connection`] if the client cannot connect.
+    ///
+    /// Returns [`OxiModError::Connection`](crate::error::oximod_error::OxiModError::Connection)
+    /// if the MongoDB driver cannot create a client from the supplied URI.
     pub async fn init_client(&mut self, mongo_uri: String) -> Result<(), OxiModError> {
         let client = Self::connect(mongo_uri).await?;
         self.inner = Some(client);
+
         Ok(())
     }
 
-    /// Returns a reference to the inner MongoDB client, if initialized.
-    ///
-    /// Useful for advanced cases where direct access to the driver is needed.
+    /// Returns the wrapped MongoDB client, if initialized.
+    #[must_use]
     pub fn client(&self) -> Option<&Client> {
         self.inner.as_ref()
     }
 
-    /// Returns a mutable reference to the inner MongoDB client, if initialized.
-    ///
-    /// This allows low-level customization of the underlying driver.
-    pub fn client_mut(&mut self) -> Option<&Client> {
-        self.inner.as_ref()
+    /// Returns mutable access to the wrapped MongoDB client, if initialized.
+    #[must_use]
+    pub fn client_mut(&mut self) -> Option<&mut Client> {
+        self.inner.as_mut()
     }
 
     /// Initializes the global MongoDB client.
     ///
-    /// This should typically be called once at application startup.
+    /// This method should normally be called once during application startup.
+    /// Subsequent attempts to initialize the global client return an error.
     ///
-    /// OxiMod APIs will use the global client when no explicit
-    /// [`OxiClient`] is provided.
+    /// # Parameters
+    ///
+    /// - `mongo_uri`: The MongoDB connection URI used to create the client.
     ///
     /// # Errors
-    /// - [`crate::error::oximod_error::OxiModError::Connection`] if the client cannot connect
-    /// - [`crate::error::oximod_error::OxiModError::GlobalClientInit`] if already initialized
+    ///
+    /// Returns:
+    ///
+    /// - [`OxiModError::Connection`](crate::error::oximod_error::OxiModError::Connection)
+    ///   if the MongoDB driver cannot create a client from the supplied URI;
+    /// - [`OxiModError::GlobalClientInit`](crate::error::oximod_error::OxiModError::GlobalClientInit)
+    ///   if the global client has already been initialized.
     pub async fn init_global(mongo_uri: String) -> Result<(), OxiModError> {
         let client = Self::connect(mongo_uri).await?;
 
@@ -91,15 +118,30 @@ impl OxiClient {
         Ok(())
     }
 
-    /// Returns the global MongoDB client.
+    /// Returns the globally initialized MongoDB client.
     ///
-    /// [`OxiClient::init_global`] must be called before using this.
+    /// The returned [`Arc`] is a clone of the shared global handle.
     ///
     /// # Errors
-    /// Returns [`crate::error::oximod_error::OxiModError::GlobalClientMissing`] if no global client exists.
+    ///
+    /// Returns [`OxiModError::GlobalClientMissing`](crate::error::oximod_error::OxiModError::GlobalClientMissing)
+    /// if [`OxiClient::init_global`] has not completed successfully.
     pub fn global() -> Result<Arc<Client>, OxiModError> {
         CLIENT.get().cloned().ok_or_else(|| {
             OxiModError::global_client_missing("Global MongoDB client has not been initialized")
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OxiClient;
+
+    #[test]
+    fn default_client_is_uninitialized() {
+        let mut client = OxiClient::default();
+
+        assert!(client.client().is_none());
+        assert!(client.client_mut().is_none());
     }
 }
