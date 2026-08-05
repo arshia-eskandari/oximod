@@ -1,5 +1,3 @@
-# .github/workflows/ci.yml
-
 name: CI
 
 on:
@@ -25,6 +23,9 @@ jobs:
         with:
           toolchain: stable
           override: true
+
+      - name: Install Rust source
+        run: rustup component add rust-src
 
       - name: Install nextest
         uses: taiki-e/install-action@v2
