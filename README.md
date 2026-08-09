@@ -280,6 +280,8 @@ assert_eq!(preferences.nickname.as_deref(), Some("User1"));
 
 Defaults are evaluated during construction and remain overridable through generated setters. Numeric literals should be suffixed when Rust's default literal type cannot convert into the field type.
 
+Defaults are construction-time only; they are never applied when reading documents from MongoDB. A stored document that lacks the field entirely fails to deserialize regardless of `#[default(...)]`. When adding a field to a model whose collection already contains documents, give the field a read-side default with `#[serde(default = "path")]`. Avoid bare `#[serde(default)]` as a schema-evolution strategy: it substitutes the field type's `Default::default()` value — not your configured `#[default(...)]` — and a later save writes that substituted value back to the database.
+
 ### MongoDB `_id` setter
 
 For a collection field named `_id`, the generated builder setter is `id()` by default:
@@ -405,6 +407,25 @@ username: String,
 
 The function receives `&T` and may return any error implementing `ToString`. For `Option<T>`, it receives `&T` and runs only for `Some(value)`.
 
+### Validation and embedded models
+
+Validating a model evaluates only the rules declared on that model's own fields. `#[validate(...)]` rules declared inside an embedded model are **not** evaluated when a containing model is validated or saved: the parent can validate and save successfully while an embedded value violates its own rules. This applies to every container shape, including bare embedded fields, `Option<Embedded>`, and `Vec<Embedded>`. The embedded type's own `validate()` works normally when called directly.
+
+To enforce embedded rules through the parent, add a custom validator on the containing field and delegate to the embedded value's `validate()`:
+
+```rust
+fn validate_address(address: &Address) -> Result<(), String> {
+    address.validate().map_err(|error| error.to_string())
+}
+```
+
+```rust
+#[validate(custom(validate_address))]
+address: Address,
+```
+
+A pre-save hook can serve as an alternative save-time guard. When hooks are used this way, implement **both** `pre_save` and `pre_save_mut` if the application uses both save forms: `save()`/`save_from()` run only `pre_save`, and `save_mut()`/`save_from_mut()` run only `pre_save_mut`, so a guard implemented in one hook does not protect the other save form.
+
 ### Validation and updates
 
 Validation is **not** automatically applied to:
@@ -504,6 +525,8 @@ WorkItem::query()
 
 The generated query targets `teamName` in MongoDB.
 
+`#[serde(alias = "...")]` is a read-side compatibility tool, not a rename migration. Typed query paths always use a field's primary serialized name, so documents still stored under a legacy key remain readable through the alias but are silently missed by typed filters on that field. During a field rename, migrate the persisted documents — or match both spellings with a raw `$or` filter through the document collection — before relying on typed queries against the renamed field.
+
 ### Sorting
 
 ```rust
@@ -533,6 +556,8 @@ let page = User::query()
 Pagination is one-based. Page `2` with size `25` skips the first `25` matching documents.
 
 Invalid pagination values and limits that cannot be represented by the MongoDB driver are returned as typed query errors when the query executes.
+
+A page is read as one result window through `all()`, which fails as a whole if any document in the window cannot be deserialized into the model — documents are never silently dropped, and none of the window's documents are returned. Later pages whose windows contain only valid documents still succeed. To locate, inspect, or repair documents that no longer match the model, read them as raw BSON through `get_document_collection()`.
 
 ### Read execution semantics
 
@@ -567,6 +592,8 @@ Query helpers include:
 * exact `$size`;
 * scalar `$elemMatch`.
 
+The scalar `elem_match` overload applies to scalar elements; for arrays of embedded models use `elem_match_nested` (see [Embedded documents](#embedded-documents)).
+
 Typed array updates include:
 
 * `$push` and multi-value `$push`;
@@ -574,6 +601,20 @@ Typed array updates include:
 * `$pull`;
 * first- and last-element `$pop`;
 * positional and filtered updates for arrays of embedded models.
+
+Array update operators (`push`, `add_to_set`, `pull`, and whole-array `set`) require the element type to convert into BSON (`Into<Bson>`). Scalar elements such as strings and numbers qualify automatically; derived embedded models do not implement `Into<Bson>` automatically. Implement the conversion once per embedded type to enable these operators on `Vec<Embedded>` fields:
+
+```rust
+use mongodb::bson::{Bson, to_bson};
+
+impl From<Address> for Bson {
+    fn from(address: Address) -> Self {
+        to_bson(&address).expect("Address serializes to BSON")
+    }
+}
+```
+
+`From` conversions cannot report failure, so the implementation must decide how to handle a value that fails to serialize (this example panics). Typed *matching* on embedded arrays needs no conversion — `elem_match_nested` works without it.
 
 ### Embedded documents
 
@@ -601,6 +642,8 @@ let users = User::query()
     .all()
     .await?;
 ```
+
+An `elem_match_nested` filter also supplies the array match that MongoDB's positional `$` update operator requires, so pair it with `positional(...)` when updating the first matched element.
 
 Nested fields may also be used for sorting and typed updates where supported.
 
@@ -717,6 +760,8 @@ let updated = User::query()
 ```
 
 Combine independent update expressions with `&`. Updates using the same MongoDB operator are merged into one operator document.
+
+Typed update expressions write specific dotted field paths. When documents written by older model versions may still be present, prefer these targeted updates — or `$set` on dotted paths through `update_by_id` — over replacing a whole stored document with a serialized model: a whole-document replacement writes only the current struct shape and can drop or rewrite fields the running code no longer declares.
 
 Supported families include:
 
@@ -857,6 +902,8 @@ let users = User::query().all().await?;
 
 `OxiClient::global()` returns an `Arc<mongodb::Client>` and fails when global initialization has not completed. A second successful initialization is not allowed.
 
+Treat `init_global()` as a process-level, one-time startup step and handle its `Result`. Global-client operations require initialization to have completed successfully; until it has, they fail. Once a client is installed, later `init_global()` calls return an error rather than replacing it.
+
 ### Instance-level client
 
 ```rust
@@ -941,6 +988,10 @@ mongodb::Collection<mongodb::bson::Document>
 
 Use it when the document shape is dynamic or when working directly with BSON.
 
+### Sessions and transactions
+
+Sessions and transactions are raw-driver territory: no OxiMod method accepts a `ClientSession`. A model or typed-query write issued while a transaction is open executes outside that transaction and commits independently, with no error or warning. Once any write to a collection participates in a transaction, perform **every** write to that collection through the session-aware driver APIs on `get_collection()` / `get_document_collection()` for as long as the transactional pattern is in use.
+
 ### Aggregation example
 
 ```rust
@@ -988,6 +1039,10 @@ email: String,
 Generated indexes are initialized lazily before model insertion. A successful initialization is remembered for that model type within the process. Merely constructing a query or obtaining a collection does not create indexes.
 
 Use direct collection access for compound indexes and advanced options not represented by `#[index(...)]`.
+
+Partial or filtered indexes (MongoDB's `partialFilterExpression` option) are likewise not expressible with `#[index(...)]`; create them through the driver's `create_index` on the collection returned by `get_collection()` or `get_document_collection()`. Driver-created indexes coexist with `#[index(...)]` declarations. MongoDB enforces that uniqueness; the underlying driver failure on a violation is a duplicate-key error (E11000), not an OxiMod validation failure — OxiMod validation does not replace MongoDB's index enforcement.
+
+> **Warning:** Do not emulate a compound unique index by storing a derived composite-key field guarded by `#[index(unique)]`. Partial updates such as `update_by_id` or a typed `$set` can change the source fields without recomputing the derived field, silently desynchronizing it; genuine duplicates can then persist while the index still appears healthy. Create a real MongoDB compound unique index through the driver instead.
 
 ### Core options
 
@@ -1217,7 +1272,7 @@ match User::query().page(0, 20).all().await {
 | Raw filters with typed model results               | `Collection<Model>`                  |
 | Dynamic BSON documents                             | `Collection<Document>`               |
 | Aggregation pipelines                              | Direct MongoDB collection access     |
-| Compound indexes or unsupported index options      | MongoDB driver index API             |
+| Compound, partial/filtered, or unsupported index options | MongoDB driver index API       |
 | Sessions and advanced driver features              | Direct MongoDB collection/client API |
 
 OxiMod is designed so these approaches can coexist in the same application.
@@ -1258,8 +1313,11 @@ MongoDB-backed examples read `MONGODB_URI` from the environment or a `.env` file
 
 * Typed-query execution currently requires the global client.
 * Typed and raw update operations do not automatically run model validation.
+* Validation does not descend into embedded models; enforce embedded rules with a custom validator on the containing field or with pre-save hooks (covering both `pre_save` and `pre_save_mut`).
 * Generated indexes are single-field and are initialized lazily during saves.
-* Compound indexes require the MongoDB driver API.
+* Compound and partial/filtered indexes require the MongoDB driver API; a derived composite-key field with `#[index(unique)]` is not a safe substitute for a compound unique index.
+* OxiMod methods do not accept MongoDB sessions; writes issued through OxiMod while a transaction is open commit outside that transaction.
+* Typed reads fail as a whole when any document in the selected result window cannot be deserialized; use the raw document collection to inspect or repair such documents.
 * Lifecycle hooks wrap only save and `_id` helper methods.
 * `clear()`, unfiltered `update_all()`, and unfiltered `delete_all()` can affect an entire collection.
 * `GeoPoint`, `GeoPolygon`, and `NearQuery` construct MongoDB geometry and query documents but do not perform complete geospatial validity checks.

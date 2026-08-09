@@ -382,6 +382,14 @@ where
     /// [`Query::count`]. It is not supported by [`Query::update_all`] or
     /// [`Query::delete_all`]. Single-document operations select by filter and
     /// sorting rather than by page.
+    ///
+    /// A page is executed as one result window by [`Query::all`] and shares
+    /// its deserialization behavior: if any document inside the selected
+    /// window cannot be deserialized into the model, the call returns an
+    /// error rather than silently dropping that document, and none of the
+    /// window's documents are returned. Later pages whose windows contain
+    /// only valid documents still succeed. See [`Query::all`] for the raw
+    /// inspection and repair route.
     pub fn page(mut self, page: u64, page_size: u64) -> Self {
         self.pagination = true;
 
@@ -626,6 +634,15 @@ where
     /// - collection resolution or query execution fails
     /// - cursor advancement fails
     /// - a document cannot be deserialized into `M`
+    ///
+    /// Deserialization failures are never skipped: if any document in the
+    /// selected result window cannot be deserialized into `M`, `all()`
+    /// returns `Err` and yields none of the window's documents, including
+    /// valid ones. The error does not identify the offending document. To
+    /// locate, inspect, or repair such documents, read them as raw BSON
+    /// through
+    /// [`Model::get_document_collection`](crate::feature::model::Model::get_document_collection)
+    /// and convert individually with `bson::from_document`.
     pub async fn all(mut self) -> Result<Vec<M>, OxiModError> {
         self.take_error()?;
 

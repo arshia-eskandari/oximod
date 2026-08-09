@@ -349,6 +349,12 @@ pub trait Model:
     /// let result = collection.update_one(doc! { "_id": id }, update).await?;
     /// ```
     ///
+    /// When documents written by older model versions may still be present,
+    /// prefer `$set` on specific dotted field paths over rewriting whole
+    /// embedded values or documents: a whole-value replacement writes only
+    /// the current model shape and can drop fields the running code no
+    /// longer declares.
+    ///
     /// # Parameters
     ///
     /// - `id`: The `_id` of the document to update.

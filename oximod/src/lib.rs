@@ -116,7 +116,23 @@
 //!
 //! Embedded fields can still participate in collection-model queries:
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use oximod::{Model, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("users")]
+//! # struct User {
+//! #     name: String,
+//! #     address: Address,
+//! # }
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[model(embedded)]
+//! # struct Address {
+//! #     street: String,
+//! #     city: String,
+//! # }
+//! # async fn run() -> Result<(), oximod::OxiModError> {
 //! User::query()
 //!     .filter(|user| {
 //!         user.address.nested(|address| {
@@ -125,10 +141,20 @@
 //!     })
 //!     .all()
 //!     .await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Generated nested paths honor supported Serde `rename` and `rename_all`
 //! attributes.
+//!
+//! `#[serde(alias = "...")]` is a read-side compatibility tool, not a rename
+//! migration. Typed query paths always use a field's primary serialized name,
+//! so documents still stored under a legacy key remain readable through the
+//! alias but are silently missed by typed filters on that field. During a
+//! field rename, migrate the persisted documents — or match both spellings
+//! with a raw `$or` filter through [`Model::get_document_collection`] —
+//! before relying on typed queries against the renamed field.
 //!
 //! ## Construction and defaults
 //!
@@ -161,6 +187,17 @@
 //! assert_eq!(preferences.display_name, "Guest");
 //! assert_eq!(preferences.nickname.as_deref(), Some("Al"));
 //! ```
+//!
+//! `#[default(...)]` applies only while constructing a model in Rust; it is
+//! never applied when reading documents from MongoDB. A stored document that
+//! lacks the field entirely fails to deserialize regardless of any configured
+//! `#[default(...)]`. When adding a field to a model whose collection already
+//! contains documents, give the field a read-side default with
+//! `#[serde(default = "path")]`. Avoid bare `#[serde(default)]` as a
+//! schema-evolution strategy: it substitutes the field type's
+//! `Default::default()` value — not the configured `#[default(...)]`
+//! expression — and a later save writes that substituted value back to the
+//! database.
 //!
 //! For a collection field named `_id`, the generated setter is `id()` by
 //! default and accepts a MongoDB `ObjectId`. Rename it with
@@ -219,6 +256,52 @@
 //! typed update expressions. Those operations modify stored documents directly
 //! through MongoDB.
 //!
+//! ### Validation does not descend into embedded models
+//!
+//! Validating a model evaluates only the rules declared on that model's own
+//! fields. `#[validate(...)]` rules declared inside an embedded model are
+//! **not** evaluated when a containing model is validated or saved: the
+//! parent can validate and save successfully while an embedded value violates
+//! its own rules. This applies to every container shape, including bare
+//! embedded fields, `Option<Embedded>`, and `Vec<Embedded>`. The embedded
+//! type's own `validate()` method works normally when called directly.
+//!
+//! To enforce embedded rules through the parent, add a custom validator to
+//! the containing field and delegate to the embedded value's `validate()`:
+//!
+//! ```rust
+//! use oximod::Model;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Address {
+//!     #[validate(non_empty)]
+//!     city: String,
+//! }
+//!
+//! fn validate_address(address: &Address) -> Result<(), String> {
+//!     address.validate().map_err(|error| error.to_string())
+//! }
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Profile {
+//!     #[validate(custom(validate_address))]
+//!     address: Address,
+//! }
+//!
+//! let profile = Profile::new().address(Address::new().city(""));
+//! assert!(profile.validate().is_err());
+//! ```
+//!
+//! A pre-save hook can serve as an alternative save-time guard. When hooks
+//! are used this way, implement **both** [`Hooks::pre_save`] and
+//! [`Hooks::pre_save_mut`] if the application uses both save forms: `save()`
+//! and `save_from()` run only `pre_save`, while `save_mut()` and
+//! `save_from_mut()` run only `pre_save_mut`, so a guard implemented in one
+//! hook does not protect the other save form.
+//!
 //! ## Indexes
 //!
 //! `#[index(...)]` declares a single-field index on a collection model. Common
@@ -233,11 +316,31 @@
 //! a collection. Use the MongoDB collection returned by [`Model::get_collection`]
 //! for compound indexes or driver options not represented by `#[index(...)]`.
 //!
+//! Partial or filtered indexes (MongoDB's `partialFilterExpression` option)
+//! are likewise not expressible with `#[index(...)]`; create them through the
+//! driver's `create_index` on the collection returned by
+//! [`Model::get_collection`] or [`Model::get_document_collection`].
+//! Driver-created indexes coexist with `#[index(...)]` declarations. MongoDB
+//! enforces that uniqueness; the underlying driver failure on a violation is
+//! a duplicate-key error (E11000), not an OxiMod validation failure. OxiMod
+//! validation does not replace MongoDB's index enforcement.
+//!
+//! Do not emulate a compound unique index by storing a derived composite-key
+//! field guarded by `#[index(unique)]`. Partial updates such as
+//! `update_by_id` or a typed `$set` can change the source fields without
+//! recomputing the derived field, silently desynchronizing it; genuine
+//! duplicates can then persist while the index still appears healthy. Create
+//! a real MongoDB compound unique index through the driver instead.
+//!
 //! ## Clients and collection access
 //!
 //! [`OxiClient::init_global`] installs one process-wide MongoDB client. Model
 //! methods without an `_from` suffix and all typed-query execution methods use
-//! that global client. Global initialization can succeed only once.
+//! that global client. Treat `init_global` as a process-level, one-time
+//! startup step and handle its `Result`: global-client operations require
+//! initialization to have completed successfully — until it has, they fail —
+//! and once a client is installed, later `init_global` calls return an error
+//! rather than replacing it.
 //!
 //! Explicit-client model methods accept `&mongodb::Client`. An [`OxiClient`]
 //! instance is one convenient way to own such a client:
@@ -273,6 +376,14 @@
 //! compound indexes, sessions, and any MongoDB operation outside OxiMod's
 //! convenience APIs.
 //!
+//! Sessions and transactions in particular remain driver territory: no OxiMod
+//! method accepts a `ClientSession`, so a model or typed-query write issued
+//! while a transaction is open executes outside that transaction and commits
+//! independently, with no error or warning. Once any write to a collection
+//! participates in a transaction, perform every write to that collection
+//! through the session-aware driver APIs on these collections for as long as
+//! the transactional pattern is in use.
+//!
 //! ## Typed queries
 //!
 //! Import [`Queryable`] to call `ModelType::query()`. The closure-based API
@@ -285,9 +396,64 @@
 //! no explicit-client typed-query executor; use the `_from` model methods or an
 //! explicitly obtained MongoDB collection when global state is unsuitable.
 //!
+//! The examples in this section use the following model:
+//!
+//! ```rust
+//! use mongodb::bson::oid::ObjectId;
+//! use oximod::Model;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Address {
+//!     city: String,
+//! }
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("app")]
+//! #[collection("users")]
+//! struct User {
+//!     #[serde(skip_serializing_if = "Option::is_none")]
+//!     _id: Option<ObjectId>,
+//!     name: String,
+//!     age: i32,
+//!     active: bool,
+//!     role: String,
+//!     tags: Vec<String>,
+//!     scores: Vec<i32>,
+//!     addresses: Vec<Address>,
+//!     login_count: i32,
+//!     nickname: Option<String>,
+//! }
+//! ```
+//!
 //! ### Filters and logical expressions
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! # use oximod::{Model, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[model(embedded)]
+//! # struct Address { city: String }
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("users")]
+//! # struct User {
+//! #     #[serde(skip_serializing_if = "Option::is_none")]
+//! #     _id: Option<ObjectId>,
+//! #     name: String,
+//! #     age: i32,
+//! #     active: bool,
+//! #     role: String,
+//! #     tags: Vec<String>,
+//! #     scores: Vec<i32>,
+//! #     addresses: Vec<Address>,
+//! #     login_count: i32,
+//! #     nickname: Option<String>,
+//! # }
+//! # async fn run() -> Result<(), oximod::OxiModError> {
+//! # let users =
 //! User::query()
 //!     .filter(|user| {
 //!         user.active.eq(true)
@@ -297,6 +463,11 @@
 //!                     | user.role.eq("member")
 //!             )
 //!     })
+//! #     .all()
+//! #     .await?;
+//! # let _ = users;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! `&` creates logical AND and `|` creates logical OR; Rust does not permit
@@ -311,7 +482,31 @@
 //!
 //! ### Arrays and embedded values
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! # use oximod::{Model, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[model(embedded)]
+//! # struct Address { city: String }
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("users")]
+//! # struct User {
+//! #     #[serde(skip_serializing_if = "Option::is_none")]
+//! #     _id: Option<ObjectId>,
+//! #     name: String,
+//! #     age: i32,
+//! #     active: bool,
+//! #     role: String,
+//! #     tags: Vec<String>,
+//! #     scores: Vec<i32>,
+//! #     addresses: Vec<Address>,
+//! #     login_count: i32,
+//! #     nickname: Option<String>,
+//! # }
+//! # async fn run() -> Result<(), oximod::OxiModError> {
+//! # let users =
 //! User::query()
 //!     .filter(|user| {
 //!         user.tags.contains_all(["rust", "mongodb"])
@@ -322,15 +517,76 @@
 //!                 address.city.eq("City1")
 //!             })
 //!     })
+//! #     .all()
+//! #     .await?;
+//! # let _ = users;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Arrays support membership, `$all`, exact size, and scalar `$elemMatch`.
-//! Arrays of embedded models add typed nested `$elemMatch` and positional
-//! update helpers.
+//! Arrays of embedded models add typed nested `$elemMatch` through
+//! `elem_match_nested`, shown above, plus positional update helpers. An
+//! `elem_match_nested` filter also supplies the array match that MongoDB's
+//! positional `$` update operator requires, so pair it with `positional(...)`
+//! when updating the first matched element.
+//!
+//! Array update operators such as `push`, `add_to_set`, `pull`, and
+//! whole-array `set` require the element type to implement `Into<Bson>`.
+//! Scalar elements qualify automatically; derived embedded models do not
+//! implement `Into<Bson>` automatically. To use these operators on a
+//! `Vec<Embedded>` field, implement the conversion once for the embedded
+//! type:
+//!
+//! ```rust
+//! use mongodb::bson::{Bson, to_bson};
+//! use oximod::Model;
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[model(embedded)]
+//! struct Address {
+//!     city: String,
+//! }
+//!
+//! impl From<Address> for Bson {
+//!     fn from(address: Address) -> Self {
+//!         to_bson(&address).expect("Address serializes to BSON")
+//!     }
+//! }
+//! ```
+//!
+//! Matching with `elem_match_nested` does not require this conversion; only
+//! the mutation operators do. `From` conversions cannot report failure, so
+//! the implementation must decide how to handle a value that fails to
+//! serialize (this example panics via `expect`).
 //!
 //! ### Sorting, pagination, and execution
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! # use oximod::{Model, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[model(embedded)]
+//! # struct Address { city: String }
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("users")]
+//! # struct User {
+//! #     #[serde(skip_serializing_if = "Option::is_none")]
+//! #     _id: Option<ObjectId>,
+//! #     name: String,
+//! #     age: i32,
+//! #     active: bool,
+//! #     role: String,
+//! #     tags: Vec<String>,
+//! #     scores: Vec<i32>,
+//! #     addresses: Vec<Address>,
+//! #     login_count: i32,
+//! #     nickname: Option<String>,
+//! # }
+//! # async fn run() -> Result<(), oximod::OxiModError> {
 //! let users = User::query()
 //!     .filter(|user| user.active.eq(true))
 //!     .sort_by(|user| user.role.asc())
@@ -338,6 +594,9 @@
 //!     .page(2, 25)
 //!     .all()
 //!     .await?;
+//! # let _ = users;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Pagination is one-based. `all()` applies sorting, skip, limit, and
@@ -345,12 +604,37 @@
 //! `count()` uses only the filter and text search. Invalid pagination and
 //! out-of-range limits are returned as [`QueryError`] when the query executes.
 //!
+//! `all()` deserializes every document in the selected result window and
+//! fails as a whole — returning `Err` and no documents — if any document in
+//! that window cannot be deserialized into the model. Documents are never
+//! silently skipped. With `page()`, each page is its own window: a page whose
+//! window contains an undeserializable document errors, while later pages
+//! whose windows contain only valid documents still succeed. Diagnose or
+//! repair such documents through the raw collection returned by
+//! [`Model::get_document_collection`].
+//!
 //! ### Text and geospatial queries
 //!
 //! Add `$text` with a string or [`TextSearch`] and optionally sort by MongoDB's
 //! relevance score:
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! use oximod::{Model, Queryable, TextSearch};
+//! # use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("app")]
+//! #[collection("articles")]
+//! struct Article {
+//!     #[serde(skip_serializing_if = "Option::is_none")]
+//!     _id: Option<ObjectId>,
+//!
+//!     #[index(text)]
+//!     content: String,
+//! }
+//!
+//! # async fn run() -> Result<(), oximod::OxiModError> {
 //! Article::query()
 //!     .text(
 //!         TextSearch::new("\"rust mongodb\" -beginner")
@@ -359,6 +643,8 @@
 //!     .sort_by_text_score()
 //!     .all()
 //!     .await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Text queries require an appropriate MongoDB text index.
@@ -366,7 +652,23 @@
 //! GeoJSON point and polygon fields support `$near`, `$geoWithin`, and
 //! `$geoIntersects` where their typed field constraints permit:
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! use oximod::{GeoPoint, Model, NearQuery, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("app")]
+//! #[collection("places")]
+//! struct Place {
+//!     #[serde(skip_serializing_if = "Option::is_none")]
+//!     _id: Option<ObjectId>,
+//!
+//!     #[index(geo_2dsphere)]
+//!     location: GeoPoint,
+//! }
+//!
+//! # async fn run() -> Result<(), oximod::OxiModError> {
 //! Place::query()
 //!     .filter(|place| {
 //!         place.location.near(
@@ -376,6 +678,8 @@
 //!     })
 //!     .all()
 //!     .await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Coordinates use longitude-latitude order. Distances for GeoJSON `$near`
@@ -386,7 +690,30 @@
 //! `update_one()` and `delete_one()` apply filtering and sorting and return the
 //! affected document. They do not apply skip, limit, or pagination.
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! # use oximod::{Model, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[model(embedded)]
+//! # struct Address { city: String }
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("users")]
+//! # struct User {
+//! #     #[serde(skip_serializing_if = "Option::is_none")]
+//! #     _id: Option<ObjectId>,
+//! #     name: String,
+//! #     age: i32,
+//! #     active: bool,
+//! #     role: String,
+//! #     tags: Vec<String>,
+//! #     scores: Vec<i32>,
+//! #     addresses: Vec<Address>,
+//! #     login_count: i32,
+//! #     nickname: Option<String>,
+//! # }
+//! # async fn run() -> Result<(), oximod::OxiModError> {
 //! let updated = User::query()
 //!     .filter(|user| user.name.eq("User1"))
 //!     .update_one(|user| {
@@ -395,6 +722,9 @@
 //!             & user.nickname.unset()
 //!     })
 //!     .await?;
+//! # let _ = updated;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! `update_all()` and `delete_all()` operate on every matching document and
@@ -551,12 +881,30 @@ pub use oximod_core::feature::conn::client::OxiClient;
 /// update, and delete helpers in both global-client and explicit-client forms.
 /// Hooks do not wrap typed queries or direct MongoDB collection operations.
 ///
+/// Each save form runs only its own hooks: `save()` and `save_from()` run
+/// `pre_save`/`post_save`, while `save_mut()` and `save_from_mut()` run
+/// `pre_save_mut`/`post_save_mut`. A safeguard implemented in only one
+/// pre-save hook does not guard the other save form; implement both when the
+/// application uses both.
+///
 /// A pre-hook error aborts the database operation. A post-hook error reports a
 /// post-processing failure after the database operation has succeeded.
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
+/// # use mongodb::bson::oid::ObjectId;
+/// # use oximod::{Hooks, Model, OxiModError};
+/// # use serde::{Deserialize, Serialize};
+/// # #[derive(Debug, Serialize, Deserialize, Model)]
+/// # #[db("app")]
+/// # #[collection("users")]
+/// # #[hooks]
+/// # struct User {
+/// #     #[serde(skip_serializing_if = "Option::is_none")]
+/// #     _id: Option<ObjectId>,
+/// #     email: String,
+/// # }
 /// #[async_trait::async_trait]
 /// impl Hooks for User {
 ///     async fn pre_save_mut(&mut self) -> Result<(), OxiModError> {
@@ -654,7 +1002,10 @@ pub use oximod_core::feature::model::Model;
 /// # Field attributes
 ///
 /// - `#[default(expression)]` replaces `Default::default()` during `new()`;
-/// - `#[validate(...)]` adds compile-time-checked built-in or custom rules;
+/// - `#[validate(...)]` adds compile-time-checked built-in or custom rules.
+///   Rules apply to the model's own fields only: validation does not descend
+///   into embedded models. See the crate-level Validation section for the
+///   custom-validator and hook remedies;
 /// - `#[index(...)]` adds a single-field MongoDB index to a collection model.
 ///
 /// Serde field and container renames are reflected in generated typed paths.
@@ -765,9 +1116,33 @@ pub use oximod_core::query::RegexOption;
 /// operator writes the same path more than once, the right-hand expression
 /// takes precedence.
 ///
+/// Update expressions write specific dotted field paths. When documents
+/// written by older model versions may still be present, prefer these
+/// targeted updates — or `$set` on dotted paths through
+/// [`Model::update_by_id`] — over replacing a whole stored document with a
+/// serialized model: a whole-document replacement writes only the current
+/// struct shape and can drop or rewrite fields the running code no longer
+/// declares.
+///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
+/// # use mongodb::bson::oid::ObjectId;
+/// # use oximod::{Model, Queryable};
+/// # use serde::{Deserialize, Serialize};
+/// # #[derive(Debug, Serialize, Deserialize, Model)]
+/// # #[db("app")]
+/// # #[collection("users")]
+/// # struct User {
+/// #     #[serde(skip_serializing_if = "Option::is_none")]
+/// #     _id: Option<ObjectId>,
+/// #     name: String,
+/// #     active: bool,
+/// #     login_count: i32,
+/// #     nickname: Option<String>,
+/// # }
+/// # async fn run() -> Result<(), oximod::OxiModError> {
+/// # let _ =
 /// User::query()
 ///     .filter(|user| user.name.eq("User1"))
 ///     .update_one(|user| {
@@ -776,6 +1151,8 @@ pub use oximod_core::query::RegexOption;
 ///             & user.nickname.unset()
 ///     })
 ///     .await?;
+/// # Ok(())
+/// # }
 /// ```
 pub use oximod_core::query::UpdateExpression;
 

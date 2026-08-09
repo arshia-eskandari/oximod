@@ -21,6 +21,16 @@ where
     /// Matches an array containing an embedded model that satisfies the
     /// supplied typed conditions.
     ///
+    /// This is the supported spelling of `$elemMatch` for `Vec<T>` fields
+    /// whose element type is a derived model (including `#[model(embedded)]`);
+    /// the scalar [`Field::elem_match`] overload does not apply to embedded
+    /// elements. Matching requires no BSON conversion for `T` — only array
+    /// mutation operators such as `push` and `pull` require `T: Into<Bson>`.
+    ///
+    /// An `elem_match_nested` filter also supplies the array-matching query
+    /// clause that MongoDB's positional `$` update operator requires; see
+    /// [`Field::positional`].
+    ///
     /// The generated fields are relative to the array element, so their paths
     /// do not include the array field name inside `$elemMatch`.
     ///
