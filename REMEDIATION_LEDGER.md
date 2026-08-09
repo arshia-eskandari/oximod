@@ -135,13 +135,13 @@ audit evidence
 | SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W3-V01 index-establishment cluster |
 | SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation verification; no new capability implied |
 | SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
-| SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-V03 and W2-V04 malformed-document probes |
-| SR-7 | Give conflicting text-index / duplicate-index-name declarations an earlier signal | W2-F07; W2-V08; W2-A4-E01; W2-A3-B02 | CODE_OR_DIAGNOSTIC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-A4-E01 / W2-V08 declaration matrix |
+| SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | READY_FOR_REVERIFY | FIX_PRE_1_0 | W2-V03 and W2-V04 malformed-document probes |
+| SR-7 | Give conflicting text-index / duplicate-index-name declarations an earlier signal | W2-F07; W2-V08; W2-A4-E01; W2-A3-B02 | CODE_OR_DIAGNOSTIC | READY_FOR_REVERIFY | FIX_PRE_1_0 | W2-A4-E01 / W2-V08 declaration matrix |
 | SR-8 | Expose ordered/numeric operators on `Option<T>`, or document the supported boundary/workaround | W2-F01; W2-V01; W2-A7-B02; W2-A3-B01 | CODE_OR_DOC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-V01 operator compile matrix |
 | SR-9 | Make `elem_match` on `Vec<Embedded>` reachable and document the array-operator remedy | W2-F03; W2-V02; W2-A4-B03 | CODE_AND_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W2-V02 array/operator matrix |
 | SR-10 | Publish the measured production rules | W3-F03; W3-F02; W1-F12; W3-A9-B02; W3-A9-B03; W3-OPS-02; W3-OPS-E01 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation/example verification |
 | SR-11 | Fix the three published code blocks that reference undeclared fields | W1-F14; W1-B-01 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Compile/check affected documentation examples |
-| SR-12 | Improve derive attribute diagnostics | W1-F10; W0-F02; W0-F03; F-V02; W1-M-X01 | CODE_OR_DIAGNOSTIC | MAINTAINER_DECIDED | FIX_PRE_1_0 | F-V02 compile matrix plus relevant `oximod/tests/ui` coverage |
+| SR-12 | Improve derive attribute diagnostics | W1-F10; W0-F02; W0-F03; F-V02; W1-M-X01 | CODE_OR_DIAGNOSTIC | READY_FOR_REVERIFY | FIX_PRE_1_0 | F-V02 compile matrix plus relevant `oximod/tests/ui` coverage |
 | SR-13 | Make `.page()` fail as loudly as `.all()` over undeserializable documents, or document the difference | W3-A9-B05 capability evidence; no filed finding ID by design | CODE_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W3-A9-B05 poison-document pagination case |
 
 
