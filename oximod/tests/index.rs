@@ -497,3 +497,60 @@ async fn advanced_index_features_are_applied_correctly() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run index_creation_errors_name_the_collection
+#[tokio::test]
+async fn index_creation_errors_name_the_collection() -> TestResult {
+    init().await?;
+
+    // Two models sharing one collection may still conflict at the server:
+    // the same index name over different keys is rejected with
+    // IndexOptionsConflict. This is deliberately not a compile-time conflict,
+    // so it exercises the runtime index-creation error surface.
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("index_error_names_collection")]
+    struct FirstModel {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(name = "clash_idx")]
+        first_field: String,
+    }
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("index_error_names_collection")]
+    struct SecondModel {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(name = "clash_idx")]
+        second_field: String,
+    }
+
+    reset_collection::<FirstModel>().await?;
+
+    FirstModel::default().first_field("a").save().await?;
+
+    let error = SecondModel::default()
+        .second_field("b")
+        .save()
+        .await
+        .expect_err("conflicting server-side index name should fail the save");
+
+    assert!(
+        matches!(error, oximod::OxiModError::Index { .. }),
+        "expected OxiModError::Index, got {error:?}"
+    );
+    assert!(
+        error.to_string().contains("`index_error_names_collection`"),
+        "index error should name the collection: {error}"
+    );
+    assert!(
+        std::error::Error::source(&error).is_some(),
+        "index error should preserve its driver source: {error:?}"
+    );
+
+    Ok(())
+}

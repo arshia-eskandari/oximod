@@ -153,6 +153,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
             let index_once_async_ident =
                 Ident::new(&format!("_INDEX_INIT_{name}"), Span::call_site());
 
+            let index_error_message =
+                format!("Failed to create indexes for collection `{collection}`");
+
             let query_tokens = generate_query_tokens(input)?;
 
             let collection_model_token =
@@ -190,7 +193,7 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                                         .await
                                         .map_err(|error| {
                                             ::oximod::OxiModError::index(
-                                                "Failed to create indexes for collection",
+                                                #index_error_message,
                                                 error,
                                             )
                                         })?;
@@ -328,6 +331,30 @@ mod tests {
                  {generated}"
             );
         }
+    }
+
+    #[test]
+    fn index_creation_errors_name_the_collection() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique)]
+                name: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("collection model should expand"));
+
+        assert!(
+            generated.contains("\"Failedtocreateindexesforcollection`users`\""),
+            "index error message should include the collection name: \
+             {generated}"
+        );
     }
 
     #[test]

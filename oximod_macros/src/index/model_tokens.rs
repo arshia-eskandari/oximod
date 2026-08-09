@@ -163,13 +163,7 @@ pub(crate) fn generate_index_model_tokens(
 
 /// Generates the document entry used as the index key.
 fn generate_key_entry(field_ident: &Ident, index_args: &IndexArgs) -> TokenStream {
-    let is_text = index_args.text == Some(true)
-        || index_args.text_index_version.is_some()
-        || index_args.default_language.is_some()
-        || index_args.language_override.is_some()
-        || index_args.weight.is_some();
-
-    if is_text {
+    if index_args.is_text_implying() {
         quote! { stringify!(#field_ident): "text" }
     } else if index_args.hashed == Some(true) {
         quote! { stringify!(#field_ident): "hashed" }

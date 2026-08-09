@@ -81,3 +81,85 @@ pub(crate) struct IndexArgs {
     /// The MongoDB `2dsphere` index format version.
     pub(crate) geo_2dsphere_index_version: Option<u32>,
 }
+
+impl IndexArgs {
+    /// Returns whether these arguments declare a text index.
+    ///
+    /// Text-index-specific options imply a text index even when the explicit
+    /// `text` flag is absent. This is the single definition shared by index
+    /// key generation and cross-field declaration validation, so the two
+    /// layers cannot drift.
+    pub(crate) fn is_text_implying(&self) -> bool {
+        self.text == Some(true)
+            || self.text_index_version.is_some()
+            || self.default_language.is_some()
+            || self.language_override.is_some()
+            || self.weight.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IndexArgs;
+
+    #[test]
+    fn text_flag_and_every_text_associated_option_imply_a_text_index() {
+        let cases = [
+            IndexArgs {
+                text: Some(true),
+                ..IndexArgs::default()
+            },
+            IndexArgs {
+                text_index_version: Some(2),
+                ..IndexArgs::default()
+            },
+            IndexArgs {
+                default_language: Some("english".to_string()),
+                ..IndexArgs::default()
+            },
+            IndexArgs {
+                language_override: Some("language".to_string()),
+                ..IndexArgs::default()
+            },
+            IndexArgs {
+                weight: Some(10),
+                ..IndexArgs::default()
+            },
+        ];
+
+        for args in cases {
+            assert!(
+                args.is_text_implying(),
+                "expected text-implying arguments: {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn non_text_arguments_are_not_text_implying() {
+        let cases = [
+            IndexArgs::default(),
+            IndexArgs {
+                unique: Some(true),
+                name: Some("name_idx".to_string()),
+                ..IndexArgs::default()
+            },
+            IndexArgs {
+                hashed: Some(true),
+                ..IndexArgs::default()
+            },
+            IndexArgs {
+                geo_2dsphere: Some(true),
+                geo_2dsphere_index_version: Some(3),
+                ..IndexArgs::default()
+            },
+        ];
+
+        for args in cases {
+            assert!(
+                !args.is_text_implying(),
+                "expected non-text arguments: {args:?}"
+            );
+        }
+    }
+}

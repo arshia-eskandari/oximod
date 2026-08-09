@@ -1,0 +1,11 @@
+error: Unsupported attribute `#[unknown]` for #[derive(Model)]
+  --> tests/ui/attrs/unknown_attribute.rs:14:1
+   |
+14 | #[unknown]
+   | ^^^^^^^^^^
+
+error: cannot find attribute `unknown` in this scope
+  --> tests/ui/attrs/unknown_attribute.rs:14:3
+   |
+14 | #[unknown]
+   |   ^^^^^^^

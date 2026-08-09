@@ -126,6 +126,53 @@ async fn checks_existence_of_matching_document_using_model_helper() -> TestResul
     Ok(())
 }
 
+// Run test: cargo nextest run exists_is_a_document_level_probe_and_agrees_with_count
+#[tokio::test]
+async fn exists_is_a_document_level_probe_and_agrees_with_count() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("test")]
+    #[collection("exists_test_exists_is_a_document_level_probe_and_agrees_with_count")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        age: i32,
+        active: bool,
+    }
+
+    User::clear().await?;
+
+    // Raw-insert a document that matches the filter but cannot deserialize as
+    // `User` (`age` is a string, `active` is missing).
+    let raw_collection = User::get_document_collection()?;
+    raw_collection
+        .insert_one(doc! { "name": "Poison", "age": "twenty-seven" })
+        .await?;
+
+    let filter = doc! { "name": "Poison" };
+
+    // The fixture is genuinely undeserializable through the typed collection.
+    let typed_read = User::get_collection()?.find_one(filter.clone()).await;
+    assert!(
+        typed_read.is_err(),
+        "raw fixture unexpectedly deserialized as User"
+    );
+
+    let exists = User::exists(filter.clone()).await?;
+    assert!(exists);
+
+    let count = User::count(filter).await?;
+    assert!(count > 0);
+    assert_eq!(exists, count > 0);
+
+    let not_exists = User::exists(doc! { "name": "SomeoneWhoDoesNotExist" }).await?;
+    assert!(!not_exists);
+
+    Ok(())
+}
+
 // Run test: cargo nextest run checks_existence_of_matching_document_by_email_using_model_helper
 #[tokio::test]
 async fn checks_existence_of_matching_document_by_email_using_model_helper() -> TestResult {

@@ -1,0 +1,5 @@
+error: conflicting #[index] declarations: field `body` declares a text or text-implying index, but field `title` already declares one; MongoDB allows at most one text index per collection
+  --> tests/ui/index/two_text_indexes.rs:22:5
+   |
+22 |     #[index(weight = 3)]
+   |     ^^^^^^^^^^^^^^^^^^^^

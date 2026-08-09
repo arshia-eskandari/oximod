@@ -370,9 +370,11 @@ pub trait Model:
 
     /// Checks whether any document matching `filter` exists using an explicit client.
     ///
-    /// This method is implemented using `find_one(filter).await?.is_some()`,
-    /// which is typically more efficient for existence checks than counting
-    /// all matching documents.
+    /// This method is a document-level existence probe: it runs `find_one`
+    /// against the raw document collection and never deserializes the matched
+    /// document into `Self`. A matching document that cannot deserialize as
+    /// this model therefore still returns `Ok(true)`, in agreement with
+    /// [`Model::count_from`] over the same filter.
     ///
     /// # Parameters
     ///
@@ -387,7 +389,7 @@ pub trait Model:
     ///
     /// Returns [`OxiModError`] if collection resolution or the query fails.
     async fn exists_from(filter: Document, client: &Client) -> Result<bool, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
+        let collection = Self::get_document_collection_from(client)?;
         let found = collection
             .find_one(filter)
             .await

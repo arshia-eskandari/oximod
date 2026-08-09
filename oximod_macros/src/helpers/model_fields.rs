@@ -69,6 +69,8 @@ pub struct FieldTokenStreams {
 /// - the macro target is not a struct,
 /// - a field attribute fails to parse,
 /// - an embedded model declares an `#[index(...)]` attribute,
+/// - a model declares more than one text or text-implying index,
+/// - a model declares the same literal `#[index(name = "...")]` twice,
 /// - or a collection-backed model is missing its document ID setter
 ///   configuration.
 pub fn generate_field_tokens(
@@ -80,6 +82,13 @@ pub fn generate_field_tokens(
     let mut validations = Vec::new();
     let mut inits = Vec::new();
     let mut setters = Vec::new();
+
+    // Cross-field `#[index]` declaration state. MongoDB permits at most one
+    // text index per collection and rejects duplicate index names at creation
+    // time, so both conflicts are reported at compile time instead.
+    let mut text_index_field: Option<String> = None;
+    let mut declared_index_names: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     let data_struct = match &input.data {
         syn::Data::Struct(data_struct) => data_struct,
@@ -125,6 +134,37 @@ pub fn generate_field_tokens(
                         syn::Error::new_spanned(attr, format!("Invalid #[index]: {error}"))
                             .to_compile_error()
                     })?;
+
+                    if index_args.is_text_implying() {
+                        if let Some(first_field) = &text_index_field {
+                            return Err(syn::Error::new_spanned(
+                                attr,
+                                format!(
+                                    "conflicting #[index] declarations: field `{ident}` declares \
+                                     a text or text-implying index, but field `{first_field}` \
+                                     already declares one; MongoDB allows at most one text index \
+                                     per collection"
+                                ),
+                            )
+                            .to_compile_error());
+                        }
+
+                        text_index_field = Some(ident.to_string());
+                    }
+
+                    if let Some(name) = &index_args.name
+                        && let Some(first_field) =
+                            declared_index_names.insert(name.clone(), ident.to_string())
+                    {
+                        return Err(syn::Error::new_spanned(
+                            attr,
+                            format!(
+                                "duplicate #[index] name `{name}`: an index with this name \
+                                 is already declared on field `{first_field}`"
+                            ),
+                        )
+                        .to_compile_error());
+                    }
 
                     let index_token = generate_index_model_tokens(ident, index_args);
 
@@ -319,6 +359,80 @@ mod tests {
         assert!(
             !fields.validations.is_empty(),
             "validation attributes should generate validation tokens"
+        );
+    }
+
+    #[test]
+    fn multiple_indexes_with_distinct_names_are_accepted() {
+        let input: DeriveInput = parse_quote! {
+            struct User {
+                #[index(unique, name = "name_idx")]
+                name: String,
+
+                #[index(sparse, name = "age_idx")]
+                age: i32,
+
+                #[index(text, name = "bio_text_idx")]
+                bio: String,
+            }
+        };
+
+        let fields = generate_field_tokens(&input, ModelKind::Collection, Some("id"))
+            .expect("distinct index declarations should generate");
+
+        assert_eq!(fields.indexes.len(), 3);
+    }
+
+    #[test]
+    fn a_second_text_implying_index_is_rejected() {
+        // The second declaration uses a text-associated option (`weight`)
+        // without the explicit `text` flag, proving the conflict check uses
+        // the same text-implying predicate as index generation.
+        let input: DeriveInput = parse_quote! {
+            struct Article {
+                #[index(text)]
+                title: String,
+
+                #[index(weight = 3)]
+                body: String,
+            }
+        };
+
+        let error = match generate_field_tokens(&input, ModelKind::Collection, Some("id")) {
+            Ok(_) => panic!("second text-implying index should be rejected"),
+            Err(tokens) => tokens.to_string(),
+        };
+
+        assert!(
+            error.contains("conflicting #[index] declarations")
+                && error.contains("`body`")
+                && error.contains("`title`"),
+            "unexpected error tokens: {error}"
+        );
+    }
+
+    #[test]
+    fn duplicate_literal_index_names_are_rejected() {
+        let input: DeriveInput = parse_quote! {
+            struct User {
+                #[index(unique, name = "shared_idx")]
+                name: String,
+
+                #[index(sparse, name = "shared_idx")]
+                age: i32,
+            }
+        };
+
+        let error = match generate_field_tokens(&input, ModelKind::Collection, Some("id")) {
+            Ok(_) => panic!("duplicate index name should be rejected"),
+            Err(tokens) => tokens.to_string(),
+        };
+
+        assert!(
+            error.contains("duplicate #[index] name")
+                && error.contains("shared_idx")
+                && error.contains("`name`"),
+            "unexpected error tokens: {error}"
         );
     }
 

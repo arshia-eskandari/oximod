@@ -1,0 +1,5 @@
+error: duplicate #[index] name `shared_idx`: an index with this name is already declared on field `name`
+  --> tests/ui/index/duplicate_index_name.rs:21:5
+   |
+21 |     #[index(sparse, name = "shared_idx")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
