@@ -2,7 +2,7 @@
 
 ## Status
 
-CONTROLLED — DIAGNOSIS NOT YET STARTED
+D0 COMPLETE — MAINTAINER DISPOSITIONS RECORDED — D1 PENDING
 
 ## Baseline
 
@@ -130,19 +130,155 @@ audit evidence
 
 | ID | Audit recommendation | Audit basis | Initial resolution lane | Diagnosis | Decision | External re-verification target |
 |---|---|---|---|---|---|---|
-| SR-1 | Give the embedded `#[validate]` gap a signal, or document it with its remedy | W2-F05; W2-F06; W2-V06; W2-V07; W2-A4-E02 | CODE_OR_DOC | PENDING_DIAGNOSIS | UNDECIDED | W2-A4-E02 / W2-V07 validation matrix; hook-remedy coverage if relevant |
-| SR-2 | Correct the error-variant documentation or the variant meanings | W1-F11; W1-V07 | DOC_OR_CODE | PENDING_DIAGNOSIS | UNDECIDED | W1-V07 error-classification cases |
-| SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | PENDING_DIAGNOSIS | UNDECIDED | W3-V01 index-establishment cluster |
-| SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | PENDING_DIAGNOSIS | UNDECIDED | Documentation verification; no new capability implied |
-| SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | PENDING_DIAGNOSIS | UNDECIDED | Documentation verification; raw hatch remains boundary unless separately approved |
-| SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | PENDING_DIAGNOSIS | UNDECIDED | W2-V03 and W2-V04 malformed-document probes |
-| SR-7 | Give conflicting text-index / duplicate-index-name declarations an earlier signal | W2-F07; W2-V08; W2-A4-E01; W2-A3-B02 | CODE_OR_DIAGNOSTIC | PENDING_DIAGNOSIS | UNDECIDED | W2-A4-E01 / W2-V08 declaration matrix |
-| SR-8 | Expose ordered/numeric operators on `Option<T>`, or document the supported boundary/workaround | W2-F01; W2-V01; W2-A7-B02; W2-A3-B01 | CODE_OR_DOC | PENDING_DIAGNOSIS | UNDECIDED | W2-V01 operator compile matrix |
-| SR-9 | Make `elem_match` on `Vec<Embedded>` reachable and document the array-operator remedy | W2-F03; W2-V02; W2-A4-B03 | CODE_AND_OR_DOC | PENDING_DIAGNOSIS | UNDECIDED | W2-V02 array/operator matrix |
-| SR-10 | Publish the measured production rules | W3-F03; W3-F02; W1-F12; W3-A9-B02; W3-A9-B03; W3-OPS-02; W3-OPS-E01 | DOC_CANDIDATE | PENDING_DIAGNOSIS | UNDECIDED | Documentation/example verification |
-| SR-11 | Fix the three published code blocks that reference undeclared fields | W1-F14; W1-B-01 | DOC_CANDIDATE | PENDING_DIAGNOSIS | UNDECIDED | Compile/check affected documentation examples |
-| SR-12 | Improve derive attribute diagnostics | W1-F10; W0-F02; W0-F03; F-V02; W1-M-X01 | CODE_OR_DIAGNOSTIC | PENDING_DIAGNOSIS | UNDECIDED | F-V02 compile matrix plus relevant `oximod/tests/ui` coverage |
-| SR-13 | Make `.page()` fail as loudly as `.all()` over undeserializable documents, or document the difference | W3-A9-B05 capability evidence; no filed finding ID by design | CODE_OR_DOC | PENDING_DIAGNOSIS | UNDECIDED | W3-A9-B05 poison-document pagination case |
+| SR-1 | Give the embedded `#[validate]` gap a signal, or document it with its remedy | W2-F05; W2-F06; W2-V06; W2-V07; W2-A4-E02 | CODE_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W2-A4-E02 / W2-V07 validation matrix; hook-remedy coverage if relevant |
+| SR-2 | Correct the error-variant documentation or the variant meanings | W1-F11; W1-V07 | DOC_OR_CODE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W1-V07 error-classification cases |
+| SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W3-V01 index-establishment cluster |
+| SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation verification; no new capability implied |
+| SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
+| SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-V03 and W2-V04 malformed-document probes |
+| SR-7 | Give conflicting text-index / duplicate-index-name declarations an earlier signal | W2-F07; W2-V08; W2-A4-E01; W2-A3-B02 | CODE_OR_DIAGNOSTIC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-A4-E01 / W2-V08 declaration matrix |
+| SR-8 | Expose ordered/numeric operators on `Option<T>`, or document the supported boundary/workaround | W2-F01; W2-V01; W2-A7-B02; W2-A3-B01 | CODE_OR_DOC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-V01 operator compile matrix |
+| SR-9 | Make `elem_match` on `Vec<Embedded>` reachable and document the array-operator remedy | W2-F03; W2-V02; W2-A4-B03 | CODE_AND_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W2-V02 array/operator matrix |
+| SR-10 | Publish the measured production rules | W3-F03; W3-F02; W1-F12; W3-A9-B02; W3-A9-B03; W3-OPS-02; W3-OPS-E01 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation/example verification |
+| SR-11 | Fix the three published code blocks that reference undeclared fields | W1-F14; W1-B-01 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Compile/check affected documentation examples |
+| SR-12 | Improve derive attribute diagnostics | W1-F10; W0-F02; W0-F03; F-V02; W1-M-X01 | CODE_OR_DIAGNOSTIC | MAINTAINER_DECIDED | FIX_PRE_1_0 | F-V02 compile matrix plus relevant `oximod/tests/ui` coverage |
+| SR-13 | Make `.page()` fail as loudly as `.all()` over undeserializable documents, or document the difference | W3-A9-B05 capability evidence; no filed finding ID by design | CODE_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W3-A9-B05 poison-document pagination case |
+
+
+## Maintainer disposition notes — 2026-08-09
+
+These notes are authoritative for implementation scope. They refine the
+decision column without altering the frozen audit or the D0 diagnosis.
+
+### SR-1
+
+Pre-1.0 resolution is documentation only.
+
+Do not implement automatic validation descent or `#[validate(nested)]` in the
+current remediation campaign. Document that embedded validation does not
+recurse automatically, document the custom-validator remedy, and document the
+hook remedy together with the requirement to cover both `pre_save` and
+`pre_save_mut`.
+
+### SR-2
+
+The pre-1.0 goal is a coherent error contract, not merely a one-line
+`Connection` -> `Database` remap.
+
+Before implementation, design and obtain maintainer approval for a complete
+mapping in which `OxiModError` variants have one consistent meaning across the
+public API. The preferred direction is failure-class semantics, while
+preserving the original driver error through `source()`.
+
+SR-2 is intentionally excluded from D1 and will receive its own implementation
+phase.
+
+### SR-3
+
+Approve an explicit write-independent index-initialization API.
+
+Preferred names:
+
+- `init_indexes()`
+- `init_indexes_from(...)`
+
+Do not implement continuous drift detection or automatic re-establishment.
+Those would change the established once-per-process lifecycle and are outside
+this remediation.
+
+SR-3 is intentionally excluded from D1.
+
+### SR-4
+
+Documentation only. Explicitly warn that a derived/composite mirror field is
+not a safe substitute for a real MongoDB compound unique index.
+
+### SR-5
+
+Documentation only. Partial/filtered indexes remain an intentional raw-driver
+boundary pre-1.0.
+
+### SR-6
+
+Approve the code correction: `exists()` should perform a document-level
+existence probe rather than deserialize the matched model.
+
+The narrow `Err` -> `Ok(true)` behavior change for an undeserializable matching
+document is accepted.
+
+### SR-7
+
+Approve compile-time rejection of exactly the two audit-established
+single-model conflicts:
+
+- more than one text-implying declared index;
+- duplicate literal declared index names.
+
+Also approve adding collection context to the runtime index-creation error.
+
+Do not generalize this into broad MongoDB index compatibility analysis.
+
+### SR-8
+
+Approve a pre-1.0 code solution for `Option<T>` operators using inner-value
+arguments rather than blanket marker-trait implementations that would permit
+nonsensical values such as `inc(None)`.
+
+Ordered and numeric families are approved. Integer/bitwise operators may be
+included only if they are a straightforward application of the same safe
+design; otherwise leave them documented for later review.
+
+SR-8 is intentionally excluded from D1.
+
+### SR-9
+
+Documentation only.
+
+`elem_match_nested` already exists at the audited baseline and must not be
+reimplemented.
+
+Do not generate `From<Embedded> for Bson` pre-1.0: it would conflict with
+consumer implementations of the documented workaround and creates an
+infallible-conversion design problem.
+
+### SR-10
+
+Documentation only: publish the five measured production rules identified by
+D0.
+
+### SR-11
+
+Documentation correction plus recurrence protection.
+
+Fix the broken examples and convert them to compiled doctests where practical
+without making the examples materially harder to read.
+
+### SR-12
+
+Approve:
+
+1. an explicit skip-list for ordinary/inert standard Rust attributes;
+2. naming the offending attribute in remaining unsupported-attribute errors.
+
+Do not switch to ignoring every unknown struct attribute.
+
+A targeted `_id` diagnostic is desirable, but it may be implemented in D1 only
+if the macro can do so without falsely rejecting valid 0.3.0 type aliases,
+qualified paths, or other already-accepted equivalent spellings. If that
+cannot be guaranteed from syntax alone, STOP that sub-part and report it for a
+later design decision rather than narrowing accepted source.
+
+### SR-13
+
+No loud-versus-silent behavior correction is authorized. D0 established that
+poisoned page windows already fail loudly through the same `.all()` terminal.
+
+Document the actual whole-window failure behavior and raw-document repair
+route.
+
+Adding the offending document `_id` to deserialization error context is
+favored, but it belongs with the later SR-2 error-surface phase rather than D1.
+
 
 ## Post-1.0 scope fence
 
