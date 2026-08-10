@@ -192,8 +192,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                                         .create_indexes(indexes)
                                         .await
                                         .map_err(|error| {
-                                            ::oximod::OxiModError::index(
+                                            ::oximod::_error::classify_driver_error(
                                                 #index_error_message,
+                                                ::oximod::_error::OperationDomain::Index,
                                                 error,
                                             )
                                         })?;
@@ -221,8 +222,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     /// # Errors
                     ///
                     /// Returns an error when the global client has not been
-                    /// initialized, or an index error when MongoDB rejects
-                    /// index creation.
+                    /// initialized, an index error when MongoDB rejects
+                    /// index creation, or a connection error when the
+                    /// deployment cannot be reached.
                     pub async fn init_indexes() -> Result<(), ::oximod::OxiModError> {
                         let collection = <
                             Self as ::oximod::_feature::model::Model
@@ -243,7 +245,8 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     /// # Errors
                     ///
                     /// Returns an index error when MongoDB rejects index
-                    /// creation.
+                    /// creation, or a connection error when the deployment
+                    /// cannot be reached.
                     pub async fn init_indexes_from(
                         client: &::oximod::_mongodb::Client,
                     ) -> Result<(), ::oximod::OxiModError> {
@@ -278,8 +281,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                             .insert_one(self)
                             .await
                             .map_err(|error| {
-                                ::oximod::OxiModError::connection(
+                                ::oximod::_error::classify_driver_error(
                                     "Failed to insert document into MongoDB collection",
+                                    ::oximod::_error::OperationDomain::General,
                                     error,
                                 )
                             })?;

@@ -1049,7 +1049,7 @@ User::init_indexes().await?;              // global client
 User::init_indexes_from(&client).await?;  // explicit client
 ```
 
-Explicit initialization reuses the save path's index machinery and shares its once-per-process establishment state: repeated successful calls are harmless, an index-establishment failure returns the same `OxiModError::Index` surface and can be retried by a later call or save, and applications that never call these methods keep the existing lazy save-triggered behavior. This is establishment, not drift synchronization: an index dropped or changed externally after a successful initialization is not automatically re-established during the same process.
+Explicit initialization reuses the save path's index machinery and shares its once-per-process establishment state: repeated successful calls are harmless, an index-establishment failure returns the same error surface as save-triggered establishment (`OxiModError::Index` for server-side rejections, `Connection` for connectivity failures) and can be retried by a later call or save, and applications that never call these methods keep the existing lazy save-triggered behavior. This is establishment, not drift synchronization: an index dropped or changed externally after a successful initialization is not automatically re-established during the same process.
 
 Use direct collection access for compound indexes and advanced options not represented by `#[index(...)]`.
 
@@ -1215,19 +1215,59 @@ Serde field and container renames are used when generating typed query paths.
 
 ## Error handling
 
-Most OxiMod operations return `OxiModError`. Its variants distinguish failures involving:
+Most OxiMod operations return `OxiModError`. Its variants identify failure classes: MongoDB driver errors produced while executing OxiMod database operations are classified by failure class rather than by the method that was executing.
 
-* MongoDB client construction;
-* missing or duplicate global-client initialization;
-* serialization and deserialization;
-* aggregation;
-* index initialization;
-* model validation;
-* database operations;
-* user-defined custom errors;
-* typed-query configuration.
+Operation-time driver failures classify with a fixed precedence:
 
-Driver-backed variants retain their source errors.
+1. `Connection` — MongoDB client/connectivity infrastructure failure: connection establishment, authentication, DNS resolution, TLS configuration, server selection, transport I/O, and connection-pool failure, during any operation (including index establishment).
+2. `Serialization` — BSON encoding or decoding failure, in either direction, through every read and write path.
+3. `Index` / `Aggregation` — remaining failures of the corresponding operation domain, such as MongoDB rejecting a conflicting index specification.
+4. `Database` — every remaining MongoDB/driver operation failure, including duplicate-key rejections. This is the conservative non-connectivity fallback.
+
+`Connection` classifies the failure only: it does not mean the operation never reached MongoDB, and it does not make retrying safe. Retry safety depends on the specific operation, its idempotency, and application policy. `Database` likewise does not guarantee that the server definitely received or rejected the operation.
+
+MongoDB client construction and setup remain a connection concern reported directly as `Connection`, outside the operation-time classifier. `GlobalClientInit`, `GlobalClientMissing`, `Validation`, `Custom`, and `Query` keep their lifecycle, validation, user-defined, and typed-query meanings and are not selected by the operation-time driver classifier.
+
+Driver-backed variants retain the original `mongodb::error::Error` as their `source()`; downcast it for server detail. `Display` text carries human-readable operation context and is not a classification API — do not branch on error message strings.
+
+### Detecting duplicate keys
+
+A duplicate-key rejection classifies as `Database` through `save()` and the update paths alike, with server code 11000 recoverable from the preserved driver error. Duplicate-key failures may surface through the driver as a write error for plain writes or as a command error for findAndModify-based operations such as `query().update_one()`:
+
+```rust
+use std::error::Error as _;
+
+use mongodb::error::{ErrorKind, WriteFailure};
+use oximod::OxiModError;
+
+fn is_duplicate_key(error: &OxiModError) -> bool {
+    matches!(error, OxiModError::Database { .. })
+        && error
+            .source()
+            .and_then(|source| source.downcast_ref::<mongodb::error::Error>())
+            .is_some_and(|driver| match &*driver.kind {
+                ErrorKind::Write(WriteFailure::WriteError(write_error)) => {
+                    write_error.code == 11000
+                }
+                ErrorKind::Command(command_error) => command_error.code == 11000,
+                _ => false,
+            })
+}
+```
+
+### Migrating variant matchers from 0.3.0
+
+OxiMod 0.3.0 selected error variants by call site. Code that matches `OxiModError` variants — exhaustively or otherwise — may observe different arms after the failure-class contract:
+
+| Failure | Path | 0.3.0 variant | Current variant |
+|---|---|---|---|
+| Duplicate key | `save` / `save_mut` / `save_from` / `save_from_mut` | `Connection` | `Database` |
+| Client-side BSON encoding | `save*` | `Connection` | `Serialization` |
+| Unreachable server | non-save operations and typed queries | `Database` | `Connection` |
+| Unreachable server | index establishment | `Index` | `Connection` |
+| Undeserializable document | `find_by_id`, `query().first()` | `Database` | `Serialization` |
+
+Unchanged mappings: an unreachable server through `save*` remains `Connection`; a duplicate key through the update paths remains `Database`; an undeserializable document through `query().all()` remains `Serialization`; index-spec rejections remain `Index`; and the `GlobalClient*`, `Validation`, `Custom`, and `Query` variants are unaffected. `Display` prefixes changed wherever the variant changed; duplicate-key detection keyed on `Connection` around `save()` must switch to the `Database` + `source()` route above, and outage handling keyed on `Database` should match `Connection` instead.
 
 ### Validation errors
 

@@ -20,6 +20,7 @@ use mongodb::{
 
 use crate::{
     error::{
+        classify::{OperationDomain, classify_driver_error},
         oximod_error::OxiModError,
         query_error::{BulkWriteOperation, QueryError, QueryModifier},
     },
@@ -570,8 +571,13 @@ where
             find = find.sort(sort.into_document());
         }
 
-        find.await
-            .map_err(|error| OxiModError::database("Failed to execute typed query", error))
+        find.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to execute typed query",
+                OperationDomain::General,
+                error,
+            )
+        })
     }
 
     /// Counts documents matching this query's filter.
@@ -600,10 +606,13 @@ where
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
-        collection
-            .count_documents(filter)
-            .await
-            .map_err(|error| OxiModError::database("Failed to count typed query results", error))
+        collection.count_documents(filter).await.map_err(|error| {
+            classify_driver_error(
+                "Failed to count typed query results",
+                OperationDomain::General,
+                error,
+            )
+        })
     }
 
     /// Returns all documents matching this query.
@@ -669,19 +678,29 @@ where
             find = find.limit(limit);
         }
 
-        let mut cursor = find
-            .await
-            .map_err(|error| OxiModError::database("Failed to execute typed query", error))?;
+        let mut cursor = find.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to execute typed query",
+                OperationDomain::General,
+                error,
+            )
+        })?;
 
         let mut models = Vec::new();
 
-        while cursor
-            .advance()
-            .await
-            .map_err(|error| OxiModError::database("Failed to advance typed query cursor", error))?
-        {
+        while cursor.advance().await.map_err(|error| {
+            classify_driver_error(
+                "Failed to advance typed query cursor",
+                OperationDomain::General,
+                error,
+            )
+        })? {
             let model = cursor.deserialize_current().map_err(|error| {
-                OxiModError::serialization("Failed to deserialize typed query result", error)
+                classify_driver_error(
+                    "Failed to deserialize typed query result",
+                    OperationDomain::General,
+                    error,
+                )
             })?;
 
             models.push(model);
@@ -738,8 +757,9 @@ where
         }
 
         operation.await.map_err(|error| {
-            OxiModError::database(
+            classify_driver_error(
                 "Failed to delete the first document matching the typed query",
+                OperationDomain::General,
                 error,
             )
         })
@@ -804,7 +824,11 @@ where
         let collection = M::get_collection()?;
 
         collection.delete_many(filter).await.map_err(|error| {
-            OxiModError::database("Failed to delete documents matching the typed query", error)
+            classify_driver_error(
+                "Failed to delete documents matching the typed query",
+                OperationDomain::General,
+                error,
+            )
         })
     }
 
@@ -879,8 +903,9 @@ where
         }
 
         operation.await.map_err(|error| {
-            OxiModError::database(
+            classify_driver_error(
                 "Failed to update the first document matching the typed query",
+                OperationDomain::General,
                 error,
             )
         })
@@ -961,7 +986,11 @@ where
         }
 
         operation.await.map_err(|error| {
-            OxiModError::database("Failed to update documents matching the typed query", error)
+            classify_driver_error(
+                "Failed to update documents matching the typed query",
+                OperationDomain::General,
+                error,
+            )
         })
     }
 }

@@ -320,8 +320,10 @@
 //! save path's index machinery and share its once-per-process establishment
 //! state: a successful explicit initialization is remembered exactly like a
 //! save-triggered one, repeated successful calls are harmless, and a failed
-//! index-establishment attempt returns the same index error surface and may
-//! be retried by a later call or save. Applications that never call these
+//! index-establishment attempt returns the same error surface as
+//! save-triggered establishment (an index error for server-side rejections,
+//! a connection error for connectivity failures) and may be retried by a
+//! later call or save. Applications that never call these
 //! methods keep the existing lazy save-triggered behavior unchanged.
 //!
 //! Explicit initialization is establishment, not drift synchronization: it
@@ -777,11 +779,39 @@
 //!
 //! ## Errors
 //!
-//! [`OxiModError`] distinguishes connection, global-client, serialization,
-//! aggregation, index, validation, database, custom, and typed-query failures.
-//! Driver-backed variants retain their source errors. Validation and query
-//! details can be inspected through [`OxiModError::validation_errors`] and
-//! [`OxiModError::query_error`].
+//! [`OxiModError`] classifies failures by failure class: MongoDB driver
+//! errors produced while executing OxiMod database operations are classified
+//! by failure class rather than by the method that was executing, with a
+//! fixed precedence: connectivity and client-infrastructure failures are
+//! `Connection`; BSON encoding and decoding failures are `Serialization`, in
+//! both directions; remaining index-domain and aggregation-domain failures
+//! are `Index` and `Aggregation`; and every other driver failure — including
+//! duplicate-key rejections — is `Database`, the conservative
+//! non-connectivity fallback. MongoDB client construction and setup remain a
+//! connection concern reported directly as `Connection`, outside the
+//! operation-time classifier. The `GlobalClientInit`, `GlobalClientMissing`,
+//! `Validation`, `Custom`, and `Query` variants keep their lifecycle,
+//! validation, user-defined, and typed-query meanings and are not selected
+//! by the operation-time driver classifier.
+//!
+//! `Connection` classifies the failure only: it does not guarantee that the
+//! operation never reached MongoDB, and it does not make retrying safe —
+//! retry safety depends on the specific operation, its idempotency, and
+//! application policy. `Database` likewise does not guarantee that the
+//! server definitely received or rejected the operation.
+//!
+//! Driver-backed variants retain the original `mongodb::error::Error` as
+//! their [`source`](std::error::Error::source); downcast it to recover
+//! server detail such as duplicate-key code 11000. `Display` text carries
+//! human-readable operation context and is not a classification API.
+//! Validation and query details can be inspected through
+//! [`OxiModError::validation_errors`] and [`OxiModError::query_error`].
+//!
+//! Variant matchers written against OxiMod 0.3.0 may observe different arms:
+//! 0.3.0 selected variants by call site. In particular, a duplicate key
+//! through `save()` is now `Database` rather than `Connection`, an
+//! unreachable server is `Connection` through every operation, and an
+//! undeserializable document is `Serialization` through every read path.
 //!
 //! For complete runnable examples, see the
 //! [`examples/`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples)
@@ -791,10 +821,13 @@
 
 /// Primary error returned by OxiMod operations.
 ///
-/// The variants distinguish connection setup, missing or duplicate global
-/// clients, serialization, aggregation, index initialization, validation,
-/// database operations, user-defined failures, and invalid typed-query
-/// configuration.
+/// The variants identify failure classes — connectivity, global-client
+/// lifecycle, BSON encoding/decoding, aggregation-domain, index-domain,
+/// validation, general database operation, user-defined, and typed-query
+/// configuration failures. MongoDB driver errors produced while executing
+/// database operations are classified by failure class rather than by the
+/// method that was executing; client construction and setup failures are
+/// reported directly as connection failures.
 ///
 /// Errors backed by another library retain that error as their source. Use
 /// [`OxiModError::validation_errors`] or [`OxiModError::query_error`] to inspect
@@ -1280,6 +1313,20 @@ pub use oximod_core::query::NearQuery;
 
 #[doc(hidden)]
 pub use async_trait as _async_trait;
+
+#[doc(hidden)]
+pub mod _error {
+    //! Hidden macro-support namespace for generated error handling.
+    //!
+    //! Generated code routes operation-time MongoDB driver errors through
+    //! the centralized classifier here. This namespace is not supported
+    //! public API; classify failures through the public [`OxiModError`]
+    //! variants and `source()` instead.
+    //!
+    //! [`OxiModError`]: crate::OxiModError
+
+    pub use oximod_core::error::classify::{OperationDomain, classify_driver_error};
+}
 
 #[doc(hidden)]
 pub use futures_util as _futures_util;

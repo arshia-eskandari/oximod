@@ -110,8 +110,9 @@ pub fn generate_collection_model_token(
                     )
                     .await
                     .map_err(|error| {
-                        ::oximod::OxiModError::database(
+                        ::oximod::_error::classify_driver_error(
                             "Failed to find document by _id",
+                            ::oximod::_error::OperationDomain::General,
                             error,
                         )
                     })?;
@@ -141,8 +142,9 @@ pub fn generate_collection_model_token(
                     )
                     .await
                     .map_err(|error| {
-                        ::oximod::OxiModError::database(
+                        ::oximod::_error::classify_driver_error(
                             "Failed to delete document by _id",
+                            ::oximod::_error::OperationDomain::General,
                             error,
                         )
                     })?;
@@ -174,8 +176,9 @@ pub fn generate_collection_model_token(
                     )
                     .await
                     .map_err(|error| {
-                        ::oximod::OxiModError::database(
+                        ::oximod::_error::classify_driver_error(
                             "Failed to update document by _id",
+                            ::oximod::_error::OperationDomain::General,
                             error,
                         )
                     })?;
@@ -200,8 +203,9 @@ pub fn generate_collection_model_token(
                     )
                     .await
                     .map_err(|error| {
-                        ::oximod::OxiModError::database(
+                        ::oximod::_error::classify_driver_error(
                             "Failed to execute MongoDB delete_many operation",
+                            ::oximod::_error::OperationDomain::General,
                             error,
                         )
                     })?;

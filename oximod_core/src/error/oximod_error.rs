@@ -69,18 +69,65 @@ impl std::fmt::Display for ValidationErrors {
 
 /// Represents errors returned by OxiMod operations.
 ///
-/// Driver and runtime failures preserve their underlying source errors, while
-/// validation and query-configuration failures remain directly inspectable
-/// through their dedicated variants and accessor methods.
+/// # Failure-class contract
+///
+/// Variants identify the **class of failure**: MongoDB driver errors
+/// produced while executing OxiMod database operations are classified by
+/// failure class rather than by the method that was executing, with a
+/// deterministic precedence:
+///
+/// 1. [`Connection`](OxiModError::Connection) — connectivity /
+///    client-infrastructure failure, during any operation;
+/// 2. [`Serialization`](OxiModError::Serialization) — BSON encoding or
+///    decoding failure, in either direction;
+/// 3. [`Index`](OxiModError::Index) / [`Aggregation`](OxiModError::Aggregation)
+///    — remaining failures of the failing operation's domain;
+/// 4. [`Database`](OxiModError::Database) — the conservative fallback for
+///    every remaining driver failure.
+///
+/// MongoDB client construction and setup remain a connection concern
+/// reported directly as [`Connection`](OxiModError::Connection), outside the
+/// operation-time classification above. The `GlobalClientInit`,
+/// `GlobalClientMissing`, `Validation`, `Custom`, and `Query` variants are
+/// not selected by the operation-time driver classifier.
+///
+/// Driver and runtime failures preserve their underlying source errors,
+/// while validation and query-configuration failures remain directly
+/// inspectable through their dedicated variants and accessor methods. The
+/// original [`mongodb::error::Error`] remains available through
+/// [`std::error::Error::source`] and can be downcast to recover server
+/// detail such as duplicate-key code 11000:
+///
+/// ```rust,ignore
+/// use std::error::Error as _;
+///
+/// let driver_error = error
+///     .source()
+///     .and_then(|source| source.downcast_ref::<mongodb::error::Error>());
+/// ```
+///
+/// `Display` output carries human-readable operation context only; it is
+/// not a machine-classification API. Classify by matching the variant and,
+/// when driver detail is needed, by inspecting `source()`.
+///
+/// Variant matchers written for OxiMod 0.3.0 may observe different arms:
+/// 0.3.0 selected variants by call site, and several mappings changed when
+/// the failure-class contract was adopted.
 #[derive(Debug, Error)]
 pub enum OxiModError {
-    /// Failed to connect to the MongoDB server.
+    /// MongoDB client/connectivity infrastructure failure.
     ///
-    /// Common causes:
-    /// - invalid connection URI
-    /// - network connectivity issues
-    /// - authentication failure
-    /// - server unavailable
+    /// Covers direct client construction and setup failures — such as an
+    /// invalid connection URI or TLS configuration while creating an
+    /// `OxiClient` — as well as operation-time connectivity failures:
+    /// connection establishment, authentication, DNS resolution, TLS
+    /// configuration, server selection, transport I/O, and connection-pool
+    /// failure, during any operation, including index establishment.
+    ///
+    /// This variant classifies the failure; it does not guarantee that the
+    /// logical operation was never sent to or never reached MongoDB, and it
+    /// does not make the operation safe to retry. Retry safety depends on
+    /// the specific operation, its idempotency, and application policy.
     #[error("Failed to connect to db: {msg}")]
     Connection {
         /// Human-readable context describing *what* was being attempted.
@@ -110,12 +157,14 @@ pub enum OxiModError {
         msg: String,
     },
 
-    /// Error serializing or deserializing between MongoDB documents and Rust structs.
+    /// Rust/BSON encoding or decoding failure, independent of call site.
     ///
-    /// Common causes:
-    /// - mismatched BSON types
-    /// - schema drift
-    /// - invalid data for the expected Rust type
+    /// Covers both directions: encoding a model for a write (for example a
+    /// value BSON cannot represent) and decoding a stored document into the
+    /// model type (mismatched BSON types, schema drift, invalid data for the
+    /// expected Rust type). The same undeserializable document classifies
+    /// identically through every read path, including `find_by_id`,
+    /// `query().first()`, and `query().all()`.
     #[error("Serialization error: {msg}")]
     Serialization {
         /// Human-readable context describing the serialization step that failed.
@@ -125,12 +174,13 @@ pub enum OxiModError {
         source: BoxError,
     },
 
-    /// An error occurred while executing an aggregation pipeline.
+    /// Non-connectivity, non-serialization aggregation-domain failure.
     ///
-    /// Common causes:
-    /// - malformed pipeline stages
-    /// - collection access issues
-    /// - server-side execution errors
+    /// Applies only after the [`Connection`](OxiModError::Connection) and
+    /// [`Serialization`](OxiModError::Serialization) precedence: a
+    /// connectivity failure during an aggregation classifies as
+    /// `Connection`, while a server-side pipeline rejection or execution
+    /// failure classifies here.
     #[error("Aggregation error: {msg}")]
     Aggregation {
         /// Human-readable context describing the aggregation step that failed.
@@ -140,13 +190,14 @@ pub enum OxiModError {
         source: BoxError,
     },
 
-    /// An error occurred during index creation, deletion, or retrieval.
+    /// Non-connectivity, non-serialization index-domain failure.
     ///
-    /// Common causes:
-    /// - invalid index specifications
-    /// - duplicate definitions
-    /// - insufficient permissions
-    /// - server-side errors
+    /// Covers server-side rejection of an index operation, such as invalid
+    /// or conflicting index specifications and insufficient permissions.
+    /// Applies only after the [`Connection`](OxiModError::Connection) and
+    /// [`Serialization`](OxiModError::Serialization) precedence: a
+    /// connectivity failure during index establishment classifies as
+    /// `Connection`.
     #[error("Index error: {msg}")]
     Index {
         /// Human-readable context describing the index operation that failed.
@@ -169,14 +220,17 @@ pub enum OxiModError {
     #[error("Validation errors: {0}")]
     Validation(ValidationErrors),
 
-    /// Error returned when a database operation fails.
+    /// General MongoDB/driver operation failure that is not classified as
+    /// `Connection`, `Serialization`, `Index`, or `Aggregation`.
     ///
-    /// This variant is used when an operation involving MongoDB fails,
-    /// such as insert, update, delete, find, aggregation, or other
-    /// driver-level calls.
+    /// Covers server-side operation failures such as write rejections —
+    /// including duplicate key, whose server code 11000 remains recoverable
+    /// through [`std::error::Error::source`] — command failures, and
+    /// write-concern failures.
     ///
-    /// The underlying error produced by the MongoDB driver or runtime
-    /// is stored as the source.
+    /// This variant is also the conservative fallback for driver failures
+    /// OxiMod does not specifically recognize; it does not guarantee that
+    /// the server definitely received or rejected the operation.
     #[error("Database operation failed: {msg}")]
     Database {
         /// A human-readable description of the database error.
@@ -219,6 +273,10 @@ pub enum OxiModError {
 
 impl OxiModError {
     /// Creates a connection error with a message and underlying source error.
+    ///
+    /// This helper sets the variant unconditionally; it performs no
+    /// classification. OxiMod's own operations classify driver failures by
+    /// failure class before choosing a variant.
     pub fn connection(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Connection {
             msg: msg.into(),
@@ -237,6 +295,9 @@ impl OxiModError {
     }
 
     /// Creates a serialization error with a message and underlying source error.
+    ///
+    /// This helper sets the variant unconditionally; it performs no
+    /// classification.
     pub fn serialization(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Serialization {
             msg: msg.into(),
@@ -245,6 +306,9 @@ impl OxiModError {
     }
 
     /// Creates an aggregation error with a message and underlying source error.
+    ///
+    /// This helper sets the variant unconditionally; it performs no
+    /// classification.
     pub fn aggregation(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Aggregation {
             msg: msg.into(),
@@ -253,6 +317,9 @@ impl OxiModError {
     }
 
     /// Creates an index error with a message and underlying source error.
+    ///
+    /// This helper sets the variant unconditionally; it performs no
+    /// classification.
     pub fn index(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Index {
             msg: msg.into(),
@@ -271,6 +338,10 @@ impl OxiModError {
     }
 
     /// Creates a database error with a message and underlying source error.
+    ///
+    /// This helper sets the variant unconditionally; it performs no
+    /// classification. OxiMod's own operations classify driver failures by
+    /// failure class before choosing a variant.
     pub fn database(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
         Self::Database {
             msg: msg.into(),
