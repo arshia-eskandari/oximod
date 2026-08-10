@@ -2,7 +2,7 @@
 
 ## Status
 
-D3 COMPLETE — SR-8 CLOSED — NEXT PHASE PENDING
+D4 COMPLETE — SR-3 CLOSED — FINAL SR-2 PHASE PENDING
 
 ## Baseline
 
@@ -132,7 +132,7 @@ audit evidence
 |---|---|---|---|---|---|---|
 | SR-1 | Give the embedded `#[validate]` gap a signal, or document it with its remedy | W2-F05; W2-F06; W2-V06; W2-V07; W2-A4-E02 | CODE_OR_DOC | CLOSED | DOCUMENT_PRE_1_0 | W2-A4-E02 / W2-V07 validation matrix; hook-remedy coverage if relevant |
 | SR-2 | Correct the error-variant documentation or the variant meanings | W1-F11; W1-V07 | DOC_OR_CODE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W1-V07 error-classification cases |
-| SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | READY_FOR_REVERIFY | FIX_AND_DOCUMENT_PRE_1_0 | W3-V01 index-establishment cluster |
+| SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | CLOSED | FIX_AND_DOCUMENT_PRE_1_0 | W3-V01 index-establishment cluster |
 | SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; no new capability implied |
 | SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
 | SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | CLOSED | FIX_PRE_1_0 | W2-V03 and W2-V04 malformed-document probes |
@@ -406,3 +406,41 @@ Archive SHA-256:
 `0dd3e3410ece77ab4053307381a2b01c9918dc0ba42727d03ca97779743447a0`
 
 SR-8 is CLOSED.
+
+## D4 closure note — 2026-08-10
+
+D4 implementation commit:
+
+`e588274b8424fb63fb28b4c7fcbb01ef654cadc2`
+
+READY_FOR_REVERIFY state-recording commit:
+
+`956640ff959082bdb0f106f3a8a335db7aa911cf`
+
+Source-hidden external re-verification:
+
+`SR-3 = READY_TO_CLOSE`
+
+The external verification occurred before the READY_FOR_REVERIFY
+bookkeeping transition was committed. Maintainer provenance verification
+confirmed no change to README, manifests, or OxiMod source/test trees
+between the implementation commit and the later state-recording commit
+(`SOURCE_DIFF_EXIT=0`).
+
+External report:
+
+`REMEDIATION_D4_REVERIFY.md`
+
+External report SHA-256:
+
+`6a96665122ae71e46460bd8dd60d8d7f034583ecc3692db608592853c5182fbf`
+
+Archived evidence:
+
+`~/Code/oximod-d4-reverify-2026-08-10.tar.gz`
+
+Archive SHA-256:
+
+`9a82aacfe15e6d0eec37c752f2149260291918d89010224f5e1e195c9574f3f0`
+
+SR-3 is CLOSED.
