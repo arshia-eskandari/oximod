@@ -2,7 +2,7 @@
 
 ## Status
 
-D2 COMPLETE — SR-1, SR-4, SR-5, SR-9, SR-10, SR-11, AND SR-13 CLOSED — NEXT PHASE PENDING
+D3 COMPLETE — SR-8 CLOSED — NEXT PHASE PENDING
 
 ## Baseline
 
@@ -137,7 +137,7 @@ audit evidence
 | SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
 | SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | CLOSED | FIX_PRE_1_0 | W2-V03 and W2-V04 malformed-document probes |
 | SR-7 | Give conflicting text-index / duplicate-index-name declarations an earlier signal | W2-F07; W2-V08; W2-A4-E01; W2-A3-B02 | CODE_OR_DIAGNOSTIC | CLOSED | FIX_PRE_1_0 | W2-A4-E01 / W2-V08 declaration matrix |
-| SR-8 | Expose ordered/numeric operators on `Option<T>`, or document the supported boundary/workaround | W2-F01; W2-V01; W2-A7-B02; W2-A3-B01 | CODE_OR_DOC | READY_FOR_REVERIFY | FIX_PRE_1_0 | W2-V01 operator compile matrix |
+| SR-8 | Expose ordered/numeric operators on `Option<T>`, or document the supported boundary/workaround | W2-F01; W2-V01; W2-A7-B02; W2-A3-B01 | CODE_OR_DOC | CLOSED | FIX_PRE_1_0 | W2-V01 operator compile matrix |
 | SR-9 | Make `elem_match` on `Vec<Embedded>` reachable and document the array-operator remedy | W2-F03; W2-V02; W2-A4-B03 | CODE_AND_OR_DOC | CLOSED | DOCUMENT_PRE_1_0 | W2-V02 array/operator matrix |
 | SR-10 | Publish the measured production rules | W3-F03; W3-F02; W1-F12; W3-A9-B02; W3-A9-B03; W3-OPS-02; W3-OPS-E01 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation/example verification |
 | SR-11 | Fix the three published code blocks that reference undeclared fields | W1-F14; W1-B-01 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Compile/check affected documentation examples |
@@ -370,3 +370,39 @@ doctests, and diff-check were rerun successfully. Final doctest counts were:
 - `oximod_macros`: 1 passed, 0 failed, 3 ignored
 
 The ignored `oximod_core` / `oximod_macros` doctests are pre-existing.
+
+## D3 closure note — 2026-08-09
+
+D3 implementation commit:
+
+`9ef97c4335b802c74ad592ca539f5fb6a9e4aefc`
+
+READY_FOR_REVERIFY ledger commit:
+
+`498233f`
+
+Source-hidden external re-verification:
+
+`SR-8 = READY_TO_CLOSE`
+
+Maintainer provenance check confirmed no change to README, manifests,
+or OxiMod source/test trees between the implementation commit and the
+READY_FOR_REVERIFY commit (`SOURCE_DIFF_EXIT=0`).
+
+External report:
+
+`REMEDIATION_D3_REVERIFY.md`
+
+External report SHA-256:
+
+`7b27cda84857003e12115ae8b5d0ab9ee5555b7514e7c1584da796cd16ec5704`
+
+Archived evidence:
+
+`~/Code/oximod-d3-reverify-2026-08-09.tar.gz`
+
+Archive SHA-256:
+
+`0dd3e3410ece77ab4053307381a2b01c9918dc0ba42727d03ca97779743447a0`
+
+SR-8 is CLOSED.
