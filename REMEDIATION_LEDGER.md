@@ -2,7 +2,7 @@
 
 ## Status
 
-D4 COMPLETE — SR-3 CLOSED — FINAL SR-2 PHASE PENDING
+D6 IMPLEMENTATION COMPLETE — SR-2 READY_FOR_REVERIFY
 
 ## Baseline
 
@@ -131,7 +131,7 @@ audit evidence
 | ID | Audit recommendation | Audit basis | Initial resolution lane | Diagnosis | Decision | External re-verification target |
 |---|---|---|---|---|---|---|
 | SR-1 | Give the embedded `#[validate]` gap a signal, or document it with its remedy | W2-F05; W2-F06; W2-V06; W2-V07; W2-A4-E02 | CODE_OR_DOC | CLOSED | DOCUMENT_PRE_1_0 | W2-A4-E02 / W2-V07 validation matrix; hook-remedy coverage if relevant |
-| SR-2 | Correct the error-variant documentation or the variant meanings | W1-F11; W1-V07 | DOC_OR_CODE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W1-V07 error-classification cases |
+| SR-2 | Correct the error-variant documentation or the variant meanings | W1-F11; W1-V07 | DOC_OR_CODE | READY_FOR_REVERIFY | FIX_AND_DOCUMENT_PRE_1_0 | W1-V07 error-classification cases |
 | SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | CLOSED | FIX_AND_DOCUMENT_PRE_1_0 | W3-V01 index-establishment cluster |
 | SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; no new capability implied |
 | SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
