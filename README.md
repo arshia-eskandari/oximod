@@ -504,6 +504,8 @@ Depending on the field type, generated fields support families such as:
 * embedded-model paths;
 * GeoJSON geospatial predicates.
 
+Ordered comparisons, numeric updates, and modulo are also available on `Option<T>` fields whose inner type supports them. The operand is always a value of the inner type `T` — for example `expires_at.gt(deadline)` on an `Option<DateTime>` field, or `login_count.inc(1)` on an `Option<i32>` field; `Some(...)` and `None` operands do not compile. Documents storing BSON null and documents missing the field follow MongoDB's normal query semantics: an ordered comparison against an inner value does not match them.
+
 The Rust field name does not have to match the stored MongoDB field name. Generated paths follow supported Serde renames:
 
 ```rust
@@ -771,6 +773,8 @@ Supported families include:
 * field rename and current-date updates;
 * array push, set-like addition, pull, and pop operations;
 * positional and array-filtered updates for embedded arrays.
+
+Numeric updates on `Option<T>` fields take inner-type operands, exactly as on required fields.
 
 ### Single-document update
 

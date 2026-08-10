@@ -480,6 +480,14 @@
 //! predicates, arrays, embedded models, text search, and GeoJSON geospatial
 //! predicates.
 //!
+//! Ordered comparisons, numeric updates, and modulo are also available on
+//! `Option<T>` fields whose inner type supports them. The operand is always a
+//! value of the inner type `T` — for example `nickname.lt("m")` on an
+//! `Option<String>` field, or `inc(1)` on an `Option<i32>` field; `Some(...)`
+//! and `None` operands do not compile. Documents storing BSON null and
+//! documents missing the field follow MongoDB's normal query semantics: an
+//! ordered comparison against an inner value does not match them.
+//!
 //! ### Arrays and embedded values
 //!
 //! ```rust,no_run

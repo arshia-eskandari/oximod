@@ -286,6 +286,122 @@ async fn typed_query_increments_numeric_field() -> TestResult {
 }
 
 // Run test:
+// cargo nextest run typed_query_increments_optional_numeric_field
+#[tokio::test]
+async fn typed_query_increments_optional_numeric_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_increments_optional_numeric_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        login_count: Option<i32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        balance: Option<f64>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .login_count(5)
+        .balance(10.5)
+        .save()
+        .await?;
+
+    // The operands are the inner i32 and f64 values, not Option values.
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.login_count.inc(2) & user.balance.inc(1.5))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.name, "User1");
+    assert_eq!(updated_user.login_count, Some(7));
+    assert_eq!(updated_user.balance, Some(12.0));
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_applies_numeric_updates_to_optional_fields
+#[tokio::test]
+async fn typed_query_applies_numeric_updates_to_optional_fields() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_applies_numeric_updates_to_optional_fields")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        score: Option<i32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        balance: Option<f64>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .score(10)
+        .balance(12.5)
+        .save()
+        .await?;
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.score.mul(3) & user.balance.mul(2.0))
+        .await?
+        .expect("one user should be updated");
+
+    assert_eq!(updated_user.score, Some(30));
+    assert_eq!(updated_user.balance, Some(25.0));
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.score.min(8) & user.balance.min(30.0))
+        .await?
+        .expect("one user should be updated");
+
+    // 8 is lower than the stored score, so it replaces 30.
+    assert_eq!(updated_user.score, Some(8));
+
+    // 30.0 is higher than the stored balance, so 25.0 remains.
+    assert_eq!(updated_user.balance, Some(25.0));
+
+    let updated_user = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .update_one(|user| user.score.max(15) & user.balance.max(20.0))
+        .await?
+        .expect("one user should be updated");
+
+    // 15 is higher than the stored score, so it replaces 8.
+    assert_eq!(updated_user.score, Some(15));
+
+    // 20.0 is lower than the stored balance, so 25.0 remains.
+    assert_eq!(updated_user.balance, Some(25.0));
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
 // cargo nextest run typed_query_updates_all_matching_documents
 #[tokio::test]
 async fn typed_query_updates_all_matching_documents() -> TestResult {

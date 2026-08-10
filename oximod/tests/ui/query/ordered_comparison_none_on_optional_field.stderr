@@ -1,0 +1,63 @@
+error[E0277]: the trait bound `i32: From<std::option::Option<_>>` is not satisfied
+  --> tests/ui/query/ordered_comparison_none_on_optional_field.rs:21:58
+   |
+21 |     let _query = User::query().filter(|user| user.age.gt(None));
+   |                                                       -- ^^^^ the trait `From<std::option::Option<_>>` is not implemented for `i32`
+   |                                                       |
+   |                                                       required by a bound introduced by this call
+   |
+   = help: `i32` implements trait `From<T>`:
+             From<bool>
+             From<deranged::RangedI32<MIN, MAX>>
+             From<errno::Errno>
+             From<i16>
+             From<i8>
+             From<socket2::Domain>
+             From<socket2::Protocol>
+             From<socket2::Type>
+             From<tokio::signal::unix::SignalKind>
+             From<u16>
+             From<u8>
+             From<zerocopy::byteorder::I16<O>>
+             From<zerocopy::byteorder::I32<O>>
+   = note: required for `std::option::Option<_>` to implement `Into<i32>`
+note: required by a bound in `oximod_core::query::field::scalar::<impl oximod::_query::Field<std::option::Option<T>>>::gt`
+  --> $WORKSPACE/oximod_core/src/query/field/scalar.rs
+   |
+   |     pub fn gt<V>(&self, value: V) -> Expression
+   |            -- required by a bound in this associated function
+   |     where
+   |         V: Into<T>,
+   |            ^^^^^^^ required by this bound in `oximod_core::query::field::scalar::<impl Field<Option<T>>>::gt`
+
+error[E0277]: the trait bound `i32: From<std::option::Option<{integer}>>` is not satisfied
+  --> tests/ui/query/ordered_comparison_none_on_optional_field.rs:22:58
+   |
+22 |     let _query = User::query().filter(|user| user.age.gt(Some(18)));
+   |                                                       -- ^^^^^^^^ the trait `From<std::option::Option<{integer}>>` is not implemented for `i32`
+   |                                                       |
+   |                                                       required by a bound introduced by this call
+   |
+   = help: `i32` implements trait `From<T>`:
+             From<bool>
+             From<deranged::RangedI32<MIN, MAX>>
+             From<errno::Errno>
+             From<i16>
+             From<i8>
+             From<socket2::Domain>
+             From<socket2::Protocol>
+             From<socket2::Type>
+             From<tokio::signal::unix::SignalKind>
+             From<u16>
+             From<u8>
+             From<zerocopy::byteorder::I16<O>>
+             From<zerocopy::byteorder::I32<O>>
+   = note: required for `std::option::Option<{integer}>` to implement `Into<i32>`
+note: required by a bound in `oximod_core::query::field::scalar::<impl oximod::_query::Field<std::option::Option<T>>>::gt`
+  --> $WORKSPACE/oximod_core/src/query/field/scalar.rs
+   |
+   |     pub fn gt<V>(&self, value: V) -> Expression
+   |            -- required by a bound in this associated function
+   |     where
+   |         V: Into<T>,
+   |            ^^^^^^^ required by this bound in `oximod_core::query::field::scalar::<impl Field<Option<T>>>::gt`
