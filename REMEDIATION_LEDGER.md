@@ -2,7 +2,7 @@
 
 ## Status
 
-D1 COMPLETE — SR-6, SR-7, AND SR-12 CLOSED — NEXT PHASE PENDING
+D2 COMPLETE — SR-1, SR-4, SR-5, SR-9, SR-10, SR-11, AND SR-13 CLOSED — NEXT PHASE PENDING
 
 ## Baseline
 
@@ -130,19 +130,19 @@ audit evidence
 
 | ID | Audit recommendation | Audit basis | Initial resolution lane | Diagnosis | Decision | External re-verification target |
 |---|---|---|---|---|---|---|
-| SR-1 | Give the embedded `#[validate]` gap a signal, or document it with its remedy | W2-F05; W2-F06; W2-V06; W2-V07; W2-A4-E02 | CODE_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W2-A4-E02 / W2-V07 validation matrix; hook-remedy coverage if relevant |
+| SR-1 | Give the embedded `#[validate]` gap a signal, or document it with its remedy | W2-F05; W2-F06; W2-V06; W2-V07; W2-A4-E02 | CODE_OR_DOC | CLOSED | DOCUMENT_PRE_1_0 | W2-A4-E02 / W2-V07 validation matrix; hook-remedy coverage if relevant |
 | SR-2 | Correct the error-variant documentation or the variant meanings | W1-F11; W1-V07 | DOC_OR_CODE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W1-V07 error-classification cases |
 | SR-3 | State the index-establishment trigger and provide a write-independent establish/verify path | W3-F01; W3-V01; W3-A6-E01; W3-A8-B02; W3-A9-X02 | CODE_AND_DOC_CANDIDATE | MAINTAINER_DECIDED | FIX_AND_DOCUMENT_PRE_1_0 | W3-V01 index-establishment cluster |
-| SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation verification; no new capability implied |
-| SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
+| SR-4 | Warn that a derived composite key is not a safe substitute for compound uniqueness | W1-F16; W1-B-07; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; no new capability implied |
+| SR-5 | Make the partial/filtered-uniqueness raw-driver boundary explicit | W1-F16 family; W2-A3-B02; W2-A4-X03; W2-A5-X02 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation verification; raw hatch remains boundary unless separately approved |
 | SR-6 | Close the `exists()` / `count()` inconsistency, or document it | W2-F02; W2-V03; W2-V04 | CODE_OR_DOC | CLOSED | FIX_PRE_1_0 | W2-V03 and W2-V04 malformed-document probes |
 | SR-7 | Give conflicting text-index / duplicate-index-name declarations an earlier signal | W2-F07; W2-V08; W2-A4-E01; W2-A3-B02 | CODE_OR_DIAGNOSTIC | CLOSED | FIX_PRE_1_0 | W2-A4-E01 / W2-V08 declaration matrix |
 | SR-8 | Expose ordered/numeric operators on `Option<T>`, or document the supported boundary/workaround | W2-F01; W2-V01; W2-A7-B02; W2-A3-B01 | CODE_OR_DOC | MAINTAINER_DECIDED | FIX_PRE_1_0 | W2-V01 operator compile matrix |
-| SR-9 | Make `elem_match` on `Vec<Embedded>` reachable and document the array-operator remedy | W2-F03; W2-V02; W2-A4-B03 | CODE_AND_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W2-V02 array/operator matrix |
-| SR-10 | Publish the measured production rules | W3-F03; W3-F02; W1-F12; W3-A9-B02; W3-A9-B03; W3-OPS-02; W3-OPS-E01 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Documentation/example verification |
-| SR-11 | Fix the three published code blocks that reference undeclared fields | W1-F14; W1-B-01 | DOC_CANDIDATE | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | Compile/check affected documentation examples |
+| SR-9 | Make `elem_match` on `Vec<Embedded>` reachable and document the array-operator remedy | W2-F03; W2-V02; W2-A4-B03 | CODE_AND_OR_DOC | CLOSED | DOCUMENT_PRE_1_0 | W2-V02 array/operator matrix |
+| SR-10 | Publish the measured production rules | W3-F03; W3-F02; W1-F12; W3-A9-B02; W3-A9-B03; W3-OPS-02; W3-OPS-E01 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Documentation/example verification |
+| SR-11 | Fix the three published code blocks that reference undeclared fields | W1-F14; W1-B-01 | DOC_CANDIDATE | CLOSED | DOCUMENT_PRE_1_0 | Compile/check affected documentation examples |
 | SR-12 | Improve derive attribute diagnostics | W1-F10; W0-F02; W0-F03; F-V02; W1-M-X01 | CODE_OR_DIAGNOSTIC | CLOSED | FIX_PRE_1_0 | F-V02 compile matrix plus relevant `oximod/tests/ui` coverage |
-| SR-13 | Make `.page()` fail as loudly as `.all()` over undeserializable documents, or document the difference | W3-A9-B05 capability evidence; no filed finding ID by design | CODE_OR_DOC | MAINTAINER_DECIDED | DOCUMENT_PRE_1_0 | W3-A9-B05 poison-document pagination case |
+| SR-13 | Make `.page()` fail as loudly as `.all()` over undeserializable documents, or document the difference | W3-A9-B05 capability evidence; no filed finding ID by design | CODE_OR_DOC | CLOSED | DOCUMENT_PRE_1_0 | W3-A9-B05 poison-document pagination case |
 
 
 ## Maintainer disposition notes — 2026-08-09
@@ -333,3 +333,40 @@ diagnose all SR-1 through SR-13
 → verify
 → externally re-test
 
+
+## D2 closure note — 2026-08-09
+
+D2 documentation implementation commit:
+
+`c4d04ed974a1de14c00eaec9ad468e7a70abbea1`
+
+Closed items:
+
+- SR-1
+- SR-4
+- SR-5
+- SR-9
+- SR-10
+- SR-11
+- SR-13
+
+Maintainer review confirmed that D2 remained documentation-only and introduced
+no runtime/API behavior change.
+
+Verification included:
+
+- `cargo fmt --all -- --check`
+- `cargo test --doc --workspace`
+- `cargo test -p oximod_core -p oximod_macros`
+- `cargo test -p oximod --test compile_fail`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `git diff --check`
+
+After the maintainer-requested wording corrections, formatting, workspace
+doctests, and diff-check were rerun successfully. Final doctest counts were:
+
+- `oximod`: 27 passed, 0 failed, 0 ignored
+- `oximod_core`: 3 passed, 0 failed, 73 ignored
+- `oximod_macros`: 1 passed, 0 failed, 3 ignored
+
+The ignored `oximod_core` / `oximod_macros` doctests are pre-existing.
