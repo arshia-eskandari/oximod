@@ -151,7 +151,7 @@ They receive:
 * fluent field setters;
 * an inherent `validate()` method;
 * field defaults and validation;
-* lazy index initialization;
+* lazy index initialization, with explicit `init_indexes()` startup initialization;
 * optional lifecycle hooks;
 * the `Model` persistence API;
 * the `Queryable` typed-query API.
@@ -1040,7 +1040,16 @@ Declare a single-field MongoDB index directly on a collection-model field:
 email: String,
 ```
 
-Generated indexes are initialized lazily before model insertion. A successful initialization is remembered for that model type within the process. Merely constructing a query or obtaining a collection does not create indexes.
+Declared indexes are not created by deriving the model. Generated indexes are initialized lazily before model insertion. A successful initialization is remembered for that model type within the process. Merely constructing a query or obtaining a collection does not create indexes.
+
+Applications that need declared indexes before their first write — for example so a unique constraint is enforced from process start — can establish them explicitly during startup:
+
+```rust
+User::init_indexes().await?;              // global client
+User::init_indexes_from(&client).await?;  // explicit client
+```
+
+Explicit initialization reuses the save path's index machinery and shares its once-per-process establishment state: repeated successful calls are harmless, an index-establishment failure returns the same `OxiModError::Index` surface and can be retried by a later call or save, and applications that never call these methods keep the existing lazy save-triggered behavior. This is establishment, not drift synchronization: an index dropped or changed externally after a successful initialization is not automatically re-established during the same process.
 
 Use direct collection access for compound indexes and advanced options not represented by `#[index(...)]`.
 
@@ -1318,7 +1327,7 @@ MongoDB-backed examples read `MONGODB_URI` from the environment or a `.env` file
 * Typed-query execution currently requires the global client.
 * Typed and raw update operations do not automatically run model validation.
 * Validation does not descend into embedded models; enforce embedded rules with a custom validator on the containing field or with pre-save hooks (covering both `pre_save` and `pre_save_mut`).
-* Generated indexes are single-field and are initialized lazily during saves.
+* Generated indexes are single-field and are initialized lazily during saves, or explicitly at startup with `init_indexes()` / `init_indexes_from(&client)`; initialization is once per process and does not re-establish indexes dropped externally afterward.
 * Compound and partial/filtered indexes require the MongoDB driver API; a derived composite-key field with `#[index(unique)]` is not a safe substitute for a compound unique index.
 * OxiMod methods do not accept MongoDB sessions; writes issued through OxiMod while a transaction is open commit outside that transaction.
 * Typed reads fail as a whole when any document in the selected result window cannot be deserialized; use the raw document collection to inspect or repair such documents.

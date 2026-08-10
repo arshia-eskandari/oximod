@@ -308,9 +308,26 @@
 //! options include scalar ordering, uniqueness, sparseness, TTL, text, hashed,
 //! wildcard, hidden, collation, and `2d` or `2dsphere` geospatial settings.
 //!
-//! Generated index initialization is attempted before a model is inserted. A
-//! successful initialization is remembered for that model type; after a failed
-//! attempt, a later save can try again.
+//! Deriving a model does not by itself create any server-side index.
+//! Generated index initialization is attempted lazily before a model is
+//! inserted. A successful initialization is remembered for that model type;
+//! after a failed attempt, a later save can try again.
+//!
+//! Applications that need declared indexes before their first write can
+//! establish them explicitly during startup with the generated
+//! `ModelType::init_indexes()` method (global client) or
+//! `ModelType::init_indexes_from(&client)` (explicit client). Both reuse the
+//! save path's index machinery and share its once-per-process establishment
+//! state: a successful explicit initialization is remembered exactly like a
+//! save-triggered one, repeated successful calls are harmless, and a failed
+//! index-establishment attempt returns the same index error surface and may
+//! be retried by a later call or save. Applications that never call these
+//! methods keep the existing lazy save-triggered behavior unchanged.
+//!
+//! Explicit initialization is establishment, not drift synchronization: it
+//! does not verify server indexes on later calls, and an index dropped or
+//! changed externally after a successful initialization is not automatically
+//! re-established during the same process.
 //!
 //! Index creation is not triggered merely by constructing a query or obtaining
 //! a collection. Use the MongoDB collection returned by [`Model::get_collection`]
@@ -1014,7 +1031,12 @@ pub use oximod_core::feature::model::Model;
 ///   Rules apply to the model's own fields only: validation does not descend
 ///   into embedded models. See the crate-level Validation section for the
 ///   custom-validator and hook remedies;
-/// - `#[index(...)]` adds a single-field MongoDB index to a collection model.
+/// - `#[index(...)]` declares a single-field MongoDB index on a collection
+///   model. Declared indexes are not created by deriving the model: they are
+///   established lazily before document insertion during save, or explicitly
+///   at startup through the generated `init_indexes()` /
+///   `init_indexes_from(&client)` methods. See the crate-level Indexes
+///   section for the complete lifecycle.
 ///
 /// Serde field and container renames are reflected in generated typed paths.
 ///
