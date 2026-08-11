@@ -1,4 +1,4 @@
-//! Integration tests for the failure-class error contract (SR-2).
+//! Integration tests for the failure-class error contract.
 //!
 //! MongoDB driver errors produced while executing OxiMod database operations
 //! are classified by failure class rather than by the method that was

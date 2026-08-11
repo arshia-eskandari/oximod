@@ -1,5 +1,5 @@
 //! Failure-class contract: global-client operations against an unreachable
-//! deployment (SR-2).
+//! deployment.
 //!
 //! This binary initializes the process-wide global client against an
 //! unreachable deployment, a state that is incompatible with every test that

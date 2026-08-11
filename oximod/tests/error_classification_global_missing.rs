@@ -1,5 +1,4 @@
 //! Failure-class contract: operations without an initialized global client
-//! (SR-2).
 //!
 //! This binary requires the process-wide global client to remain completely
 //! uninitialized, a state that is incompatible with every test that
