@@ -3,6 +3,15 @@
 //! This module provides MongoDB array operations for [`Field<Vec<T>>`],
 //! including membership checks, `$all`, `$size`, scalar `$elemMatch`, and
 //! array update operators such as `$push`, `$addToSet`, `$pull`, and `$pop`.
+//!
+//! Operators that insert or remove values (`push`, `add_to_set`, `pull`, and
+//! their `$each` variants) require the element type to implement
+//! `Into<Bson>`. Scalar elements qualify automatically; derived embedded
+//! models do not implement `Into<Bson>` automatically. Consumers can enable
+//! these operators on a `Vec<Embedded>` field by implementing the conversion
+//! once for the embedded type, for example `impl From<MyEmbedded> for Bson`
+//! delegating to `bson::to_bson`. Typed *matching* on embedded arrays needs
+//! no conversion — see `Field::elem_match_nested` in the embedded module.
 
 use mongodb::bson::Bson;
 
@@ -108,7 +117,8 @@ impl<T> Field<Vec<T>> {
     /// Matches arrays containing an element that satisfies every condition
     /// built by the closure.
     ///
-    /// This overload is intended for scalar array elements.
+    /// This overload is intended for scalar array elements. For arrays of
+    /// embedded models, use [`Field::elem_match_nested`] instead.
     ///
     /// ```ignore
     /// let users = User::query()

@@ -10,6 +10,52 @@ use crate::{helpers::ModelKind, parsers::parse_attr_value_ts};
 use proc_macro2::{Span, TokenStream};
 use syn::{Attribute, spanned::Spanned};
 
+/// Ordinary standard Rust attributes that are inert for the derive.
+///
+/// These attributes are validated by the compiler itself and carry no OxiMod
+/// meaning, so the derive skips them instead of rejecting them. This is an
+/// explicit allow-list: attributes outside it (and outside the derive's
+/// registered helpers) remain rejected.
+const INERT_STANDARD_ATTRIBUTES: &[&str] = &[
+    "doc",
+    "allow",
+    "warn",
+    "deny",
+    "expect",
+    "cfg",
+    "cfg_attr",
+    "non_exhaustive",
+    "derive",
+    "repr",
+    "automatically_derived",
+];
+
+/// Returns whether `attr` is an inert standard Rust attribute the derive
+/// accepts without interpreting.
+fn is_inert_standard_attribute(attr: &Attribute) -> bool {
+    INERT_STANDARD_ATTRIBUTES
+        .iter()
+        .any(|name| attr.path().is_ident(name))
+}
+
+/// Generates the rejection for an attribute the derive does not support,
+/// naming the offending attribute in the diagnostic.
+fn unsupported_attr_ts(attr: &Attribute) -> TokenStream {
+    let attribute_name = attr
+        .path()
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::");
+
+    syn::Error::new_spanned(
+        attr,
+        format!("Unsupported attribute `#[{attribute_name}]` for #[derive(Model)]"),
+    )
+    .to_compile_error()
+}
+
 /// Generates a compile error token stream for a missing required attribute,
 /// using the first attribute's span if available or the call site otherwise.
 fn missing_attr_ts(attrs: &[Attribute], msg: &str) -> TokenStream {
@@ -53,6 +99,11 @@ pub struct ModelAttrs {
 /// Models marked with `#[model(embedded)]` do not require collection
 /// configuration and reject attributes that are only meaningful for
 /// collection-backed models.
+///
+/// Ordinary standard Rust attributes, such as `///` documentation, lint
+/// controls, and `#[non_exhaustive]`, are accepted and skipped for both model
+/// kinds. Any other unregistered attribute is rejected with a diagnostic
+/// naming the offending attribute.
 pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStream> {
     let kind = ModelKind::from_attrs(attrs)?;
 
@@ -74,6 +125,13 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
         if path.is_ident("serde") {
             // Serde container attributes, such as `rename_all`, are handled
             // separately by the generated serialization and query code.
+            continue;
+        }
+
+        if is_inert_standard_attribute(attr) {
+            // Ordinary standard attributes, such as `///` documentation,
+            // lint controls, and `#[non_exhaustive]`, are validated by the
+            // compiler and carry no derive meaning.
             continue;
         }
 
@@ -102,11 +160,7 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
                 .to_compile_error());
             }
 
-            return Err(syn::Error::new_spanned(
-                attr,
-                "Unsupported attribute for #[derive(Model)]",
-            )
-            .to_compile_error());
+            return Err(unsupported_attr_ts(attr));
         }
 
         if path.is_ident("collection") {
@@ -135,11 +189,7 @@ pub fn collect_model_attrs(attrs: &[Attribute]) -> Result<ModelAttrs, TokenStrea
         } else if path.is_ident("hooks") {
             hooks = true;
         } else {
-            return Err(syn::Error::new_spanned(
-                attr,
-                "Unsupported attribute for #[derive(Model)]",
-            )
-            .to_compile_error());
+            return Err(unsupported_attr_ts(attr));
         }
     }
 
@@ -332,9 +382,112 @@ mod tests {
         );
 
         assert!(
-            error.contains("Unsupported attribute for #[derive(Model)]"),
+            error.contains("Unsupported attribute `#[unknown]` for #[derive(Model)]"),
             "unexpected error tokens: {error}"
         );
+    }
+
+    #[test]
+    fn unsupported_embedded_attributes_are_rejected_by_name() {
+        let attrs = vec![
+            parse_quote! {
+                #[model(embedded)]
+            },
+            parse_quote! {
+                #[unknown]
+            },
+        ];
+
+        let error = error_text(
+            collect_model_attrs(&attrs),
+            "unsupported embedded attribute should fail",
+        );
+
+        assert!(
+            error.contains("Unsupported attribute `#[unknown]` for #[derive(Model)]"),
+            "unexpected error tokens: {error}"
+        );
+    }
+
+    #[test]
+    fn inert_standard_attributes_are_accepted_on_collection_models() {
+        let attrs = vec![
+            parse_quote! {
+                #[doc = " A documented model."]
+            },
+            parse_quote! {
+                #[allow(dead_code)]
+            },
+            parse_quote! {
+                #[non_exhaustive]
+            },
+            parse_quote! {
+                #[warn(missing_docs)]
+            },
+            parse_quote! {
+                #[deny(unsafe_code)]
+            },
+            parse_quote! {
+                #[expect(unused)]
+            },
+            parse_quote! {
+                #[cfg(test)]
+            },
+            parse_quote! {
+                #[cfg_attr(test, allow(dead_code))]
+            },
+            parse_quote! {
+                #[derive(Clone)]
+            },
+            parse_quote! {
+                #[repr(C)]
+            },
+            parse_quote! {
+                #[automatically_derived]
+            },
+            parse_quote! {
+                #[db("app_db")]
+            },
+            parse_quote! {
+                #[collection("users")]
+            },
+        ];
+
+        let model_attrs =
+            collect_model_attrs(&attrs).expect("inert standard attributes should be skipped");
+
+        assert_eq!(model_attrs.kind, ModelKind::Collection);
+
+        let collection = model_attrs
+            .collection
+            .expect("collection model should have configuration");
+
+        assert_eq!(collection.db, "app_db");
+        assert_eq!(collection.collection, "users");
+    }
+
+    #[test]
+    fn inert_standard_attributes_are_accepted_on_embedded_models() {
+        let attrs = vec![
+            parse_quote! {
+                #[model(embedded)]
+            },
+            parse_quote! {
+                #[doc = " A documented embedded model."]
+            },
+            parse_quote! {
+                #[allow(dead_code)]
+            },
+            parse_quote! {
+                #[non_exhaustive]
+            },
+        ];
+
+        let model_attrs =
+            collect_model_attrs(&attrs).expect("inert standard attributes should be skipped");
+
+        assert_eq!(model_attrs.kind, ModelKind::Embedded);
+        assert!(model_attrs.collection.is_none());
     }
 
     fn error_text(result: Result<ModelAttrs, TokenStream>, failure_message: &str) -> String {

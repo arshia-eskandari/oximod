@@ -20,6 +20,7 @@ use mongodb::{
 
 use crate::{
     error::{
+        classify::{OperationDomain, classify_driver_error},
         oximod_error::OxiModError,
         query_error::{BulkWriteOperation, QueryError, QueryModifier},
     },
@@ -382,6 +383,14 @@ where
     /// [`Query::count`]. It is not supported by [`Query::update_all`] or
     /// [`Query::delete_all`]. Single-document operations select by filter and
     /// sorting rather than by page.
+    ///
+    /// A page is executed as one result window by [`Query::all`] and shares
+    /// its deserialization behavior: if any document inside the selected
+    /// window cannot be deserialized into the model, the call returns an
+    /// error rather than silently dropping that document, and none of the
+    /// window's documents are returned. Later pages whose windows contain
+    /// only valid documents still succeed. See [`Query::all`] for the raw
+    /// inspection and repair route.
     pub fn page(mut self, page: u64, page_size: u64) -> Self {
         self.pagination = true;
 
@@ -562,8 +571,13 @@ where
             find = find.sort(sort.into_document());
         }
 
-        find.await
-            .map_err(|error| OxiModError::database("Failed to execute typed query", error))
+        find.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to execute typed query",
+                OperationDomain::General,
+                error,
+            )
+        })
     }
 
     /// Counts documents matching this query's filter.
@@ -592,10 +606,13 @@ where
         let filter = self.into_filter_document();
         let collection = M::get_collection()?;
 
-        collection
-            .count_documents(filter)
-            .await
-            .map_err(|error| OxiModError::database("Failed to count typed query results", error))
+        collection.count_documents(filter).await.map_err(|error| {
+            classify_driver_error(
+                "Failed to count typed query results",
+                OperationDomain::General,
+                error,
+            )
+        })
     }
 
     /// Returns all documents matching this query.
@@ -626,6 +643,15 @@ where
     /// - collection resolution or query execution fails
     /// - cursor advancement fails
     /// - a document cannot be deserialized into `M`
+    ///
+    /// Deserialization failures are never skipped: if any document in the
+    /// selected result window cannot be deserialized into `M`, `all()`
+    /// returns `Err` and yields none of the window's documents, including
+    /// valid ones. The error does not identify the offending document. To
+    /// locate, inspect, or repair such documents, read them as raw BSON
+    /// through
+    /// [`Model::get_document_collection`](crate::feature::model::Model::get_document_collection)
+    /// and convert individually with `bson::from_document`.
     pub async fn all(mut self) -> Result<Vec<M>, OxiModError> {
         self.take_error()?;
 
@@ -652,19 +678,29 @@ where
             find = find.limit(limit);
         }
 
-        let mut cursor = find
-            .await
-            .map_err(|error| OxiModError::database("Failed to execute typed query", error))?;
+        let mut cursor = find.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to execute typed query",
+                OperationDomain::General,
+                error,
+            )
+        })?;
 
         let mut models = Vec::new();
 
-        while cursor
-            .advance()
-            .await
-            .map_err(|error| OxiModError::database("Failed to advance typed query cursor", error))?
-        {
+        while cursor.advance().await.map_err(|error| {
+            classify_driver_error(
+                "Failed to advance typed query cursor",
+                OperationDomain::General,
+                error,
+            )
+        })? {
             let model = cursor.deserialize_current().map_err(|error| {
-                OxiModError::serialization("Failed to deserialize typed query result", error)
+                classify_driver_error(
+                    "Failed to deserialize typed query result",
+                    OperationDomain::General,
+                    error,
+                )
             })?;
 
             models.push(model);
@@ -721,8 +757,9 @@ where
         }
 
         operation.await.map_err(|error| {
-            OxiModError::database(
+            classify_driver_error(
                 "Failed to delete the first document matching the typed query",
+                OperationDomain::General,
                 error,
             )
         })
@@ -787,7 +824,11 @@ where
         let collection = M::get_collection()?;
 
         collection.delete_many(filter).await.map_err(|error| {
-            OxiModError::database("Failed to delete documents matching the typed query", error)
+            classify_driver_error(
+                "Failed to delete documents matching the typed query",
+                OperationDomain::General,
+                error,
+            )
         })
     }
 
@@ -862,8 +903,9 @@ where
         }
 
         operation.await.map_err(|error| {
-            OxiModError::database(
+            classify_driver_error(
                 "Failed to update the first document matching the typed query",
+                OperationDomain::General,
                 error,
             )
         })
@@ -944,7 +986,11 @@ where
         }
 
         operation.await.map_err(|error| {
-            OxiModError::database("Failed to update documents matching the typed query", error)
+            classify_driver_error(
+                "Failed to update documents matching the typed query",
+                OperationDomain::General,
+                error,
+            )
         })
     }
 }

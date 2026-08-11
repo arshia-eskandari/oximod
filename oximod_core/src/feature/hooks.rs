@@ -33,6 +33,12 @@ use mongodb::bson::{Document, oid::ObjectId};
 ///   and
 ///   [`Model::get_document_collection`](crate::feature::model::Model::get_document_collection).
 ///
+/// Each save form runs only its own hooks: `save` and `save_from` run
+/// [`Hooks::pre_save`]/[`Hooks::post_save`], while `save_mut` and
+/// `save_from_mut` run [`Hooks::pre_save_mut`]/[`Hooks::post_save_mut`]. A
+/// safeguard implemented in only one pre-save hook does not guard the other
+/// save form; implement both when the application uses both.
+///
 /// # Error handling
 ///
 /// Every hook returns `Result<(), OxiModError>`.

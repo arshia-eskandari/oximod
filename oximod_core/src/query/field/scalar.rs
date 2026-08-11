@@ -186,6 +186,65 @@ where
     }
 }
 
+impl<T> Field<Option<T>>
+where
+    T: OrderedQueryValue + Into<Bson>,
+{
+    /// Matches documents where this optional field is greater than `value`.
+    ///
+    /// The operand is a value of the inner type `T`, exactly as on a required
+    /// field; `Option` operands such as `None` do not compile. Documents
+    /// storing BSON null and documents missing the field follow MongoDB's
+    /// normal ordered-comparison semantics: they are not matched by an
+    /// ordered comparison against an inner value.
+    pub fn gt<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        self.comparison(ComparisonOperator::Gt, value)
+    }
+
+    /// Matches documents where this optional field is greater than or equal
+    /// to `value`.
+    ///
+    /// The operand is a value of the inner type `T`.
+    pub fn gte<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        self.comparison(ComparisonOperator::Gte, value)
+    }
+
+    /// Matches documents where this optional field is less than `value`.
+    ///
+    /// The operand is a value of the inner type `T`.
+    pub fn lt<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        self.comparison(ComparisonOperator::Lt, value)
+    }
+
+    /// Matches documents where this optional field is less than or equal to
+    /// `value`.
+    ///
+    /// The operand is a value of the inner type `T`.
+    pub fn lte<V>(&self, value: V) -> Expression
+    where
+        V: Into<T>,
+    {
+        let value: T = value.into();
+
+        self.comparison(ComparisonOperator::Lte, value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::query::{
@@ -317,6 +376,76 @@ mod tests {
                         "admin",
                         "moderator",
                     ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_field_builds_ordered_comparison_expressions() {
+        let age = Field::<Option<i64>>::new("age");
+
+        assert_eq!(
+            age.gt(18_i64).into_document(),
+            doc! {
+                "age": {
+                    "$gt": 18_i64,
+                },
+            }
+        );
+
+        assert_eq!(
+            age.gte(18_i64).into_document(),
+            doc! {
+                "age": {
+                    "$gte": 18_i64,
+                },
+            }
+        );
+
+        assert_eq!(
+            age.lt(65_i64).into_document(),
+            doc! {
+                "age": {
+                    "$lt": 65_i64,
+                },
+            }
+        );
+
+        assert_eq!(
+            age.lte(65_i64).into_document(),
+            doc! {
+                "age": {
+                    "$lte": 65_i64,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_date_field_builds_ordered_comparison_expression() {
+        let expires_at = Field::<Option<mongodb::bson::DateTime>>::new("expires_at");
+        let deadline = mongodb::bson::DateTime::from_millis(2_500);
+
+        assert_eq!(
+            expires_at.gte(deadline).into_document(),
+            doc! {
+                "expires_at": {
+                    "$gte": deadline,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn optional_string_field_accepts_a_string_slice_in_ordered_comparison() {
+        let nickname = Field::<Option<String>>::new("nickname");
+
+        assert_eq!(
+            nickname.lt("m").into_document(),
+            doc! {
+                "nickname": {
+                    "$lt": "m",
                 },
             }
         );

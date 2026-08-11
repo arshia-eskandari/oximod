@@ -6,7 +6,7 @@
 mod common;
 
 use common::init;
-use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{DateTime, oid::ObjectId};
 use oximod::{BsonType, Model, Queryable, RegexOption};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
@@ -685,6 +685,172 @@ async fn typed_query_matches_all_clear_bits() -> TestResult {
 
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "User3");
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_ordered_comparison_on_optional_numeric_field
+#[tokio::test]
+async fn typed_query_ordered_comparison_on_optional_numeric_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_ordered_comparison_on_optional_numeric_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        // No skip_serializing_if: None is stored as explicit BSON null.
+        expires_at_ms: Option<i64>,
+    }
+
+    User::clear().await?;
+
+    User::default()
+        .name("User1")
+        .expires_at_ms(1_000_i64)
+        .save()
+        .await?;
+
+    User::default()
+        .name("User2")
+        .expires_at_ms(3_000_i64)
+        .save()
+        .await?;
+
+    User::default().name("User3").save().await?;
+
+    // The operand is the inner i64 value, not Option<i64>. The stored null
+    // follows MongoDB's normal ordered-comparison semantics and never matches.
+    let users: Vec<User> = User::query()
+        .filter(|user| user.expires_at_ms.gt(2_000_i64))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User2");
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.expires_at_ms.lte(1_000_i64))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.expires_at_ms.gte(1_000_i64) & user.expires_at_ms.lt(4_000_i64))
+        .sort_by(|user| user.name.asc())
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].name, "User1");
+    assert_eq!(users[1].name, "User2");
+
+    User::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_ordered_comparison_on_optional_datetime_field
+#[tokio::test]
+async fn typed_query_ordered_comparison_on_optional_datetime_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_ordered_comparison_on_optional_datetime_field")]
+    pub struct Session {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expires_at: Option<DateTime>,
+    }
+
+    Session::clear().await?;
+
+    Session::default()
+        .name("Session1")
+        .expires_at(DateTime::from_millis(1_000))
+        .save()
+        .await?;
+
+    Session::default()
+        .name("Session2")
+        .expires_at(DateTime::from_millis(3_000))
+        .save()
+        .await?;
+
+    Session::default().name("Session3").save().await?;
+
+    // The operand is the inner DateTime value. The missing field follows
+    // MongoDB's normal ordered-comparison semantics and never matches.
+    let sessions: Vec<Session> = Session::query()
+        .filter(|session| session.expires_at.gte(DateTime::from_millis(2_500)))
+        .all()
+        .await?;
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].name, "Session2");
+
+    let sessions: Vec<Session> = Session::query()
+        .filter(|session| session.expires_at.lt(DateTime::from_millis(2_500)))
+        .all()
+        .await?;
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].name, "Session1");
+
+    Session::clear().await?;
+
+    Ok(())
+}
+
+// Run test:
+// cargo nextest run typed_query_matches_numeric_modulo_on_optional_field
+#[tokio::test]
+async fn typed_query_matches_numeric_modulo_on_optional_field() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("test")]
+    #[collection("typed_query_matches_numeric_modulo_on_optional_field")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        login_count: Option<i32>,
+    }
+
+    User::clear().await?;
+
+    User::default().name("User1").login_count(4).save().await?;
+
+    User::default().name("User2").login_count(5).save().await?;
+
+    User::default().name("User3").save().await?;
+
+    let users: Vec<User> = User::query()
+        .filter(|user| user.login_count.modulo(2, 0))
+        .all()
+        .await?;
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "User1");
 
     User::clear().await?;
 

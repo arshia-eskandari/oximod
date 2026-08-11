@@ -5,6 +5,7 @@
 //! [`ModelCore`] trait and mode markers to share validation behavior with
 //! models declared using `#[model(embedded)]`.
 
+use crate::error::classify::{OperationDomain, classify_driver_error};
 use crate::error::oximod_error::OxiModError;
 use crate::feature::conn::client::OxiClient;
 use async_trait::async_trait;
@@ -349,6 +350,12 @@ pub trait Model:
     /// let result = collection.update_one(doc! { "_id": id }, update).await?;
     /// ```
     ///
+    /// When documents written by older model versions may still be present,
+    /// prefer `$set` on specific dotted field paths over rewriting whole
+    /// embedded values or documents: a whole-value replacement writes only
+    /// the current model shape and can drop fields the running code no
+    /// longer declares.
+    ///
     /// # Parameters
     ///
     /// - `id`: The `_id` of the document to update.
@@ -370,9 +377,11 @@ pub trait Model:
 
     /// Checks whether any document matching `filter` exists using an explicit client.
     ///
-    /// This method is implemented using `find_one(filter).await?.is_some()`,
-    /// which is typically more efficient for existence checks than counting
-    /// all matching documents.
+    /// This method is a document-level existence probe: it runs `find_one`
+    /// against the raw document collection and never deserializes the matched
+    /// document into `Self`. A matching document that cannot deserialize as
+    /// this model therefore still returns `Ok(true)`, in agreement with
+    /// [`Model::count_from`] over the same filter.
     ///
     /// # Parameters
     ///
@@ -387,11 +396,14 @@ pub trait Model:
     ///
     /// Returns [`OxiModError`] if collection resolution or the query fails.
     async fn exists_from(filter: Document, client: &Client) -> Result<bool, OxiModError> {
-        let collection = Self::get_collection_from(client)?;
-        let found = collection
-            .find_one(filter)
-            .await
-            .map_err(|error| OxiModError::database("Failed to check document existence", error))?;
+        let collection = Self::get_document_collection_from(client)?;
+        let found = collection.find_one(filter).await.map_err(|error| {
+            classify_driver_error(
+                "Failed to check document existence",
+                OperationDomain::General,
+                error,
+            )
+        })?;
         Ok(found.is_some())
     }
 
@@ -413,10 +425,13 @@ pub trait Model:
     /// Returns [`OxiModError`] if collection resolution or the count operation fails.
     async fn count_from(filter: Document, client: &Client) -> Result<u64, OxiModError> {
         let collection = Self::get_collection_from(client)?;
-        collection
-            .count_documents(filter)
-            .await
-            .map_err(|error| OxiModError::database("Failed to count matching documents", error))
+        collection.count_documents(filter).await.map_err(|error| {
+            classify_driver_error(
+                "Failed to count matching documents",
+                OperationDomain::General,
+                error,
+            )
+        })
     }
 
     /// Returns the typed MongoDB collection for this model using the global [`OxiClient`].

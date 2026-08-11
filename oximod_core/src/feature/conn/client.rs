@@ -94,7 +94,13 @@ impl OxiClient {
     /// Initializes the global MongoDB client.
     ///
     /// This method should normally be called once during application startup.
-    /// Subsequent attempts to initialize the global client return an error.
+    /// Subsequent attempts to initialize the global client return an error;
+    /// a repeated call does not replace the existing client.
+    ///
+    /// Handle the returned `Result` rather than discarding it. Global-client
+    /// operations require initialization to have completed successfully;
+    /// until it has, they fail with
+    /// [`OxiModError::GlobalClientMissing`](crate::error::oximod_error::OxiModError::GlobalClientMissing).
     ///
     /// # Parameters
     ///

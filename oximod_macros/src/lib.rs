@@ -153,6 +153,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
             let index_once_async_ident =
                 Ident::new(&format!("_INDEX_INIT_{name}"), Span::call_site());
 
+            let index_error_message =
+                format!("Failed to create indexes for collection `{collection}`");
+
             let query_tokens = generate_query_tokens(input)?;
 
             let collection_model_token =
@@ -189,8 +192,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                                         .create_indexes(indexes)
                                         .await
                                         .map_err(|error| {
-                                            ::oximod::OxiModError::index(
-                                                "Failed to create indexes for collection",
+                                            ::oximod::_error::classify_driver_error(
+                                                #index_error_message,
+                                                ::oximod::_error::OperationDomain::Index,
                                                 error,
                                             )
                                         })?;
@@ -199,6 +203,58 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                                 Ok(())
                             })
                             .await
+                    }
+
+                    /// Establishes this model's declared `#[index(...)]`
+                    /// specifications using the global client, without
+                    /// saving any document.
+                    ///
+                    /// This reuses the same index-establishment machinery
+                    /// and once-per-process state as save-triggered
+                    /// initialization: a successful call is remembered for
+                    /// this model type, repeated successful calls are
+                    /// harmless no-ops, and a failed attempt may be retried
+                    /// by a later call or save. This is establishment, not
+                    /// drift synchronization: indexes dropped or changed
+                    /// externally after a successful initialization are not
+                    /// re-established during the same process.
+                    ///
+                    /// # Errors
+                    ///
+                    /// Returns an error when the global client has not been
+                    /// initialized, an index error when MongoDB rejects
+                    /// index creation, or a connection error when the
+                    /// deployment cannot be reached.
+                    pub async fn init_indexes() -> Result<(), ::oximod::OxiModError> {
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection()?;
+
+                        Self::_create_indexes(&collection).await
+                    }
+
+                    /// Establishes this model's declared `#[index(...)]`
+                    /// specifications using the supplied client, without
+                    /// saving any document.
+                    ///
+                    /// This is the explicit-client counterpart to
+                    /// `init_indexes()` and does not require the global
+                    /// client to be initialized. It shares the same
+                    /// once-per-process establishment state and semantics.
+                    ///
+                    /// # Errors
+                    ///
+                    /// Returns an index error when MongoDB rejects index
+                    /// creation, or a connection error when the deployment
+                    /// cannot be reached.
+                    pub async fn init_indexes_from(
+                        client: &::oximod::_mongodb::Client,
+                    ) -> Result<(), ::oximod::OxiModError> {
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection_from(client)?;
+
+                        Self::_create_indexes(&collection).await
                     }
 
                     #[doc(hidden)]
@@ -225,8 +281,9 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                             .insert_one(self)
                             .await
                             .map_err(|error| {
-                                ::oximod::OxiModError::connection(
+                                ::oximod::_error::classify_driver_error(
                                     "Failed to insert document into MongoDB collection",
+                                    ::oximod::_error::OperationDomain::General,
                                     error,
                                 )
                             })?;
@@ -328,6 +385,76 @@ mod tests {
                  {generated}"
             );
         }
+    }
+
+    #[test]
+    fn init_indexes_methods_are_generated_for_collection_models_only() {
+        let collection_input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique)]
+                name: String,
+            }
+        };
+
+        let generated =
+            compact(expand_model(&collection_input).expect("collection model should expand"));
+
+        for expected in [
+            "pubasyncfninit_indexes()",
+            "pubasyncfninit_indexes_from(client:&::oximod::_mongodb::Client,)",
+        ] {
+            assert!(
+                generated.contains(expected),
+                "expected `{expected}` in generated collection model: \
+                 {generated}"
+            );
+        }
+
+        let embedded_input: DeriveInput = parse_quote! {
+            #[model(embedded)]
+            struct Address {
+                city: String,
+            }
+        };
+
+        let generated =
+            compact(expand_model(&embedded_input).expect("embedded model should expand"));
+
+        assert!(
+            !generated.contains("init_indexes"),
+            "embedded model unexpectedly received index initialization \
+             methods: {generated}"
+        );
+    }
+
+    #[test]
+    fn index_creation_errors_name_the_collection() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique)]
+                name: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("collection model should expand"));
+
+        assert!(
+            generated.contains("\"Failedtocreateindexesforcollection`users`\""),
+            "index error message should include the collection name: \
+             {generated}"
+        );
     }
 
     #[test]
