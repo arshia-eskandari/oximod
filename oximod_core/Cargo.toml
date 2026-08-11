@@ -1,6 +1,6 @@
 [package]
 name = "oximod_core"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "Core runtime components for OxiMod, a schema-aware MongoDB modeling library for Rust."
