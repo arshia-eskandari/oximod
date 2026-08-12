@@ -17,11 +17,11 @@ use mongodb::bson::{Document, oid::ObjectId};
 /// Hooks run for the corresponding persistence helpers on
 /// [`Model`](crate::feature::model::Model):
 ///
-/// - `save` and `save_from`;
-/// - `save_mut` and `save_from_mut`;
-/// - `find_by_id` and `find_by_id_from`;
-/// - `update_by_id` and `update_by_id_from`;
-/// - `delete_by_id` and `delete_by_id_from`.
+/// - `save`, `save_from`, and `save_with_session`;
+/// - `save_mut`, `save_from_mut`, and `save_mut_with_session`;
+/// - `find_by_id`, `find_by_id_from`, and `find_by_id_with_session`;
+/// - `update_by_id`, `update_by_id_from`, and `update_by_id_with_session`;
+/// - `delete_by_id`, `delete_by_id_from`, and `delete_by_id_with_session`.
 ///
 /// Hooks do not run for:
 ///
@@ -38,6 +38,21 @@ use mongodb::bson::{Document, oid::ObjectId};
 /// `save_from_mut` run [`Hooks::pre_save_mut`]/[`Hooks::post_save_mut`]. A
 /// safeguard implemented in only one pre-save hook does not guard the other
 /// save form; implement both when the application uses both.
+///
+/// # Sessions and transactions
+///
+/// Hook callbacks do not receive the caller's `ClientSession`. When a
+/// `_with_session` helper fires hooks, the hooks run in the existing order,
+/// but a database operation initiated inside a hook executes without the
+/// session and is therefore **not** part of the caller's transaction. If a
+/// side write must be atomic with the operation, perform it explicitly in
+/// the transaction body with a session-aware operation instead of inside a
+/// hook.
+///
+/// A post-hook for a session-aware helper runs after that MongoDB operation
+/// succeeded in the session — not after the surrounding transaction
+/// committed. OxiMod does not own transaction commit; an aborted transaction
+/// rolls back the database operation even though its post-hook already ran.
 ///
 /// # Error handling
 ///
