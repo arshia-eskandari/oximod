@@ -40,6 +40,7 @@ Use OxiMod when you want concise, expressive model code and compile-time guidanc
 * Type-aware filters, sorting, pagination, text search, and geospatial queries
 * Typed single-document and bulk updates and deletions
 * Typed nested paths for embedded documents and arrays of embedded models
+* Explicit session-aware operations for MongoDB transactions
 * Optional lifecycle hooks for save and `_id` helper operations
 * Structured validation and typed-query errors
 * Full MongoDB driver escape hatches
@@ -880,6 +881,21 @@ Every persistence or collection-access operation has an explicit-client counterp
 
 These methods accept `&mongodb::Client` and do not require the global client.
 
+### Session-aware counterparts
+
+Persistence operations also have explicit session-aware counterparts:
+
+* `save_with_session()`;
+* `save_mut_with_session()`;
+* `find_by_id_with_session()`;
+* `update_by_id_with_session()`;
+* `delete_by_id_with_session()`;
+* `exists_with_session()`;
+* `count_with_session()`;
+* `clear_with_session()`.
+
+These methods accept `&mut mongodb::ClientSession`, resolve the collection from the session's own client, and participate in any transaction active on that session. See [Sessions and transactions](#sessions-and-transactions).
+
 ---
 
 ## Client management
@@ -897,7 +913,7 @@ OxiClient::init_global(
 .await?;
 ```
 
-Methods without an `_from` suffix and all typed-query execution methods use this client.
+Methods without an `_from` or `_with_session` suffix and the non-session typed-query execution methods use this client.
 
 ```rust
 let user_id = user.save().await?;
@@ -946,7 +962,7 @@ Instance-level clients are useful for:
 
 ### Typed-query limitation
 
-Typed query builders currently execute only through the global client. There is no explicit-client typed-query executor yet. In an explicit-client workflow, use:
+Typed query builders execute through the global client, except for the `_with_session` execution terminals, which run through the supplied session's own client. There is no other explicit-client typed-query executor. In an explicit-client workflow without a session, use:
 
 * the `_from` model helpers;
 * `get_collection_from()`;
@@ -975,7 +991,7 @@ Use it for:
 * raw BSON queries with typed deserialization;
 * aggregation;
 * driver-specific options;
-* sessions;
+* session usage beyond OxiMod's `_with_session` methods;
 * operations not represented by OxiMod's helpers.
 
 ### Raw document collection
@@ -991,10 +1007,6 @@ mongodb::Collection<mongodb::bson::Document>
 ```
 
 Use it when the document shape is dynamic or when working directly with BSON.
-
-### Sessions and transactions
-
-Sessions and transactions are raw-driver territory: no OxiMod method accepts a `ClientSession`. A model or typed-query write issued while a transaction is open executes outside that transaction and commits independently, with no error or warning. Once any write to a collection participates in a transaction, perform **every** write to that collection through the session-aware driver APIs on `get_collection()` / `get_document_collection()` for as long as the transactional pattern is in use.
 
 ### Aggregation example
 
@@ -1028,6 +1040,53 @@ let results = collection
 ```
 
 Raw filters and pipelines must use serialized MongoDB field names. Unlike typed queries, the compiler cannot verify those paths or operator compatibility.
+
+---
+
+## Sessions and transactions
+
+Model operations and typed-query execution terminals have explicit session-aware counterparts ending in `_with_session`. Each takes `&mut mongodb::ClientSession`, resolves the model collection from the session's own client, and participates in any transaction active on that session while keeping OxiMod's typed query construction, validation, and error classification.
+
+Session and transaction lifecycle — `start_session`, `start_transaction`, `commit_transaction`, `abort_transaction`, and any retry handling — belongs to the MongoDB driver; OxiMod does not wrap or retry it.
+
+Model helpers: `save_with_session`, `save_mut_with_session`, `find_by_id_with_session`, `update_by_id_with_session`, `delete_by_id_with_session`, `exists_with_session`, `count_with_session`, and `clear_with_session`.
+
+Typed-query terminals: `first_with_session`, `all_with_session`, `count_with_session`, `update_one_with_session`, `update_all_with_session`, `delete_one_with_session`, and `delete_all_with_session`. Filters, sorting, pagination, array filters, and the bulk-write modifier preflight behave exactly as in the non-session terminals.
+
+```rust
+use oximod::{Model, Queryable};
+
+// Establish declared indexes before transactional work begins.
+Order::init_indexes_from(&client).await?;
+Inventory::init_indexes_from(&client).await?;
+
+let mut session = client.start_session().await?;
+session.start_transaction().await?;
+
+Order::new().sku("sku-1").save_with_session(&mut session).await?;
+
+Inventory::query()
+    .filter(|inventory| inventory.sku.eq("sku-1"))
+    .update_one_with_session(&mut session, |inventory| {
+        inventory.available.inc(-1)
+    })
+    .await?;
+
+session.commit_transaction().await?;
+```
+
+Session participation is always explicit. An ordinary OxiMod call made while a transaction is open does **not** join that transaction — it executes without the session and commits independently, with no error or warning. Every operation that is intended to be atomic must receive the same `ClientSession`.
+
+Rules that keep transactional code correct:
+
+* initialize declared indexes before starting transactional work — session-aware saves never establish indexes, so MongoDB's regular index enforcement applies inside the transaction without hidden out-of-transaction writes;
+* `save_with_session` and `save_mut_with_session` retain model validation; typed session-aware updates remain non-validating exactly like their non-session counterparts;
+* session-aware reads observe the transaction's own uncommitted writes; sessionless reads do not;
+* lifecycle hooks fire in the existing order, but hook callbacks do not receive the caller's session — a database write performed inside a hook is not part of the transaction; perform transactional side writes explicitly in the transaction body instead;
+* a post-hook for a session-aware operation runs after that MongoDB operation succeeded in the session, not after the transaction committed;
+* do not run parallel MongoDB operations on one session.
+
+Transactions require a MongoDB deployment that supports them, such as a replica set. OxiMod adds no atomicity beyond what the MongoDB driver and server guarantee.
 
 ---
 
@@ -1157,20 +1216,20 @@ Every hook has a default no-op implementation. Override only the events the mode
 
 ### Save hooks
 
-| Hook            | Runs for                    | Behavior                                                                             |
-| --------------- | --------------------------- | ------------------------------------------------------------------------------------ |
-| `pre_save`      | `save`, `save_from`         | Immutable check before validation and insertion.                                     |
-| `post_save`     | `save`, `save_from`         | Runs after insertion.                                                                |
-| `pre_save_mut`  | `save_mut`, `save_from_mut` | May mutate the model before validation and insertion.                                |
-| `post_save_mut` | `save_mut`, `save_from_mut` | May mutate in-memory state after insertion; changes are not automatically persisted. |
+| Hook            | Runs for                                             | Behavior                                                                             |
+| --------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `pre_save`      | `save`, `save_from`, `save_with_session`             | Immutable check before validation and insertion.                                     |
+| `post_save`     | `save`, `save_from`, `save_with_session`             | Runs after insertion.                                                                |
+| `pre_save_mut`  | `save_mut`, `save_from_mut`, `save_mut_with_session` | May mutate the model before validation and insertion.                                |
+| `post_save_mut` | `save_mut`, `save_from_mut`, `save_mut_with_session` | May mutate in-memory state after insertion; changes are not automatically persisted. |
 
 ### `_id` helper hooks
 
-| Hook                         | Runs for                            |
-| ---------------------------- | ----------------------------------- |
-| `pre_find` / `post_find`     | `find_by_id`, `find_by_id_from`     |
-| `pre_update` / `post_update` | `update_by_id`, `update_by_id_from` |
-| `pre_delete` / `post_delete` | `delete_by_id`, `delete_by_id_from` |
+| Hook                         | Runs for                                                          |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `pre_find` / `post_find`     | `find_by_id`, `find_by_id_from`, `find_by_id_with_session`        |
+| `pre_update` / `post_update` | `update_by_id`, `update_by_id_from`, `update_by_id_with_session`  |
+| `pre_delete` / `post_delete` | `delete_by_id`, `delete_by_id_from`, `delete_by_id_with_session`  |
 
 ### Hook boundaries
 
@@ -1184,6 +1243,8 @@ Hooks do **not** wrap:
 * collection accessors.
 
 A pre-hook error prevents the associated database operation. A post-hook error is returned after the database operation has already succeeded.
+
+Hook callbacks never receive a `ClientSession`. When a `_with_session` helper fires hooks, a database operation initiated inside a hook executes without the session and is therefore **not** part of the caller's transaction; perform transactional side writes explicitly in the transaction body instead. A post-hook for a session-aware helper runs after that MongoDB operation succeeded in the session — not after the transaction committed — so an aborted transaction rolls back the operation even though its post-hook already ran.
 
 ---
 
@@ -1326,7 +1387,8 @@ match User::query().page(0, 20).all().await {
 | Dynamic BSON documents                             | `Collection<Document>`               |
 | Aggregation pipelines                              | Direct MongoDB collection access     |
 | Compound, partial/filtered, or unsupported index options | MongoDB driver index API       |
-| Sessions and advanced driver features              | Direct MongoDB collection/client API |
+| Transactional model and typed-query operations     | `_with_session` methods              |
+| Advanced session and driver features               | Direct MongoDB collection/client API |
 
 OxiMod is designed so these approaches can coexist in the same application.
 
@@ -1364,12 +1426,12 @@ MongoDB-backed examples read `MONGODB_URI` from the environment or a `.env` file
 
 ## Current behavioral notes
 
-* Typed-query execution currently requires the global client.
+* Typed-query execution requires the global client, except for the `_with_session` terminals, which use the session's own client.
 * Typed and raw update operations do not automatically run model validation.
 * Validation does not descend into embedded models; enforce embedded rules with a custom validator on the containing field or with pre-save hooks (covering both `pre_save` and `pre_save_mut`).
 * Generated indexes are single-field and are initialized lazily during saves, or explicitly at startup with `init_indexes()` / `init_indexes_from(&client)`; initialization is once per process and does not re-establish indexes dropped externally afterward.
 * Compound and partial/filtered indexes require the MongoDB driver API; a derived composite-key field with `#[index(unique)]` is not a safe substitute for a compound unique index.
-* OxiMod methods do not accept MongoDB sessions; writes issued through OxiMod while a transaction is open commit outside that transaction.
+* Session participation is explicit through the `_with_session` methods; a non-session OxiMod call issued while a transaction is open commits outside that transaction. Initialize declared indexes before transactional work — session-aware saves do not establish them.
 * Typed reads fail as a whole when any document in the selected result window cannot be deserialized; use the raw document collection to inspect or repair such documents.
 * Lifecycle hooks wrap only save and `_id` helper methods.
 * `clear()`, unfiltered `update_all()`, and unfiltered `delete_all()` can affect an entire collection.

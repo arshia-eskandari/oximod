@@ -23,7 +23,8 @@
 //! - typed and raw MongoDB collection access;
 //! - type-aware filters, sorting, pagination, text search, and geospatial
 //!   queries;
-//! - typed single-document and bulk updates and deletions.
+//! - typed single-document and bulk updates and deletions;
+//! - explicit session-aware operations for MongoDB transactions.
 //!
 //! ## Quick start
 //!
@@ -392,16 +393,97 @@
 //! OxiMod exposes both `mongodb::Collection<Self>` and
 //! `mongodb::Collection<Document>` in global and explicit-client forms. These
 //! escape hatches are intended for aggregation pipelines, driver options,
-//! compound indexes, sessions, and any MongoDB operation outside OxiMod's
-//! convenience APIs.
+//! compound indexes, and any MongoDB operation outside OxiMod's convenience
+//! APIs.
 //!
-//! Sessions and transactions in particular remain driver territory: no OxiMod
-//! method accepts a `ClientSession`, so a model or typed-query write issued
-//! while a transaction is open executes outside that transaction and commits
-//! independently, with no error or warning. Once any write to a collection
-//! participates in a transaction, perform every write to that collection
-//! through the session-aware driver APIs on these collections for as long as
-//! the transactional pattern is in use.
+//! ## Sessions and transactions
+//!
+//! Model operations and typed-query execution terminals have explicit
+//! session-aware counterparts ending in `_with_session`, such as
+//! [`Model::save_with_session`] and `Query::update_one_with_session`. Each
+//! takes `&mut mongodb::ClientSession`, resolves the model collection from
+//! the session's own client, and participates in any transaction active on
+//! that session while keeping OxiMod's typed query construction, validation,
+//! and error classification.
+//!
+//! Session and transaction lifecycle — `start_session`,
+//! `start_transaction`, `commit_transaction`, `abort_transaction`, and any
+//! retry handling — belongs to the MongoDB driver; OxiMod does not wrap or
+//! retry it.
+//!
+//! ```rust,no_run
+//! use mongodb::bson::oid::ObjectId;
+//! use oximod::{Model, Queryable};
+//! use serde::{Deserialize, Serialize};
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("shop")]
+//! #[collection("orders")]
+//! struct Order {
+//!     #[serde(skip_serializing_if = "Option::is_none")]
+//!     _id: Option<ObjectId>,
+//!     sku: String,
+//! }
+//!
+//! #[derive(Debug, Serialize, Deserialize, Model)]
+//! #[db("shop")]
+//! #[collection("inventory")]
+//! struct Inventory {
+//!     #[serde(skip_serializing_if = "Option::is_none")]
+//!     _id: Option<ObjectId>,
+//!     sku: String,
+//!     available: i32,
+//! }
+//!
+//! # async fn run(client: &mongodb::Client) -> Result<(), Box<dyn std::error::Error>> {
+//! // Establish declared indexes before transactional work begins.
+//! Order::init_indexes_from(client).await?;
+//! Inventory::init_indexes_from(client).await?;
+//!
+//! let mut session = client.start_session().await?;
+//! session.start_transaction().await?;
+//!
+//! Order::new().sku("sku-1").save_with_session(&mut session).await?;
+//!
+//! Inventory::query()
+//!     .filter(|inventory| inventory.sku.eq("sku-1"))
+//!     .update_one_with_session(&mut session, |inventory| {
+//!         inventory.available.inc(-1)
+//!     })
+//!     .await?;
+//!
+//! session.commit_transaction().await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Session participation is always explicit. An ordinary OxiMod call made
+//! while a transaction is open does **not** join that transaction — it
+//! executes without the session and commits independently, with no error or
+//! warning. Every operation that is intended to be atomic must receive the
+//! same `ClientSession`.
+//!
+//! Rules that keep transactional code correct:
+//!
+//! - initialize declared indexes before starting transactional work
+//!   (session-aware saves never establish indexes, so MongoDB's regular
+//!   index enforcement applies inside the transaction without hidden
+//!   out-of-transaction writes);
+//! - `save_with_session` and `save_mut_with_session` retain model
+//!   validation; typed session-aware updates remain non-validating exactly
+//!   like their non-session counterparts;
+//! - lifecycle hooks fire in the existing order, but hook callbacks do not
+//!   receive the caller's session — a database write performed inside a hook
+//!   is not part of the transaction; perform transactional side writes
+//!   explicitly in the transaction body instead;
+//! - a post-hook for a session-aware operation runs after that MongoDB
+//!   operation succeeded in the session, not after the transaction
+//!   committed;
+//! - do not run parallel MongoDB operations on one session.
+//!
+//! Transactions require a MongoDB deployment that supports them, such as a
+//! replica set. OxiMod adds no atomicity beyond what the MongoDB driver and
+//! server guarantee.
 //!
 //! ## Typed queries
 //!
@@ -411,9 +493,11 @@
 //! regular expressions are unavailable on integers and array updates are
 //! unavailable on scalar fields.
 //!
-//! Typed queries currently execute through the global [`OxiClient`]. There is
-//! no explicit-client typed-query executor; use the `_from` model methods or an
-//! explicitly obtained MongoDB collection when global state is unsuitable.
+//! Typed queries execute through the global [`OxiClient`], except for the
+//! `_with_session` execution terminals, which run through the supplied
+//! session's own client. There is no other explicit-client typed-query
+//! executor; use the `_from` model methods or an explicitly obtained MongoDB
+//! collection when global state is unsuitable and no session is involved.
 //!
 //! The examples in this section use the following model:
 //!
@@ -763,19 +847,25 @@
 //! ## Lifecycle hooks
 //!
 //! Add `#[hooks]` to a collection model and implement [`Hooks`] to opt into
-//! lifecycle calls. Hooks wrap only these global and explicit-client [`Model`]
-//! helpers:
+//! lifecycle calls. Hooks wrap only these global, explicit-client, and
+//! session-aware [`Model`] helpers:
 //!
-//! - `save` and `save_from`;
-//! - `save_mut` and `save_from_mut`;
-//! - `find_by_id` and `find_by_id_from`;
-//! - `update_by_id` and `update_by_id_from`;
-//! - `delete_by_id` and `delete_by_id_from`.
+//! - `save`, `save_from`, and `save_with_session`;
+//! - `save_mut`, `save_from_mut`, and `save_mut_with_session`;
+//! - `find_by_id`, `find_by_id_from`, and `find_by_id_with_session`;
+//! - `update_by_id`, `update_by_id_from`, and `update_by_id_with_session`;
+//! - `delete_by_id`, `delete_by_id_from`, and `delete_by_id_with_session`.
 //!
 //! They do not wrap typed-query execution, direct collection operations,
 //! `clear`, `exists`, or `count`. A pre-hook error prevents the database
 //! operation. A post-hook error is returned after the database operation has
 //! already succeeded.
+//!
+//! Hook callbacks never receive a `ClientSession`. For a session-aware
+//! helper, the hooks still fire in the existing order, but a database
+//! operation initiated inside a hook is not automatically part of the
+//! caller's transaction, and a post-hook runs after the session operation
+//! succeeded — not after the transaction committed.
 //!
 //! ## Errors
 //!

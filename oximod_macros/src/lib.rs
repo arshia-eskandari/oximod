@@ -300,6 +300,55 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                             ),
                         }
                     }
+
+                    // Unlike the client-based insert helper, this does not
+                    // establish declared indexes: index creation is not part
+                    // of the caller's transaction and must happen before
+                    // transactional work begins.
+                    #[doc(hidden)]
+                    async fn __oximod_insert_with_session(
+                        &self,
+                        session: &mut ::oximod::_mongodb::ClientSession,
+                    ) -> Result<
+                        ::oximod::_mongodb::bson::oid::ObjectId,
+                        ::oximod::OxiModError,
+                    > {
+                        <
+                            Self as ::oximod::_feature::model::ModelCore<
+                                ::oximod::_feature::model::Collection
+                            >
+                        >::validate(self)?;
+
+                        let client = session.client();
+
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection_from(&client)?;
+
+                        let result = collection
+                            .insert_one(self)
+                            .session(&mut *session)
+                            .await
+                            .map_err(|error| {
+                                ::oximod::_error::classify_driver_error(
+                                    "Failed to insert document into MongoDB collection",
+                                    ::oximod::_error::OperationDomain::General,
+                                    error,
+                                )
+                            })?;
+
+                        match result.inserted_id.as_object_id() {
+                            Some(id) => Ok(id),
+                            None => Err(
+                                ::oximod::OxiModError::database(
+                                    "MongoDB returned a non-ObjectId inserted_id",
+                                    ::std::io::Error::other(
+                                        "inserted_id was not an ObjectId",
+                                    ),
+                                ),
+                            ),
+                        }
+                    }
                 }
 
                 #collection_model_token
