@@ -10,8 +10,8 @@ use crate::error::oximod_error::OxiModError;
 use crate::feature::conn::client::OxiClient;
 use async_trait::async_trait;
 use mongodb::{
-    Client, Collection as MongoCollection,
-    bson::{Document, oid::ObjectId},
+    Client, ClientSession, Collection as MongoCollection,
+    bson::{Document, doc, oid::ObjectId},
     results::{DeleteResult, UpdateResult},
 };
 use serde::{Serialize, de::DeserializeOwned};
@@ -88,6 +88,25 @@ where
 /// [`Model::find_by_id`] use the globally initialized [`OxiClient`]. Methods
 /// ending in `_from`, such as [`Model::save_from`] and
 /// [`Model::find_by_id_from`], use a caller-provided [`Client`].
+///
+/// # Sessions and transactions
+///
+/// Methods ending in `_with_session`, such as [`Model::save_with_session`]
+/// and [`Model::find_by_id_with_session`], run through a caller-provided
+/// [`ClientSession`] and participate in any transaction active on that
+/// session. The collection is resolved from the session's own client, so a
+/// session cannot be combined with a mismatched client.
+///
+/// Session participation is always explicit: an operation joins a
+/// transaction only when the caller passes the session to a
+/// `_with_session` method. Ordinary methods such as [`Model::save`] never
+/// join an open transaction, even one started on the same client; they
+/// execute and commit independently. Do not run parallel operations on one
+/// session.
+///
+/// Session-aware saves do not establish declared `#[index(...)]`
+/// specifications. Initialize indexes before starting transactional work,
+/// for example with `init_indexes_from`.
 ///
 /// # Typed and raw collections
 ///
@@ -374,6 +393,263 @@ pub trait Model:
         update: Document,
         client: &Client,
     ) -> Result<UpdateResult, OxiModError>;
+
+    /// Persists this model instance through an explicit [`ClientSession`].
+    ///
+    /// The collection is resolved from the session's own client, and the
+    /// insert is executed with the session attached, so it participates in
+    /// any transaction active on that session.
+    ///
+    /// Validation runs exactly as it does for [`Model::save`]: a validation
+    /// error prevents the insert. Lifecycle hooks fire in the same order as
+    /// [`Model::save`]. Hook callbacks do not receive the session, so
+    /// database operations initiated by a hook are **not** part of the
+    /// caller's transaction; perform transactional side writes explicitly in
+    /// the transaction body instead.
+    ///
+    /// Unlike [`Model::save`], this method does not establish declared
+    /// `#[index(...)]` specifications. Initialize indexes before starting
+    /// transactional work, for example with `init_indexes_from`.
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// The inserted document's [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if validation, serialization, collection
+    /// access, hook execution, or insertion fails.
+    async fn save_with_session(&self, session: &mut ClientSession)
+    -> Result<ObjectId, OxiModError>;
+
+    /// Persists this model instance through an explicit [`ClientSession`]
+    /// with mutable access.
+    ///
+    /// This is the session-aware counterpart to [`Model::save_mut`]: it runs
+    /// the mutable save hooks such as
+    /// [`crate::feature::hooks::Hooks::pre_save_mut`] and
+    /// [`crate::feature::hooks::Hooks::post_save_mut`] in the same order,
+    /// while the insert itself executes with the session attached and
+    /// participates in any transaction active on that session.
+    ///
+    /// Validation and index behavior match [`Model::save_with_session`]:
+    /// validation still prevents the insert, and declared indexes are not
+    /// established. Hook callbacks do not receive the session.
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// The inserted document's [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if validation, serialization, collection
+    /// access, hook execution, or insertion fails.
+    async fn save_mut_with_session(
+        &mut self,
+        session: &mut ClientSession,
+    ) -> Result<ObjectId, OxiModError>;
+
+    /// Finds a document by its `_id` through an explicit [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Model::find_by_id`]. The
+    /// read runs with the session attached, so inside a transaction it
+    /// observes the transaction's own uncommitted writes.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The `_id` of the document to find.
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Some(Self))` if a matching document is found, otherwise `Ok(None)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or the query fails.
+    async fn find_by_id_with_session(
+        id: ObjectId,
+        session: &mut ClientSession,
+    ) -> Result<Option<Self>, OxiModError>;
+
+    /// Deletes a document by its `_id` through an explicit [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Model::delete_by_id`]. The
+    /// delete participates in any transaction active on the session and is
+    /// rolled back if that transaction aborts.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The `_id` of the document to delete.
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// A [`DeleteResult`] indicating whether a document was deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or deletion fails.
+    async fn delete_by_id_with_session(
+        id: ObjectId,
+        session: &mut ClientSession,
+    ) -> Result<DeleteResult, OxiModError>;
+
+    /// Updates a document by its `_id` through an explicit [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Model::update_by_id`]. The
+    /// update participates in any transaction active on the session and is
+    /// rolled back if that transaction aborts. Like [`Model::update_by_id`],
+    /// this method does not run model validation.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The `_id` of the document to update.
+    /// - `update`: A MongoDB update document.
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// An [`UpdateResult`] indicating how many documents matched and were modified.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or update execution fails.
+    async fn update_by_id_with_session(
+        id: ObjectId,
+        update: Document,
+        session: &mut ClientSession,
+    ) -> Result<UpdateResult, OxiModError>;
+
+    /// Deletes all documents in this model's collection through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Model::clear`]. The delete
+    /// participates in any transaction active on the session and is rolled
+    /// back if that transaction aborts.
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// A [`DeleteResult`] describing how many documents were removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection access or deletion fails.
+    ///
+    /// # Warning
+    ///
+    /// This removes **all documents** from the model's collection.
+    async fn clear_with_session(session: &mut ClientSession) -> Result<DeleteResult, OxiModError> {
+        let client = session.client();
+        let collection = Self::get_collection_from(&client)?;
+
+        collection
+            .delete_many(doc! {})
+            .session(&mut *session)
+            .await
+            .map_err(|error| {
+                classify_driver_error(
+                    "Failed to execute MongoDB delete_many operation",
+                    OperationDomain::General,
+                    error,
+                )
+            })
+    }
+
+    /// Checks whether any document matching `filter` exists through an
+    /// explicit [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Model::exists`]. The read
+    /// runs with the session attached, so inside a transaction it observes
+    /// the transaction's own uncommitted writes. Like [`Model::exists_from`],
+    /// it probes the raw document collection and never deserializes the
+    /// matched document into `Self`.
+    ///
+    /// # Parameters
+    ///
+    /// - `filter`: A MongoDB filter document.
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// `true` if at least one matching document exists, otherwise `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or the query fails.
+    async fn exists_with_session(
+        filter: Document,
+        session: &mut ClientSession,
+    ) -> Result<bool, OxiModError> {
+        let client = session.client();
+        let collection = Self::get_document_collection_from(&client)?;
+
+        let found = collection
+            .find_one(filter)
+            .session(&mut *session)
+            .await
+            .map_err(|error| {
+                classify_driver_error(
+                    "Failed to check document existence",
+                    OperationDomain::General,
+                    error,
+                )
+            })?;
+
+        Ok(found.is_some())
+    }
+
+    /// Counts documents matching `filter` through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Model::count`]. The count
+    /// runs with the session attached, so inside a transaction it includes
+    /// the transaction's own uncommitted writes.
+    ///
+    /// # Parameters
+    ///
+    /// - `filter`: A MongoDB filter document.
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// The number of matching documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] if collection resolution or the count
+    /// operation fails.
+    async fn count_with_session(
+        filter: Document,
+        session: &mut ClientSession,
+    ) -> Result<u64, OxiModError> {
+        let client = session.client();
+        let collection = Self::get_collection_from(&client)?;
+
+        collection
+            .count_documents(filter)
+            .session(&mut *session)
+            .await
+            .map_err(|error| {
+                classify_driver_error(
+                    "Failed to count matching documents",
+                    OperationDomain::General,
+                    error,
+                )
+            })
+    }
 
     /// Checks whether any document matching `filter` exists using an explicit client.
     ///

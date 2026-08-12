@@ -188,6 +188,149 @@ pub fn generate_collection_model_token(
                 Ok(result)
             }
 
+            async fn save_with_session(
+                &self,
+                session: &mut ::oximod::_mongodb::ClientSession,
+            ) -> Result<
+                ::oximod::_mongodb::bson::oid::ObjectId,
+                ::oximod::OxiModError,
+            > {
+                #pre_save
+
+                let id = self
+                    .__oximod_insert_with_session(session)
+                    .await?;
+
+                #post_save
+
+                Ok(id)
+            }
+
+            async fn save_mut_with_session(
+                &mut self,
+                session: &mut ::oximod::_mongodb::ClientSession,
+            ) -> Result<
+                ::oximod::_mongodb::bson::oid::ObjectId,
+                ::oximod::OxiModError,
+            > {
+                #pre_save_mut
+
+                let id = self
+                    .__oximod_insert_with_session(session)
+                    .await?;
+
+                #post_save_mut
+
+                Ok(id)
+            }
+
+            async fn find_by_id_with_session(
+                id: ::oximod::_mongodb::bson::oid::ObjectId,
+                session: &mut ::oximod::_mongodb::ClientSession,
+            ) -> Result<
+                Option<Self>,
+                ::oximod::OxiModError,
+            > {
+                #pre_find
+
+                let client = session.client();
+
+                let collection =
+                    Self::get_collection_from(&client)?;
+
+                let result = collection
+                    .find_one(
+                        ::oximod::_mongodb::bson::doc! {
+                            "_id": id.clone(),
+                        },
+                    )
+                    .session(&mut *session)
+                    .await
+                    .map_err(|error| {
+                        ::oximod::_error::classify_driver_error(
+                            "Failed to find document by _id",
+                            ::oximod::_error::OperationDomain::General,
+                            error,
+                        )
+                    })?;
+
+                #post_find
+
+                Ok(result)
+            }
+
+            async fn delete_by_id_with_session(
+                id: ::oximod::_mongodb::bson::oid::ObjectId,
+                session: &mut ::oximod::_mongodb::ClientSession,
+            ) -> Result<
+                ::oximod::_mongodb::results::DeleteResult,
+                ::oximod::OxiModError,
+            > {
+                #pre_delete
+
+                let client = session.client();
+
+                let collection =
+                    Self::get_collection_from(&client)?;
+
+                let result = collection
+                    .delete_one(
+                        ::oximod::_mongodb::bson::doc! {
+                            "_id": id.clone(),
+                        },
+                    )
+                    .session(&mut *session)
+                    .await
+                    .map_err(|error| {
+                        ::oximod::_error::classify_driver_error(
+                            "Failed to delete document by _id",
+                            ::oximod::_error::OperationDomain::General,
+                            error,
+                        )
+                    })?;
+
+                #post_delete
+
+                Ok(result)
+            }
+
+            async fn update_by_id_with_session(
+                id: ::oximod::_mongodb::bson::oid::ObjectId,
+                update: ::oximod::_mongodb::bson::Document,
+                session: &mut ::oximod::_mongodb::ClientSession,
+            ) -> Result<
+                ::oximod::_mongodb::results::UpdateResult,
+                ::oximod::OxiModError,
+            > {
+                #pre_update
+
+                let client = session.client();
+
+                let collection =
+                    Self::get_collection_from(&client)?;
+
+                let result = collection
+                    .update_one(
+                        ::oximod::_mongodb::bson::doc! {
+                            "_id": id.clone(),
+                        },
+                        #update_token,
+                    )
+                    .session(&mut *session)
+                    .await
+                    .map_err(|error| {
+                        ::oximod::_error::classify_driver_error(
+                            "Failed to update document by _id",
+                            ::oximod::_error::OperationDomain::General,
+                            error,
+                        )
+                    })?;
+
+                #post_update
+
+                Ok(result)
+            }
+
             async fn clear_from(
                 client: &::oximod::_mongodb::Client,
             ) -> Result<
@@ -276,6 +419,11 @@ mod tests {
                 "find_by_id_from",
                 "delete_by_id_from",
                 "update_by_id_from",
+                "save_with_session",
+                "save_mut_with_session",
+                "find_by_id_with_session",
+                "delete_by_id_with_session",
+                "update_by_id_with_session",
                 "clear_from",
             ]
         );
