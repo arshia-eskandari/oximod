@@ -849,3 +849,285 @@ async fn typed_session_bulk_writes_reject_query_modifiers() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run save_with_session_rejects_invalid_model_before_insert
+#[tokio::test]
+async fn save_with_session_rejects_invalid_model_before_insert() -> TestResult {
+    use oximod::OxiModError;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("validation_guard")]
+    pub struct Book {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[validate(min = 1)]
+        pages: i32,
+    }
+
+    let client = client().await?;
+    Book::clear_from(&client).await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let error = Book::new()
+        .pages(0)
+        .save_with_session(&mut session)
+        .await
+        .expect_err("an invalid model must not be inserted");
+    assert!(
+        matches!(error, OxiModError::Validation { .. }),
+        "expected a validation error, got: {error:?}"
+    );
+
+    // The rejected document is not visible inside the transaction...
+    assert_eq!(Book::count_with_session(doc! {}, &mut session).await?, 0);
+
+    session.commit_transaction().await?;
+
+    // ...and not outside it either.
+    assert_eq!(Book::count_from(doc! {}, &client).await?, 0);
+
+    Ok(())
+}
+
+// Run test: cargo nextest run session_operations_preserve_hook_firing_order
+static SESSION_HOOK_EVENTS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+fn record_hook_event(event: &'static str) {
+    SESSION_HOOK_EVENTS
+        .lock()
+        .expect("hook event lock should not be poisoned")
+        .push(event);
+}
+
+#[tokio::test]
+async fn session_operations_preserve_hook_firing_order() -> TestResult {
+    use oximod::Hooks;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("session_hooks")]
+    #[hooks]
+    pub struct Audit {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        message: String,
+    }
+
+    #[async_trait::async_trait]
+    impl Hooks for Audit {
+        async fn pre_save(&self) -> Result<(), oximod::OxiModError> {
+            record_hook_event("pre_save");
+            Ok(())
+        }
+
+        async fn post_save(&self) -> Result<(), oximod::OxiModError> {
+            record_hook_event("post_save");
+            Ok(())
+        }
+
+        async fn pre_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
+            record_hook_event("pre_save_mut");
+            Ok(())
+        }
+
+        async fn post_save_mut(&mut self) -> Result<(), oximod::OxiModError> {
+            record_hook_event("post_save_mut");
+            Ok(())
+        }
+
+        async fn pre_find(_id: ObjectId) -> Result<(), oximod::OxiModError> {
+            record_hook_event("pre_find");
+            Ok(())
+        }
+
+        async fn post_find(_found: &Option<Self>) -> Result<(), oximod::OxiModError> {
+            record_hook_event("post_find");
+            Ok(())
+        }
+
+        async fn pre_update(
+            _id: ObjectId,
+            _update: &mongodb::bson::Document,
+        ) -> Result<(), oximod::OxiModError> {
+            record_hook_event("pre_update");
+            Ok(())
+        }
+
+        async fn post_update(
+            _id: ObjectId,
+            _update: &mongodb::bson::Document,
+        ) -> Result<(), oximod::OxiModError> {
+            record_hook_event("post_update");
+            Ok(())
+        }
+
+        async fn pre_delete(_id: ObjectId) -> Result<(), oximod::OxiModError> {
+            record_hook_event("pre_delete");
+            Ok(())
+        }
+
+        async fn post_delete(_id: ObjectId) -> Result<(), oximod::OxiModError> {
+            record_hook_event("post_delete");
+            Ok(())
+        }
+    }
+
+    let client = client().await?;
+    Audit::clear_from(&client).await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let id = Audit::new()
+        .message("created")
+        .save_with_session(&mut session)
+        .await?;
+    Audit::new()
+        .message("mutated")
+        .save_mut_with_session(&mut session)
+        .await?;
+    Audit::find_by_id_with_session(id, &mut session).await?;
+    Audit::update_by_id_with_session(id, doc! { "$set": { "message": "updated" } }, &mut session)
+        .await?;
+    Audit::delete_by_id_with_session(id, &mut session).await?;
+
+    session.abort_transaction().await?;
+
+    let events = SESSION_HOOK_EVENTS
+        .lock()
+        .expect("hook event lock should not be poisoned")
+        .clone();
+    assert_eq!(
+        events,
+        vec![
+            "pre_save",
+            "post_save",
+            "pre_save_mut",
+            "post_save_mut",
+            "pre_find",
+            "post_find",
+            "pre_update",
+            "post_update",
+            "pre_delete",
+            "post_delete",
+        ],
+        "session-aware helpers should fire the same hooks in the same order"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run session_duplicate_key_classifies_as_database_error
+#[tokio::test]
+async fn session_duplicate_key_classifies_as_database_error() -> TestResult {
+    use mongodb::error::{ErrorKind, WriteFailure};
+    use oximod::OxiModError;
+    use std::error::Error as StdError;
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("session_duplicate_key")]
+    pub struct Account {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(unique)]
+        email: String,
+    }
+
+    let client = client().await?;
+    Account::clear_from(&client).await?;
+
+    // The documented startup pattern: establish indexes before transactional
+    // work begins.
+    Account::init_indexes_from(&client).await?;
+
+    Account::new()
+        .email("first@example.com")
+        .save_from(&client)
+        .await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let error = Account::new()
+        .email("first@example.com")
+        .save_with_session(&mut session)
+        .await
+        .expect_err("the unique index should reject the duplicate inside the transaction");
+
+    assert!(
+        matches!(error, OxiModError::Database { .. }),
+        "expected a duplicate key through save_with_session to classify as Database, got: {error:?}"
+    );
+
+    let driver_error = error
+        .source()
+        .and_then(|source| source.downcast_ref::<mongodb::error::Error>())
+        .expect("the original driver error should be preserved through source()");
+
+    let code = match &*driver_error.kind {
+        ErrorKind::Write(WriteFailure::WriteError(write_error)) => Some(write_error.code),
+        ErrorKind::Command(command_error) => Some(command_error.code),
+        _ => None,
+    };
+    assert_eq!(code, Some(11000), "expected duplicate key code 11000");
+
+    session.abort_transaction().await?;
+
+    Ok(())
+}
+
+// Run test: cargo nextest run save_with_session_does_not_establish_indexes
+#[tokio::test]
+async fn save_with_session_does_not_establish_indexes() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("session_no_index_creation")]
+    pub struct Ticket {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(unique)]
+        code: String,
+    }
+
+    let client = client().await?;
+    Ticket::clear_from(&client).await?;
+
+    // Intentionally no init_indexes_from: the session-aware save must not
+    // establish the declared unique index as hidden out-of-transaction work.
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    Ticket::new()
+        .code("T-1")
+        .save_with_session(&mut session)
+        .await?;
+    Ticket::new()
+        .code("T-1")
+        .save_with_session(&mut session)
+        .await?;
+
+    session.commit_transaction().await?;
+
+    // Both duplicates committed, so no unique index can have been created.
+    assert_eq!(
+        Ticket::count_from(doc! { "code": "T-1" }, &client).await?,
+        2
+    );
+
+    let index_names = Ticket::get_collection_from(&client)?
+        .list_index_names()
+        .await?;
+    assert!(
+        index_names.iter().all(|name| name == "_id_"),
+        "save_with_session must not create declared indexes, found: {index_names:?}"
+    );
+
+    Ok(())
+}
