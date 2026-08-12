@@ -13,6 +13,7 @@
 use std::marker::PhantomData;
 
 use mongodb::{
+    ClientSession,
     bson::Document,
     options::ReturnDocument,
     results::{DeleteResult, UpdateResult},
@@ -980,6 +981,523 @@ where
         let collection = M::get_collection()?;
 
         let mut operation = collection.update_many(filter, update);
+
+        if !array_filters.is_empty() {
+            operation = operation.array_filters(array_filters);
+        }
+
+        operation.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to update documents matching the typed query",
+                OperationDomain::General,
+                error,
+            )
+        })
+    }
+
+    /// Returns the first document matching this query through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::first`]: the same
+    /// filter, text search, and sorting apply, the model collection is
+    /// resolved from the session's own client, and the read participates in
+    /// any transaction active on the session, so it observes the
+    /// transaction's own uncommitted writes.
+    ///
+    /// ```ignore
+    /// let user = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .sort_by(|user| user.created_at.asc())
+    ///     .first_with_session(&mut session)
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(M))` when a matching document is found.
+    /// - `Ok(None)` when no document matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as [`Query::first`].
+    pub async fn first_with_session(
+        mut self,
+        session: &mut ClientSession,
+    ) -> Result<Option<M>, OxiModError> {
+        self.take_error()?;
+
+        let sort = self.sort.take();
+        let filter = self.into_filter_document();
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        let mut find = collection.find_one(filter).session(&mut *session);
+
+        if let Some(sort) = sort {
+            find = find.sort(sort.into_document());
+        }
+
+        find.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to execute typed query",
+                OperationDomain::General,
+                error,
+            )
+        })
+    }
+
+    /// Counts documents matching this query's filter through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::count`]: sorting,
+    /// skipping, limiting, and pagination do not change the returned count,
+    /// and inside a transaction the count includes the transaction's own
+    /// uncommitted writes.
+    ///
+    /// ```ignore
+    /// let count = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .count_with_session(&mut session)
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// The number of matching documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as [`Query::count`].
+    pub async fn count_with_session(
+        mut self,
+        session: &mut ClientSession,
+    ) -> Result<u64, OxiModError> {
+        self.take_error()?;
+
+        let filter = self.into_filter_document();
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        collection
+            .count_documents(filter)
+            .session(&mut *session)
+            .await
+            .map_err(|error| {
+                classify_driver_error(
+                    "Failed to count typed query results",
+                    OperationDomain::General,
+                    error,
+                )
+            })
+    }
+
+    /// Returns all documents matching this query through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::all`]: configured
+    /// sorting, skipping, limiting, and pagination apply before results are
+    /// collected, and the session cursor is advanced with the same session,
+    /// so inside a transaction the results include the transaction's own
+    /// uncommitted writes.
+    ///
+    /// ```ignore
+    /// let users = User::query()
+    ///     .filter(|user| user.active.eq(true))
+    ///     .sort_by(|user| user.name.asc())
+    ///     .limit(25)
+    ///     .all_with_session(&mut session)
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing every document returned by MongoDB after applying
+    /// the configured query options.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as [`Query::all`],
+    /// including the same all-or-nothing deserialization behavior for the
+    /// selected result window.
+    pub async fn all_with_session(
+        mut self,
+        session: &mut ClientSession,
+    ) -> Result<Vec<M>, OxiModError> {
+        self.take_error()?;
+
+        let sort = self.sort.take();
+        let limit = self.limit.take();
+        let skip = self.skip.take();
+
+        let filter = self.into_filter_document();
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        let mut find = collection.find(filter).session(&mut *session);
+
+        if let Some(sort) = sort {
+            find = find.sort(sort.into_document());
+        }
+
+        if let Some(skip) = skip {
+            find = find.skip(skip);
+        }
+
+        if let Some(limit) = limit {
+            let limit = i64::try_from(limit).map_err(|_| QueryError::LimitOutOfRange { limit })?;
+
+            find = find.limit(limit);
+        }
+
+        let mut cursor = find.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to execute typed query",
+                OperationDomain::General,
+                error,
+            )
+        })?;
+
+        let mut models = Vec::new();
+
+        while cursor.advance(&mut *session).await.map_err(|error| {
+            classify_driver_error(
+                "Failed to advance typed query cursor",
+                OperationDomain::General,
+                error,
+            )
+        })? {
+            let model = cursor.deserialize_current().map_err(|error| {
+                classify_driver_error(
+                    "Failed to deserialize typed query result",
+                    OperationDomain::General,
+                    error,
+                )
+            })?;
+
+            models.push(model);
+        }
+
+        Ok(models)
+    }
+
+    /// Deletes and returns the first matching document through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::delete_one`]: the
+    /// same filter, text search, and sorting select the deleted document,
+    /// and the delete participates in any transaction active on the session,
+    /// so it is rolled back if that transaction aborts.
+    ///
+    /// ```ignore
+    /// let deleted = User::query()
+    ///     .filter(|user| user.active.eq(false))
+    ///     .sort_by(|user| user.created_at.asc())
+    ///     .delete_one_with_session(&mut session)
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(M))` containing the deleted document.
+    /// - `Ok(None)` when no document matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as
+    /// [`Query::delete_one`].
+    pub async fn delete_one_with_session(
+        self,
+        session: &mut ClientSession,
+    ) -> Result<Option<M>, OxiModError> {
+        let Self {
+            filter,
+            text,
+            sort,
+            error,
+            ..
+        } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        let filter = Self::build_filter_document(filter, text);
+
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        let mut operation = collection
+            .find_one_and_delete(filter)
+            .session(&mut *session);
+
+        if let Some(sort) = sort {
+            operation = operation.sort(sort.into_document());
+        }
+
+        operation.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to delete the first document matching the typed query",
+                OperationDomain::General,
+                error,
+            )
+        })
+    }
+
+    /// Deletes every document matching this query through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::delete_all`]: the
+    /// same bulk-write preflight applies (sorting, skipping, limiting, and
+    /// pagination are rejected), and the delete participates in any
+    /// transaction active on the session.
+    ///
+    /// ```ignore
+    /// let result = User::query()
+    ///     .filter(|user| user.active.eq(false))
+    ///     .delete_all_with_session(&mut session)
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    ///
+    /// # Returns
+    ///
+    /// A [`DeleteResult`] containing the number of removed documents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as
+    /// [`Query::delete_all`].
+    ///
+    /// # Warning
+    ///
+    /// An empty query deletes every document in the model's collection.
+    pub async fn delete_all_with_session(
+        self,
+        session: &mut ClientSession,
+    ) -> Result<DeleteResult, OxiModError> {
+        let Self {
+            filter,
+            text,
+            sort,
+            limit,
+            skip,
+            pagination,
+            error,
+            ..
+        } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        Self::validate_bulk_write_modifiers(
+            BulkWriteOperation::DeleteAll,
+            pagination,
+            sort.is_some(),
+            skip.is_some(),
+            limit.is_some(),
+        )?;
+
+        let filter = Self::build_filter_document(filter, text);
+
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        collection
+            .delete_many(filter)
+            .session(&mut *session)
+            .await
+            .map_err(|error| {
+                classify_driver_error(
+                    "Failed to delete documents matching the typed query",
+                    OperationDomain::General,
+                    error,
+                )
+            })
+    }
+
+    /// Updates and returns the first matching document through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::update_one`]: the
+    /// same typed update construction, sorting, and array filters apply, the
+    /// returned document reflects the value after the update, and the update
+    /// participates in any transaction active on the session. Like
+    /// [`Query::update_one`], this method does not run model validation.
+    ///
+    /// ```ignore
+    /// let updated = User::query()
+    ///     .filter(|user| user.name.eq("User1"))
+    ///     .update_one_with_session(&mut session, |user| {
+    ///         user.active.set(true)
+    ///     })
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    /// - `build`: A closure producing the typed update expression.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(M))` containing the updated document.
+    /// - `Ok(None)` when no document matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as
+    /// [`Query::update_one`].
+    pub async fn update_one_with_session<F>(
+        self,
+        session: &mut ClientSession,
+        build: F,
+    ) -> Result<Option<M>, OxiModError>
+    where
+        F: FnOnce(&M::Fields) -> UpdateExpression,
+    {
+        let Self {
+            filter,
+            text,
+            sort,
+            array_filters,
+            error,
+            ..
+        } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        let fields = M::fields();
+        let update = build(&fields).into_document();
+
+        let filter = Self::build_filter_document(filter, text);
+
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        let mut operation = collection
+            .find_one_and_update(filter, update)
+            .return_document(ReturnDocument::After)
+            .session(&mut *session);
+
+        if let Some(sort) = sort {
+            operation = operation.sort(sort.into_document());
+        }
+
+        if !array_filters.is_empty() {
+            operation = operation.array_filters(array_filters);
+        }
+
+        operation.await.map_err(|error| {
+            classify_driver_error(
+                "Failed to update the first document matching the typed query",
+                OperationDomain::General,
+                error,
+            )
+        })
+    }
+
+    /// Updates every document matching this query through an explicit
+    /// [`ClientSession`].
+    ///
+    /// This is the session-aware counterpart to [`Query::update_all`]: the
+    /// same bulk-write preflight applies (sorting, skipping, limiting, and
+    /// pagination are rejected), the same typed update construction and
+    /// array filters apply, and the update participates in any transaction
+    /// active on the session. Like [`Query::update_all`], this method does
+    /// not run model validation.
+    ///
+    /// ```ignore
+    /// let result = User::query()
+    ///     .filter(|user| user.active.eq(false))
+    ///     .update_all_with_session(&mut session, |user| {
+    ///         user.status.set("inactive")
+    ///     })
+    ///     .await?;
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `session`: The session (and therefore transaction) to run under.
+    /// - `build`: A closure producing the typed update expression.
+    ///
+    /// # Returns
+    ///
+    /// An [`UpdateResult`] describing how many documents matched and were
+    /// modified.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiModError`] under the same conditions as
+    /// [`Query::update_all`].
+    ///
+    /// # Warning
+    ///
+    /// An empty query updates every document in the model's collection.
+    pub async fn update_all_with_session<F>(
+        self,
+        session: &mut ClientSession,
+        build: F,
+    ) -> Result<UpdateResult, OxiModError>
+    where
+        F: FnOnce(&M::Fields) -> UpdateExpression,
+    {
+        let Self {
+            filter,
+            text,
+            sort,
+            limit,
+            skip,
+            array_filters,
+            pagination,
+            error,
+            ..
+        } = self;
+
+        if let Some(error) = error {
+            return Err(error.into());
+        }
+
+        Self::validate_bulk_write_modifiers(
+            BulkWriteOperation::UpdateAll,
+            pagination,
+            sort.is_some(),
+            skip.is_some(),
+            limit.is_some(),
+        )?;
+
+        let fields = M::fields();
+        let update = build(&fields).into_document();
+
+        let filter = Self::build_filter_document(filter, text);
+
+        let client = session.client();
+        let collection = M::get_collection_from(&client)?;
+
+        let mut operation = collection
+            .update_many(filter, update)
+            .session(&mut *session);
 
         if !array_filters.is_empty() {
             operation = operation.array_filters(array_filters);

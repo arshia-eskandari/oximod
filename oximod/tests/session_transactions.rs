@@ -5,7 +5,7 @@
 //! directly. Transactions require the replica-set MongoDB test environment.
 
 use mongodb::{Client, bson::doc, bson::oid::ObjectId};
-use oximod::Model;
+use oximod::{Model, Queryable};
 use serde::{Deserialize, Serialize};
 use testresult::TestResult;
 
@@ -446,6 +446,406 @@ async fn ordinary_operations_do_not_join_an_open_transaction() -> TestResult {
         0,
         "the transactional write should be rolled back"
     );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_first_with_session_applies_sort_and_sees_uncommitted_writes
+#[tokio::test]
+async fn typed_first_with_session_applies_sort_and_sees_uncommitted_writes() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_first")]
+    pub struct Task {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        priority: i32,
+    }
+
+    let client = client().await?;
+    Task::clear_from(&client).await?;
+
+    Task::new()
+        .name("low")
+        .priority(5)
+        .save_from(&client)
+        .await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    Task::new()
+        .name("urgent")
+        .priority(1)
+        .save_with_session(&mut session)
+        .await?;
+
+    // Sorting selects the uncommitted document only inside the session.
+    let first = Task::query()
+        .sort_by(|task| task.priority.asc())
+        .first_with_session(&mut session)
+        .await?
+        .expect("a task should match");
+    assert_eq!(first.name, "urgent");
+
+    session.abort_transaction().await?;
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_all_with_session_iterates_session_cursor_with_modifiers
+#[tokio::test]
+async fn typed_all_with_session_iterates_session_cursor_with_modifiers() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_all")]
+    pub struct Item {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        rank: i32,
+        active: bool,
+    }
+
+    let client = client().await?;
+    Item::clear_from(&client).await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    for rank in 1..=5 {
+        Item::new()
+            .rank(rank)
+            .active(rank != 4)
+            .save_with_session(&mut session)
+            .await?;
+    }
+
+    // Filter, sort, skip, and limit apply to the session cursor: the active
+    // ranks are [1, 2, 3, 5]; skipping one and taking two yields [2, 3].
+    let items = Item::query()
+        .filter(|item| item.active.eq(true))
+        .sort_by(|item| item.rank.asc())
+        .skip(1)
+        .limit(2)
+        .all_with_session(&mut session)
+        .await?;
+
+    let ranks: Vec<i32> = items.iter().map(|item| item.rank).collect();
+    assert_eq!(ranks, vec![2, 3]);
+
+    // A sessionless reader sees none of the uncommitted documents.
+    assert_eq!(Item::count_from(doc! {}, &client).await?, 0);
+
+    session.abort_transaction().await?;
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_count_with_session_composes_filters
+#[tokio::test]
+async fn typed_count_with_session_composes_filters() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_count")]
+    pub struct Vote {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        topic: String,
+        weight: i32,
+    }
+
+    let client = client().await?;
+    Vote::clear_from(&client).await?;
+
+    Vote::new().topic("a").weight(1).save_from(&client).await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    Vote::new()
+        .topic("a")
+        .weight(3)
+        .save_with_session(&mut session)
+        .await?;
+    Vote::new()
+        .topic("b")
+        .weight(3)
+        .save_with_session(&mut session)
+        .await?;
+
+    // Composed filters apply and the count includes the session's own writes.
+    let count = Vote::query()
+        .filter(|vote| vote.topic.eq("a"))
+        .filter(|vote| vote.weight.gte(1))
+        .count_with_session(&mut session)
+        .await?;
+    assert_eq!(count, 2);
+
+    session.abort_transaction().await?;
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_update_one_with_session_applies_array_filters_and_rolls_back
+#[tokio::test]
+async fn typed_update_one_with_session_applies_array_filters_and_rolls_back() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[model(embedded)]
+    pub struct Address {
+        city: String,
+        active: bool,
+    }
+
+    #[derive(Model, Serialize, Deserialize, Debug, PartialEq)]
+    #[db("session_tx_test")]
+    #[collection("typed_update_one")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        addresses: Vec<Address>,
+    }
+
+    let client = client().await?;
+    User::clear_from(&client).await?;
+
+    let id = User::new()
+        .name("User1")
+        .addresses(vec![
+            Address::new().city("City1").active(false),
+            Address::new().city("City2").active(false),
+        ])
+        .save_from(&client)
+        .await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let updated = User::query()
+        .filter(|user| user.name.eq("User1"))
+        .array_filter(|user| {
+            user.addresses
+                .array_filter("address", |address| address.city.eq("City1"))
+        })
+        .update_one_with_session(&mut session, |user| {
+            user.addresses
+                .filtered("address", |address| address.active.set(true))
+        })
+        .await?
+        .expect("one user should be updated");
+
+    // The returned document reflects the post-update state and the array
+    // filter touched only the matching element.
+    assert!(updated.addresses[0].active);
+    assert!(!updated.addresses[1].active);
+
+    // A sessionless reader still sees the pre-transaction state.
+    let outside = User::find_by_id_from(id, &client)
+        .await?
+        .expect("document should exist outside the transaction");
+    assert!(!outside.addresses[0].active);
+
+    session.abort_transaction().await?;
+
+    let after_abort = User::find_by_id_from(id, &client)
+        .await?
+        .expect("document should still exist after abort");
+    assert!(
+        !after_abort.addresses[0].active,
+        "aborted typed update should roll back"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_update_all_with_session_persists_on_commit
+#[tokio::test]
+async fn typed_update_all_with_session_persists_on_commit() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_update_all")]
+    pub struct Message {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        channel: String,
+        archived: bool,
+    }
+
+    let client = client().await?;
+    Message::clear_from(&client).await?;
+
+    Message::new()
+        .channel("news")
+        .archived(false)
+        .save_from(&client)
+        .await?;
+    Message::new()
+        .channel("news")
+        .archived(false)
+        .save_from(&client)
+        .await?;
+    Message::new()
+        .channel("chat")
+        .archived(false)
+        .save_from(&client)
+        .await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let result = Message::query()
+        .filter(|message| message.channel.eq("news"))
+        .update_all_with_session(&mut session, |message| message.archived.set(true))
+        .await?;
+    assert_eq!(result.modified_count, 2);
+
+    session.commit_transaction().await?;
+
+    assert_eq!(
+        Message::count_from(doc! { "archived": true }, &client).await?,
+        2,
+        "committed bulk update should persist"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_delete_one_with_session_respects_sort_and_rolls_back
+#[tokio::test]
+async fn typed_delete_one_with_session_respects_sort_and_rolls_back() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_delete_one")]
+    pub struct Job {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        attempts: i32,
+    }
+
+    let client = client().await?;
+    Job::clear_from(&client).await?;
+
+    Job::new()
+        .name("old")
+        .attempts(9)
+        .save_from(&client)
+        .await?;
+    Job::new()
+        .name("new")
+        .attempts(1)
+        .save_from(&client)
+        .await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let deleted = Job::query()
+        .sort_by(|job| job.attempts.desc())
+        .delete_one_with_session(&mut session)
+        .await?
+        .expect("one job should be deleted");
+    assert_eq!(deleted.name, "old", "sorting should select the deleted job");
+
+    // The session no longer sees the deleted document.
+    assert_eq!(Job::query().count_with_session(&mut session).await?, 1);
+
+    session.abort_transaction().await?;
+
+    assert_eq!(
+        Job::count_from(doc! {}, &client).await?,
+        2,
+        "aborted typed delete should roll back"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_delete_all_with_session_persists_on_commit
+#[tokio::test]
+async fn typed_delete_all_with_session_persists_on_commit() -> TestResult {
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_delete_all")]
+    pub struct Draft {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        stale: bool,
+    }
+
+    let client = client().await?;
+    Draft::clear_from(&client).await?;
+
+    Draft::new().stale(true).save_from(&client).await?;
+    Draft::new().stale(true).save_from(&client).await?;
+    Draft::new().stale(false).save_from(&client).await?;
+
+    let mut session = client.start_session().await?;
+    session.start_transaction().await?;
+
+    let result = Draft::query()
+        .filter(|draft| draft.stale.eq(true))
+        .delete_all_with_session(&mut session)
+        .await?;
+    assert_eq!(result.deleted_count, 2);
+
+    session.commit_transaction().await?;
+
+    assert_eq!(
+        Draft::count_from(doc! {}, &client).await?,
+        1,
+        "committed bulk delete should persist"
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run typed_session_bulk_writes_reject_query_modifiers
+#[tokio::test]
+async fn typed_session_bulk_writes_reject_query_modifiers() -> TestResult {
+    use oximod::{BulkWriteOperation, OxiModError, QueryError, QueryModifier};
+
+    #[derive(Model, Serialize, Deserialize, Debug)]
+    #[db("session_tx_test")]
+    #[collection("typed_session_bulk_preflight")]
+    pub struct User {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+        name: String,
+        active: bool,
+    }
+
+    let client = client().await?;
+    let mut session = client.start_session().await?;
+
+    let delete_sort_error = User::query()
+        .sort_by(|user| user.name.asc())
+        .delete_all_with_session(&mut session)
+        .await
+        .expect_err("delete_all_with_session should reject sorting");
+
+    assert!(matches!(
+        delete_sort_error,
+        OxiModError::Query(QueryError::UnsupportedBulkWriteModifier {
+            operation: BulkWriteOperation::DeleteAll,
+            modifier: QueryModifier::Sort,
+        })
+    ));
+
+    let update_limit_error = User::query()
+        .limit(1)
+        .update_all_with_session(&mut session, |user| user.active.set(true))
+        .await
+        .expect_err("update_all_with_session should reject limits");
+
+    assert!(matches!(
+        update_limit_error,
+        OxiModError::Query(QueryError::UnsupportedBulkWriteModifier {
+            operation: BulkWriteOperation::UpdateAll,
+            modifier: QueryModifier::Limit,
+        })
+    ));
 
     Ok(())
 }
