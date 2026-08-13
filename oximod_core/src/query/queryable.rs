@@ -9,6 +9,7 @@
 //! [`FieldSchema`](crate::query::FieldSchema) for nested fields instead and do
 //! not create collection queries.
 
+use crate::aggregation::Aggregation;
 use crate::query::builder::Query;
 
 /// A collection-backed model that supports OxiMod's typed-query API.
@@ -97,6 +98,37 @@ pub trait Queryable: Sized {
     #[must_use = "queries do nothing unless an execution method is called"]
     fn query() -> Query<Self> {
         Query::new()
+    }
+
+    /// Creates an empty typed aggregation for this collection model.
+    ///
+    /// The aggregation can be configured with typed stages, raw stages, an
+    /// output type, and driver options before execution.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let adults = User::aggregate()
+    ///     .match_(|user| user.active.eq(true) & user.age.gte(18))
+    ///     .sort_by(|user| user.age.desc())
+    ///     .limit(20)
+    ///     .all()
+    ///     .await?;
+    /// ```
+    ///
+    /// The aggregation initially deserializes output as the model itself.
+    /// Pipelines whose final document shape is no longer the model select a
+    /// different output type with
+    /// [`Aggregation::with_type`](crate::aggregation::Aggregation::with_type).
+    ///
+    /// Creating an aggregation does not communicate with MongoDB. An
+    /// execution method such as
+    /// [`Aggregation::all`](crate::aggregation::Aggregation::all) or
+    /// [`Aggregation::first`](crate::aggregation::Aggregation::first) must be
+    /// called.
+    #[must_use = "aggregations do nothing unless an execution method is called"]
+    fn aggregate() -> Aggregation<Self> {
+        Aggregation::new()
     }
 }
 

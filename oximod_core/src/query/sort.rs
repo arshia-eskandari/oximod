@@ -122,6 +122,29 @@ impl SortExpression {
         self.fields.extend(other.fields);
     }
 
+    /// Appends another sort expression, returning the combined expression.
+    ///
+    /// Existing fields keep their precedence: MongoDB evaluates sort keys
+    /// from left to right, so the fields of `self` sort before the fields of
+    /// `next`. When the same field appears twice, the later direction
+    /// replaces the earlier one in the final BSON document.
+    ///
+    /// This is the value-composing form of
+    /// [`Query::then_sort_by`](crate::query::Query::then_sort_by). It lets a
+    /// single sort expression carry several keys, which aggregation uses to
+    /// build one multi-key `$sort` stage:
+    ///
+    /// ```ignore
+    /// let users = User::aggregate()
+    ///     .sort_by(|user| user.role.asc().then(user.age.desc()))
+    ///     .all()
+    ///     .await?;
+    /// ```
+    pub fn then(mut self, next: Self) -> Self {
+        self.extend(next);
+        self
+    }
+
     /// Converts this expression into a MongoDB sort document.
     ///
     /// Field insertion order is preserved. Because BSON documents cannot

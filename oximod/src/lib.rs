@@ -1254,6 +1254,71 @@ pub use oximod_macros::Model;
 /// collection.
 pub use oximod_core::query::Queryable;
 
+// --- Aggregation -----------------------------------------------------------
+
+/// Type-safe MongoDB aggregation pipeline for a collection model.
+///
+/// Aggregations are created with [`Queryable::aggregate`] and executed with
+/// `all`, `first`, their `_from` explicit-client counterparts, or their
+/// `_with_session` session counterparts. Stage methods append at their call
+/// position and the pipeline is never reordered.
+///
+/// The builder carries a source model type `M`, which provides typed fields
+/// for `match_`, `sort_by`, and `raw_stage_with`, and an output type `R`
+/// selected with `with_type`, which controls how pipeline output is
+/// deserialized. The default output type is the model itself.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use mongodb::bson::{doc, oid::ObjectId};
+/// use oximod::{Model, OxiModError, Queryable};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("users")]
+/// struct User {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     role: String,
+///     age: i32,
+///     active: bool,
+/// }
+///
+/// #[derive(Debug, Deserialize)]
+/// struct RoleSummary {
+///     #[serde(rename = "_id")]
+///     role: String,
+///     count: i64,
+/// }
+///
+/// # async fn run() -> Result<(), OxiModError> {
+/// let summaries = User::aggregate()
+///     .match_(|user| user.active.eq(true))
+///     .raw_stage_with(|user| {
+///         doc! {
+///             "$group": {
+///                 "_id": format!("${}", user.role.name()),
+///                 "count": { "$sum": 1 },
+///             },
+///         }
+///     })
+///     .with_type::<RoleSummary>()
+///     .all()
+///     .await?;
+/// # let _ = summaries;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Raw stages are passed to MongoDB unchanged and are not type-checked;
+/// `raw_stage_with` keeps source field names compiler-linked when the
+/// generated fields are used. Direct collection access through
+/// [`Model::get_collection`] remains available for aggregation needs outside
+/// this builder, such as streaming cursors or database-level aggregation.
+pub use oximod_core::aggregation::Aggregation;
+
 /// Option accepted by typed MongoDB regular-expression queries.
 ///
 /// The variants map to MongoDB's `i`, `m`, `s`, and `x` options:

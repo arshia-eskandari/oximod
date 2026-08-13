@@ -41,9 +41,10 @@ pub enum OperationDomain {
 
     /// An aggregation-domain operation.
     ///
-    /// Reserved: no current OxiMod call site carries this domain. The
-    /// precedence is defined so that any future authorized aggregation
-    /// surface classifies consistently.
+    /// Carried by the aggregation execution path in
+    /// [`crate::aggregation::Aggregation`], so non-connectivity,
+    /// non-serialization driver failures during aggregation classify as
+    /// [`OxiModError::Aggregation`].
     Aggregation,
 }
 
