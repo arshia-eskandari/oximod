@@ -24,6 +24,8 @@
 //! - type-aware filters, sorting, pagination, text search, and geospatial
 //!   queries;
 //! - typed single-document and bulk updates and deletions;
+//! - a first-class aggregation builder mixing typed stages, raw stages, and
+//!   typed output;
 //! - explicit session-aware operations for MongoDB transactions.
 //!
 //! ## Quick start
@@ -392,19 +394,21 @@
 //!
 //! OxiMod exposes both `mongodb::Collection<Self>` and
 //! `mongodb::Collection<Document>` in global and explicit-client forms. These
-//! escape hatches are intended for aggregation pipelines, driver options,
-//! compound indexes, and any MongoDB operation outside OxiMod's convenience
-//! APIs.
+//! escape hatches are intended for aggregation behavior outside the
+//! [`Aggregation`] builder (such as cursor streaming or database-level
+//! pipelines), driver options, compound indexes, and any MongoDB operation
+//! outside OxiMod's convenience APIs.
 //!
 //! ## Sessions and transactions
 //!
-//! Model operations and typed-query execution terminals have explicit
-//! session-aware counterparts ending in `_with_session`, such as
-//! [`Model::save_with_session`] and `Query::update_one_with_session`. Each
-//! takes `&mut mongodb::ClientSession`, resolves the model collection from
-//! the session's own client, and participates in any transaction active on
-//! that session while keeping OxiMod's typed query construction, validation,
-//! and error classification.
+//! Model operations, typed-query execution terminals, and aggregation
+//! execution terminals have explicit session-aware counterparts ending in
+//! `_with_session`, such as [`Model::save_with_session`],
+//! `Query::update_one_with_session`, and `Aggregation::all_with_session`.
+//! Each takes `&mut mongodb::ClientSession`, resolves the model collection
+//! from the session's own client, and participates in any transaction active
+//! on that session while keeping OxiMod's typed query construction,
+//! validation, and error classification.
 //!
 //! Session and transaction lifecycle — `start_session`,
 //! `start_transaction`, `commit_transaction`, `abort_transaction`, and any
@@ -498,6 +502,8 @@
 //! session's own client. There is no other explicit-client typed-query
 //! executor; use the `_from` model methods or an explicitly obtained MongoDB
 //! collection when global state is unsuitable and no session is involved.
+//! The aggregation builder does not share this limitation: its `_from`
+//! terminals execute through an explicit client.
 //!
 //! The examples in this section use the following model:
 //!
@@ -843,6 +849,66 @@
 //! ignoring them. An unfiltered bulk write affects the entire collection.
 //! Array filters configured with `array_filter()` are applied to typed update
 //! operations.
+//!
+//! ## Aggregation
+//!
+//! Import [`Queryable`] to call `ModelType::aggregate()`. The [`Aggregation`]
+//! builder constructs an ordered MongoDB aggregation pipeline from typed
+//! stages (`match_`, `sort_by`, `skip`, `limit`, `text`) and raw stages
+//! (`raw_stage`, `raw_stage_with`, `raw_pipeline`), then executes it with
+//! `all`/`first`, their `_from` explicit-client counterparts, or their
+//! `_with_session` session counterparts. Stages append at their call
+//! position; the pipeline is never reordered.
+//!
+//! Because a pipeline may reshape its stream, the output type is selected
+//! independently of the source model with `with_type`:
+//!
+//! ```rust,no_run
+//! # use mongodb::bson::{doc, oid::ObjectId};
+//! # use oximod::{Model, OxiModError, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("users")]
+//! # struct User {
+//! #     #[serde(skip_serializing_if = "Option::is_none")]
+//! #     _id: Option<ObjectId>,
+//! #     role: String,
+//! #     active: bool,
+//! # }
+//! #[derive(Debug, Deserialize)]
+//! struct RoleSummary {
+//!     #[serde(rename = "_id")]
+//!     role: String,
+//!     count: i64,
+//! }
+//!
+//! # async fn run() -> Result<(), OxiModError> {
+//! let summaries = User::aggregate()
+//!     .match_(|user| user.active.eq(true))
+//!     .raw_stage_with(|user| {
+//!         doc! {
+//!             "$group": {
+//!                 "_id": format!("${}", user.role.name()),
+//!                 "count": { "$sum": 1 },
+//!             },
+//!         }
+//!     })
+//!     .with_type::<RoleSummary>()
+//!     .all()
+//!     .await?;
+//! # let _ = summaries;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Raw stage BSON is passed to MongoDB unchanged and is not type-checked;
+//! `raw_stage_with` keeps the source field references it takes from the
+//! generated fields compiler-linked. Aggregation failures classify as
+//! `Connection`, `Serialization`, or [`OxiModError::Aggregation`] under the
+//! precedence described in [Errors](#errors). Direct collection access
+//! remains available for aggregation behavior the builder does not
+//! represent.
 //!
 //! ## Lifecycle hooks
 //!
