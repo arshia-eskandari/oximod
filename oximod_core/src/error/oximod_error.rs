@@ -80,8 +80,10 @@ impl std::fmt::Display for ValidationErrors {
 ///    client-infrastructure failure, during any operation;
 /// 2. [`Serialization`](OxiModError::Serialization) — BSON encoding or
 ///    decoding failure, in either direction;
-/// 3. [`Index`](OxiModError::Index) / [`Aggregation`](OxiModError::Aggregation)
-///    — remaining failures of the failing operation's domain;
+/// 3. [`Index`](OxiModError::Index) /
+///    [`Aggregation`](OxiModError::Aggregation) /
+///    [`BulkWrite`](OxiModError::BulkWrite) — remaining failures of the
+///    failing operation's domain;
 /// 4. [`Database`](OxiModError::Database) — the conservative fallback for
 ///    every remaining driver failure.
 ///
@@ -184,6 +186,34 @@ pub enum OxiModError {
     #[error("Aggregation error: {msg}")]
     Aggregation {
         /// Human-readable context describing the aggregation step that failed.
+        msg: String,
+        /// The underlying error.
+        #[source]
+        source: BoxError,
+    },
+
+    /// Non-connectivity, non-serialization failure while materializing or
+    /// executing a MongoDB bulk write.
+    ///
+    /// Covers server-side rejection of the `bulkWrite` command — including
+    /// a server too old to support it (MongoDB 8.0+ is required) — and
+    /// individual write failures within a batch. Applies only after the
+    /// [`Connection`](OxiModError::Connection) and
+    /// [`Serialization`](OxiModError::Serialization) precedence: a
+    /// connectivity failure during a bulk write classifies as `Connection`,
+    /// and a BSON encoding failure while materializing a queued insert or
+    /// replacement classifies as `Serialization`.
+    ///
+    /// When individual writes fail, the preserved
+    /// [`mongodb::error::Error`] source carries a
+    /// [`mongodb::error::BulkWriteError`] whose `write_errors` map is keyed
+    /// by the original queued operation index and whose `partial_result`
+    /// describes the writes that succeeded. Use
+    /// [`OxiModError::bulk_write_error`] to reach it without manual
+    /// downcasting.
+    #[error("Bulk write error: {msg}")]
+    BulkWrite {
+        /// Human-readable context describing the bulk-write step that failed.
         msg: String,
         /// The underlying error.
         #[source]
@@ -316,6 +346,18 @@ impl OxiModError {
         }
     }
 
+    /// Creates a bulk-write error with a message and underlying source error.
+    ///
+    /// This helper sets the variant unconditionally; it performs no
+    /// classification. OxiMod's own operations classify driver failures by
+    /// failure class before choosing a variant.
+    pub fn bulk_write(msg: impl Into<String>, source: impl Into<BoxError>) -> Self {
+        Self::BulkWrite {
+            msg: msg.into(),
+            source: source.into(),
+        }
+    }
+
     /// Creates an index error with a message and underlying source error.
     ///
     /// This helper sets the variant unconditionally; it performs no
@@ -387,12 +429,95 @@ impl OxiModError {
             _ => None,
         }
     }
+
+    /// Returns the driver's per-operation bulk-write failure detail.
+    ///
+    /// This is a convenience accessor for [`OxiModError::BulkWrite`]
+    /// failures whose preserved driver source carries individual write
+    /// failures: the returned [`mongodb::error::BulkWriteError`] maps each
+    /// failed write back to its **original queued operation index** through
+    /// `write_errors` and exposes the successful portion of the batch
+    /// through `partial_result`.
+    ///
+    /// Returns `None` for every other variant, and for `BulkWrite` failures
+    /// whose source is not an individual-write failure (for example a
+    /// server-level command rejection); the full driver error remains
+    /// available through [`std::error::Error::source`].
+    ///
+    /// ```rust,ignore
+    /// match Job::bulk_write().insert_many(jobs).ordered(false).execute().await {
+    ///     Err(error) => {
+    ///         if let Some(failure) = error.bulk_write_error() {
+    ///             for (index, write_error) in &failure.write_errors {
+    ///                 eprintln!("operation {index} failed: {}", write_error.message);
+    ///             }
+    ///         }
+    ///     }
+    ///     Ok(result) => println!("inserted {}", result.inserted_count),
+    /// }
+    /// ```
+    pub fn bulk_write_error(&self) -> Option<&mongodb::error::BulkWriteError> {
+        match self {
+            Self::BulkWrite { source, .. } => {
+                let driver = source.downcast_ref::<mongodb::error::Error>()?;
+
+                match &*driver.kind {
+                    mongodb::error::ErrorKind::BulkWrite(bulk_write_error) => {
+                        Some(bulk_write_error)
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::OxiModError;
     use crate::error::query_error::QueryError;
+
+    #[test]
+    fn bulk_write_error_accessor_exposes_driver_write_failures() {
+        let mut failure = mongodb::error::BulkWriteError::default();
+        failure.write_errors.insert(
+            249,
+            mongodb::bson::from_bson(mongodb::bson::bson!({
+                "code": 11000,
+                "errmsg": "E11000 duplicate key error",
+            }))
+            .expect("a WriteError should deserialize from a server-shaped value"),
+        );
+
+        let driver_error =
+            mongodb::error::Error::from(mongodb::error::ErrorKind::BulkWrite(failure));
+        let error = OxiModError::bulk_write("ctx", driver_error);
+
+        let bulk_write_error = error
+            .bulk_write_error()
+            .expect("the driver bulk-write failure should be reachable");
+
+        assert_eq!(bulk_write_error.write_errors.len(), 1);
+        assert_eq!(bulk_write_error.write_errors[&249].code, 11000);
+    }
+
+    #[test]
+    fn bulk_write_error_accessor_is_none_for_non_bulk_variants_and_sources() {
+        let io_error = std::io::Error::other("connection refused");
+        assert!(
+            OxiModError::connection("ctx", io_error)
+                .bulk_write_error()
+                .is_none()
+        );
+
+        let command_failure = mongodb::error::Error::custom("not a bulk write failure");
+        assert!(
+            OxiModError::bulk_write("ctx", command_failure)
+                .bulk_write_error()
+                .is_none()
+        );
+    }
 
     #[test]
     fn query_error_converts_into_oximod_error() {

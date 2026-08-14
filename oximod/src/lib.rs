@@ -1025,10 +1025,17 @@ pub use oximod_core::error::oximod_error::OxiModError;
 /// ```
 pub use oximod_core::error::query_error::QueryError;
 
-/// A typed bulk-write operation named by [`QueryError`].
+/// A write operation named by query-preflight diagnostics in [`QueryError`].
+///
+/// This enum identifies which operation rejected an unsupported query
+/// modifier in [`QueryError::UnsupportedBulkWriteModifier`]. It covers the
+/// multi-document typed-query operations (`update_all` / `delete_all`) and
+/// the operations queued through the [`BulkWrite`] builder. It names
+/// operations for diagnostics only; it is not the bulk-write builder's
+/// queued operation type.
 pub use oximod_core::error::query_error::BulkWriteOperation;
 
-/// A query modifier rejected by a typed bulk write.
+/// A query modifier rejected by a multi-document or bulk-write operation.
 pub use oximod_core::error::query_error::QueryModifier;
 
 /// One field-level validation failure.
@@ -1384,6 +1391,100 @@ pub use oximod_core::query::Queryable;
 /// [`Model::get_collection`] remains available for aggregation needs outside
 /// this builder, such as streaming cursors or database-level aggregation.
 pub use oximod_core::aggregation::Aggregation;
+
+// --- Bulk writes -----------------------------------------------------------
+
+/// A typed batch of MongoDB write operations for one collection model.
+///
+/// Bulk writes are created with `ModelType::bulk_write()` (a [`Model`]
+/// method) and executed with `execute`, `execute_from`,
+/// `execute_with_session`, or their `_verbose` counterparts. The batch
+/// queues inserts, typed updates, replacements, and typed deletions —
+/// mixing operation kinds freely — against one model's collection and sends
+/// them to MongoDB as a **single** `bulkWrite` command, preserving queue
+/// order exactly.
+///
+/// Bulk writes require **MongoDB Server 8.0+**. Queued whole-model inserts
+/// and replacements run `#[validate]` for every queued value before any
+/// network communication; typed updates remain non-validating. Lifecycle
+/// hooks never run for bulk operations, and declared indexes are never
+/// established — initialize them explicitly with `init_indexes[_from]`
+/// before relying on unique constraints.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use mongodb::bson::oid::ObjectId;
+/// use oximod::{Model, OxiModError, Queryable};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize, Deserialize, Model)]
+/// #[db("app")]
+/// #[collection("jobs")]
+/// struct Job {
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     _id: Option<ObjectId>,
+///     #[index(unique)]
+///     dedupe_key: String,
+///     status: String,
+/// }
+///
+/// # async fn run() -> Result<(), OxiModError> {
+/// Job::init_indexes().await?;
+///
+/// let result = Job::bulk_write()
+///     .insert(Job::new().dedupe_key("job-1").status("queued"))
+///     .insert(Job::new().dedupe_key("job-2").status("queued"))
+///     .update_one(
+///         Job::query().filter(|job| job.dedupe_key.eq("job-3")),
+///         |job| job.status.set("ready"),
+///     )
+///     .delete_many(Job::query().filter(|job| job.status.eq("expired")))
+///     .ordered(false)
+///     .execute()
+///     .await?;
+///
+/// println!("inserted {}", result.inserted_count);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// When individual writes fail, the returned [`OxiModError::BulkWrite`]
+/// preserves the driver's failure detail — including each failed
+/// operation's original queued index and any partial result — reachable
+/// through [`OxiModError::bulk_write_error`].
+///
+/// A batch targets exactly one model and therefore one namespace.
+/// Cross-namespace bulk writes remain available through the MongoDB
+/// driver's `Client::bulk_write` directly.
+pub use oximod_core::bulk_write::BulkWrite;
+
+/// Driver options applied to a whole bulk-write batch.
+///
+/// Passed with `BulkWrite::with_options`. Covers ordered execution,
+/// server-side document-validation bypass, a comment, `let` variables, and
+/// the write concern. `bypass_document_validation` is MongoDB's server-side
+/// option and does not disable OxiMod's client-side `#[validate]` preflight
+/// for queued whole-model values.
+///
+/// This is the MongoDB driver's own options type, re-exported for
+/// convenience.
+pub use mongodb::options::BulkWriteOptions;
+
+/// Summary counts returned by `BulkWrite::execute`-family terminals.
+///
+/// Contains the total inserted, matched, modified, upserted, and deleted
+/// counts across the whole batch. This is the MongoDB driver's own result
+/// type, re-exported for convenience.
+pub use mongodb::results::SummaryBulkWriteResult;
+
+/// Per-operation results returned by `BulkWrite::execute_verbose`-family
+/// terminals.
+///
+/// Contains the summary counts plus per-operation insert, update, and
+/// delete results keyed by each operation's original queued index. This is
+/// the MongoDB driver's own result type, re-exported for convenience.
+pub use mongodb::results::VerboseBulkWriteResult;
 
 /// Option accepted by typed MongoDB regular-expression queries.
 ///

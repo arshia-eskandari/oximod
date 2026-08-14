@@ -14,8 +14,8 @@
 //!
 //! 1. `Connection` — connectivity/client-infrastructure driver kinds;
 //! 2. `Serialization` — BSON encode/decode driver kinds;
-//! 3. the operation domain (`Index` or `Aggregation`) for every remaining
-//!    kind, when the failing operation carries that domain;
+//! 3. the operation domain (`Index`, `Aggregation`, or `BulkWrite`) for
+//!    every remaining kind, when the failing operation carries that domain;
 //! 4. `Database` — the conservative fallback for every remaining kind,
 //!    including future kinds of the `#[non_exhaustive]` driver enum.
 //!
@@ -46,6 +46,14 @@ pub enum OperationDomain {
     /// non-serialization driver failures during aggregation classify as
     /// [`OxiModError::Aggregation`].
     Aggregation,
+
+    /// A bulk-write-domain operation.
+    ///
+    /// Carried by the bulk-write materialization and execution paths in
+    /// [`crate::bulk_write::BulkWrite`], so non-connectivity,
+    /// non-serialization driver failures during a bulk write classify as
+    /// [`OxiModError::BulkWrite`].
+    BulkWrite,
 }
 
 /// Failure class a driver error kind belongs to, before domain refinement.
@@ -99,6 +107,7 @@ pub fn classify_driver_error(
         FailureClass::Operational => match domain {
             OperationDomain::Index => OxiModError::index(msg, error),
             OperationDomain::Aggregation => OxiModError::aggregation(msg, error),
+            OperationDomain::BulkWrite => OxiModError::bulk_write(msg, error),
             OperationDomain::General => OxiModError::database(msg, error),
         },
     }
@@ -189,6 +198,14 @@ mod tests {
         assert!(matches!(error, OxiModError::Connection { .. }));
     }
 
+    #[test]
+    fn connection_precedence_outranks_bulk_write_domain() {
+        let error =
+            classify_driver_error("ctx", OperationDomain::BulkWrite, driver_error(io_kind()));
+
+        assert!(matches!(error, OxiModError::Connection { .. }));
+    }
+
     // Serialization family: both encode and decode kinds classify as
     // Serialization, and outrank the operation domain.
     #[test]
@@ -219,6 +236,17 @@ mod tests {
             "ctx",
             OperationDomain::Index,
             driver_error(bson_deserialization_kind()),
+        );
+
+        assert!(matches!(error, OxiModError::Serialization { .. }));
+    }
+
+    #[test]
+    fn serialization_precedence_outranks_bulk_write_domain() {
+        let error = classify_driver_error(
+            "ctx",
+            OperationDomain::BulkWrite,
+            driver_error(bson_serialization_kind()),
         );
 
         assert!(matches!(error, OxiModError::Serialization { .. }));
@@ -270,6 +298,25 @@ mod tests {
         );
 
         assert!(matches!(error, OxiModError::Aggregation { .. }));
+    }
+
+    #[test]
+    fn bulk_write_domain_refines_operational_failure_to_bulk_write() {
+        let error = classify_driver_error(
+            "ctx",
+            OperationDomain::BulkWrite,
+            driver_error(command_kind(2)),
+        );
+
+        assert!(matches!(error, OxiModError::BulkWrite { .. }));
+    }
+
+    #[test]
+    fn bulk_write_domain_refines_individual_write_failures_to_bulk_write() {
+        let kind = ErrorKind::BulkWrite(mongodb::error::BulkWriteError::default());
+        let error = classify_driver_error("ctx", OperationDomain::BulkWrite, driver_error(kind));
+
+        assert!(matches!(error, OxiModError::BulkWrite { .. }));
     }
 
     // Fallback family: remaining current kinds — and, structurally, future

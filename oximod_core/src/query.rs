@@ -35,6 +35,9 @@ mod update_expression;
 
 // Core typed-query API.
 pub use builder::Query;
+
+// Internal extraction consumed by the bulk-write builder.
+pub(crate) use builder::QueryParts;
 pub use expression::Expression;
 pub use field::{Field, RegexOption};
 pub use queryable::Queryable;

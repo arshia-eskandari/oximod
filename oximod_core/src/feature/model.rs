@@ -5,9 +5,11 @@
 //! [`ModelCore`] trait and mode markers to share validation behavior with
 //! models declared using `#[model(embedded)]`.
 
+use crate::bulk_write::BulkWrite;
 use crate::error::classify::{OperationDomain, classify_driver_error};
 use crate::error::oximod_error::OxiModError;
 use crate::feature::conn::client::OxiClient;
+use crate::query::Queryable;
 use async_trait::async_trait;
 use mongodb::{
     Client, ClientSession, Collection as MongoCollection,
@@ -963,5 +965,41 @@ pub trait Model:
         let client_arc = OxiClient::global()?;
         let client: &Client = client_arc.as_ref();
         Self::count_from(filter, client).await
+    }
+
+    /// Creates an empty typed bulk-write batch for this model.
+    ///
+    /// The batch queues insert, update, replace, and delete intentions —
+    /// mixing operation kinds freely — against this model's collection and
+    /// executes them as a **single** MongoDB `bulkWrite` command through
+    /// [`BulkWrite::execute`], [`BulkWrite::execute_from`], or
+    /// [`BulkWrite::execute_with_session`] (or their `_verbose` variants).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let result = Job::bulk_write()
+    ///     .insert(job1)
+    ///     .insert(job2)
+    ///     .update_one(
+    ///         Job::query().filter(|job| job.dedupe_key.eq("job-3")),
+    ///         |job| job.status.set("ready"),
+    ///     )
+    ///     .ordered(false)
+    ///     .execute()
+    ///     .await?;
+    /// ```
+    ///
+    /// Creating a batch does not communicate with MongoDB. Bulk writes
+    /// require MongoDB Server 8.0+, validate queued whole-model values
+    /// before any network communication, never invoke lifecycle hooks, and
+    /// never establish declared indexes — see [`BulkWrite`] for the
+    /// complete semantics.
+    #[must_use = "bulk writes do nothing unless an execution method is called"]
+    fn bulk_write() -> BulkWrite<Self>
+    where
+        Self: Queryable,
+    {
+        BulkWrite::new()
     }
 }
