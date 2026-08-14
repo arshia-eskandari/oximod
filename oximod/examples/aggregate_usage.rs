@@ -1,4 +1,4 @@
-//! Generate a sales summary with MongoDB's aggregation pipeline.
+//! Generate a sales summary with OxiMod's first-class aggregation API.
 //!
 //! Run with:
 //!
@@ -10,17 +10,19 @@
 //!
 //! - initialize OxiMod's global MongoDB client;
 //! - construct and save models with generated fluent setters;
-//! - use a generated field default;
-//! - access the underlying typed MongoDB collection;
-//! - build a raw aggregation pipeline with the MongoDB driver;
-//! - deserialize aggregation results into a dedicated Rust type.
+//! - start an aggregation with `Order::aggregate()`;
+//! - filter with a typed `$match` stage built from generated fields;
+//! - reshape the stream with a raw `$group` stage whose source field names
+//!   stay compiler-linked through `raw_stage_with`;
+//! - deserialize the reshaped output into a dedicated Rust type with
+//!   `with_type`;
+//! - execute with `all()` and print a deterministic report.
 //!
 //! Set `MONGODB_URI` in the environment or in a `.env` file before running
 //! the example.
 
-use futures_util::TryStreamExt;
-use mongodb::bson::{doc, from_document, oid::ObjectId};
-use oximod::{Model, OxiClient};
+use mongodb::bson::{doc, oid::ObjectId};
+use oximod::{Model, OxiClient, Queryable};
 use serde::{Deserialize, Serialize};
 
 // An order stored in MongoDB.
@@ -50,7 +52,9 @@ struct Order {
 
 /// The shape produced by the aggregation pipeline.
 ///
-/// MongoDB stores the grouping key in `_id`, so Serde maps that field to the
+/// The `$group` stage replaces the order shape entirely, so the pipeline
+/// output is deserialized into this dedicated type instead of `Order`.
+/// MongoDB stores the grouping key in `_id`; Serde maps that field to the
 /// more descriptive Rust name `category`.
 #[derive(Debug, Deserialize)]
 struct CategorySummary {
@@ -76,49 +80,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     seed_orders().await?;
 
-    // OxiMod returns MongoDB's typed `Collection<Order>`. That collection can
-    // use driver features directly when an operation is intentionally outside
-    // OxiMod's higher-level helpers.
-    let collection = Order::get_collection()?;
-
-    let pipeline = vec![
-        // Exclude pending orders from the revenue report.
-        doc! {
-            "$match": {
-                "status": "paid",
-            },
-        },
-        // Produce one report row per product category.
-        doc! {
-            "$group": {
-                "_id": "$category",
-                "order_count": {
-                    "$sum": 1,
-                },
-                "total_units": {
-                    "$sum": "$quantity",
-                },
-                "total_revenue": {
-                    "$sum": {
-                        "$multiply": [
-                            "$quantity",
-                            "$unit_price",
-                        ],
+    // The pipeline runs in exactly this stage order:
+    //
+    // 1. a typed `$match` keeps only paid orders — the field paths come from
+    //    the generated fields, so a renamed or removed model field becomes a
+    //    compile error;
+    // 2. a raw `$group` produces one report row per category. Its stage body
+    //    is ordinary MongoDB BSON, but `raw_stage_with` keeps the *source*
+    //    field references (`$category`, `$quantity`, `$unit_price`)
+    //    compiler-linked;
+    // 3. a raw `$sort` orders by the computed revenue, which only exists in
+    //    the pipeline stream, with the category key as a deterministic
+    //    tiebreaker.
+    //
+    // After the `$group` stage the documents no longer look like `Order`, so
+    // `with_type` selects the summary type the results deserialize into.
+    let summaries = Order::aggregate()
+        .match_(|order| order.status.eq("paid"))
+        .raw_stage_with(|order| {
+            doc! {
+                "$group": {
+                    "_id": format!("${}", order.category.name()),
+                    "order_count": {
+                        "$sum": 1,
+                    },
+                    "total_units": {
+                        "$sum": format!("${}", order.quantity.name()),
+                    },
+                    "total_revenue": {
+                        "$sum": {
+                            "$multiply": [
+                                format!("${}", order.quantity.name()),
+                                format!("${}", order.unit_price.name()),
+                            ],
+                        },
                     },
                 },
-            },
-        },
-        // Display the highest-revenue category first. The secondary sort keeps
-        // the output deterministic if two categories have equal revenue.
-        doc! {
+            }
+        })
+        .raw_stage(doc! {
             "$sort": {
                 "total_revenue": -1,
                 "_id": 1,
             },
-        },
-    ];
-
-    let mut cursor = collection.aggregate(pipeline).await?;
+        })
+        .with_type::<CategorySummary>()
+        .all()
+        .await?;
 
     println!("Paid-order revenue by category");
     println!("-----------------------------------------------");
@@ -127,9 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Category", "Orders", "Units", "Revenue"
     );
 
-    while let Some(document) = cursor.try_next().await? {
-        let summary: CategorySummary = from_document(document)?;
-
+    for summary in summaries {
         println!(
             "{:<14} {:>8} {:>8} ${:>10.2}",
             summary.category, summary.order_count, summary.total_units, summary.total_revenue,
@@ -138,6 +144,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
     println!("The pending order was intentionally excluded.");
+
+    // For aggregation needs outside the builder — streaming cursors,
+    // database-level pipelines, or driver features OxiMod does not wrap —
+    // the raw MongoDB collection remains available:
+    //
+    //     let collection = Order::get_collection()?;
+    //     let cursor = collection.aggregate(pipeline).await?;
 
     Ok(())
 }

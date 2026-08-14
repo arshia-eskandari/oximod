@@ -1,5 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+/// Typed MongoDB aggregation pipeline construction and execution.
+pub mod aggregation;
+
 /// Error and validation types used by OxiMod operations.
 pub mod error;
 

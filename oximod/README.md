@@ -26,7 +26,7 @@ Use OxiMod when you want concise, expressive model code and compile-time guidanc
 * `mongodb::Collection<Model>`;
 * `mongodb::Collection<Document>`;
 * raw BSON filters and updates;
-* aggregation pipelines;
+* raw aggregation pipelines;
 * sessions, compound indexes, and advanced driver options.
 
 ### Highlights
@@ -39,6 +39,7 @@ Use OxiMod when you want concise, expressive model code and compile-time guidanc
 * Global-client and explicit-client persistence workflows
 * Type-aware filters, sorting, pagination, text search, and geospatial queries
 * Typed single-document and bulk updates and deletions
+* First-class aggregation builder mixing typed stages, raw stages, and typed output
 * Typed nested paths for embedded documents and arrays of embedded models
 * Explicit session-aware operations for MongoDB transactions
 * Optional lifecycle hooks for save and `_id` helper operations
@@ -843,6 +844,125 @@ let result = User::query()
 
 ---
 
+## Aggregation
+
+Import `Queryable` to call `ModelType::aggregate()`:
+
+```rust
+use oximod::Queryable;
+```
+
+`aggregate()` starts an ordered aggregation pipeline for the model's collection. Every stage method appends exactly at its call position; OxiMod never reorders, merges, or rewrites the pipeline, because MongoDB evaluates aggregation stages strictly in order.
+
+```rust
+let adults = User::aggregate()
+    .match_(|user| user.active.eq(true) & user.age.gte(18))
+    .sort_by(|user| user.age.desc().then(user.name.asc()))
+    .limit(20)
+    .all()
+    .await?;
+```
+
+### Typed stages
+
+* `match_(...)` appends a `$match` stage built from the same typed expressions as `query().filter(...)`. Repeated calls append repeated stages in call order; they are never merged.
+* `sort_by(...)` appends a `$sort` stage. One stage carries several keys by chaining `then`: `user.role.asc().then(user.age.desc())`. Calling `sort_by` again appends another stage rather than replacing the first, because sort position is pipeline semantics.
+* `skip(n)` and `limit(n)` append `$skip` and `$limit` stages. Unlike `Query`, these are ordered stages, not query-wide modifiers.
+* `text(...)` appends a `$match` stage containing `$text`. MongoDB requires it to be the pipeline's first stage and the collection needs a text index.
+
+Typed stages use serialized field names, following supported Serde renames, exactly like typed queries. MongoDB forbids some query operators inside an aggregation `$match`, notably `$near` and `$nearSphere`; geospatial distance pipelines use a raw `$geoNear` stage as the first pipeline stage instead.
+
+### Raw stages
+
+The rest of MongoDB's aggregation language — `$group`, `$project`, `$geoNear`, `$lookup`, `$unwind`, `$facet`, and everything else — is reached through raw stages:
+
+```rust
+use mongodb::bson::doc;
+
+let summaries = User::aggregate()
+    .match_(|user| user.active.eq(true))
+    .raw_stage_with(|user| {
+        doc! {
+            "$group": {
+                "_id": format!("${}", user.role.name()),
+                "count": { "$sum": 1 },
+            },
+        }
+    })
+    .with_type::<RoleSummary>()
+    .all()
+    .await?;
+```
+
+* `raw_stage(doc! { ... })` appends one stage document unchanged.
+* `raw_stage_with(|fields| doc! { ... })` is the same, but the closure receives the generated fields, so source field references built from `fields.<name>.name()` stay compiler-linked — a renamed or removed model field becomes a compile error instead of a silently broken pipeline.
+* `raw_pipeline([...])` appends several stage documents in order.
+
+Raw stage BSON is not operator-checked or path-checked by OxiMod, and MongoDB's server rules still apply: `$geoNear` must be the first stage, and the write stages `$out` and `$merge` are restricted inside transactions. A server rejection surfaces as `OxiModError::Aggregation`.
+
+### Output types
+
+The source model and the output type are distinct concepts: a pipeline may preserve the model shape, extend it, or replace it entirely.
+
+* `$match`, `$sort`, `$skip`, and `$limit` preserve the model shape, so results deserialize as the model by default.
+* `$addFields` may preserve the model shape if the extra fields are ignored during deserialization; use a dedicated output type when the added data matters.
+* `$group` and `$project` typically replace the shape entirely and require `with_type`.
+
+```rust
+#[derive(Debug, serde::Deserialize)]
+struct RoleSummary {
+    #[serde(rename = "_id")]
+    role: String,
+    count: i64,
+}
+```
+
+`with_type::<R>()` changes only how output deserializes; it adds no stage. OxiMod cannot verify at compile time that an output struct matches what the pipeline produces — after a shape-changing raw stage, that synchronization is the caller's responsibility. If an output document does not deserialize as the selected type, execution fails with `OxiModError::Serialization` rather than silently dropping or defaulting values, and one undecodable document fails the whole `all()` call.
+
+After a shape-changing raw stage, use typed source-field stages only if those source fields still exist with the same meaning; otherwise continue with raw stages and set the final output type explicitly.
+
+### Execution
+
+```rust
+let users = User::aggregate().match_(|user| user.active.eq(true)).all().await?;
+let first = User::aggregate().sort_by(|user| user.age.desc()).limit(1).first().await?;
+
+let users = User::aggregate().match_(|user| user.active.eq(true)).all_from(&client).await?;
+let users = User::aggregate().match_(|user| user.active.eq(true)).all_with_session(&mut session).await?;
+```
+
+* `all()` / `first()` execute through the global client.
+* `all_from(&client)` / `first_from(&client)` execute through an explicit `mongodb::Client`, so aggregation does not require global initialization.
+* `all_with_session(&mut session)` / `first_with_session(&mut session)` resolve the collection from the session's own client and advance the cursor with the same session, so inside a transaction the pipeline sees the transaction's own uncommitted writes. Session participation is always explicit.
+
+`first()` runs the pipeline exactly as built and reads at most one result from the cursor; it does not append a server-side `$limit: 1`, because rewriting the pipeline could change raw-stage behavior. Add an explicit `.limit(1)` stage to stop the server early.
+
+There is no streaming terminal; `all()` materializes results the same way `query().all()` does. For cursor streaming or database-level aggregation, use the raw collection escape hatch below.
+
+### Driver options
+
+```rust
+use mongodb::options::AggregateOptions;
+
+let options = AggregateOptions::builder().allow_disk_use(true).build();
+
+let users = User::aggregate()
+    .match_(|user| user.active.eq(true))
+    .with_options(options)
+    .all()
+    .await?;
+```
+
+`with_options` passes the driver's `AggregateOptions` through unchanged — batch size, max time, collation, comment, hint, `let` variables, and read/write concerns remain driver and server behavior — and applies identically to global, explicit-client, and session execution.
+
+### Aggregation errors
+
+* connectivity failure during aggregation → `OxiModError::Connection`;
+* output BSON decode failure → `OxiModError::Serialization`;
+* every other aggregation server/driver operational failure, such as a rejected pipeline → `OxiModError::Aggregation`, with the original `mongodb::error::Error` preserved as `source()`.
+
+---
+
 ## Model persistence API
 
 The `Model` trait is implemented only for collection-backed models.
@@ -968,6 +1088,8 @@ Typed query builders execute through the global client, except for the `_with_se
 * `get_collection_from()`;
 * `get_document_collection_from()`.
 
+The aggregation builder does not share this limitation: `all_from()` and `first_from()` execute an aggregation through an explicit client.
+
 ---
 
 ## Direct MongoDB collection access
@@ -989,7 +1111,7 @@ mongodb::Collection<User>
 Use it for:
 
 * raw BSON queries with typed deserialization;
-* aggregation;
+* aggregation needs outside the builder, such as cursor streaming or unsupported driver features;
 * driver-specific options;
 * session usage beyond OxiMod's `_with_session` methods;
 * operations not represented by OxiMod's helpers.
@@ -1008,7 +1130,9 @@ mongodb::Collection<mongodb::bson::Document>
 
 Use it when the document shape is dynamic or when working directly with BSON.
 
-### Aggregation example
+### Raw aggregation escape hatch
+
+Common aggregation pipelines are covered by the first-class builder described in [Aggregation](#aggregation). The raw collection remains the route for aggregation behavior the builder does not represent — streaming a cursor instead of materializing results, database-level pipelines, or driver features OxiMod does not wrap:
 
 ```rust
 use futures_util::TryStreamExt;
@@ -1017,11 +1141,6 @@ use mongodb::bson::doc;
 let collection = User::get_collection()?;
 
 let pipeline = vec![
-    doc! {
-        "$match": {
-            "active": true,
-        },
-    },
     doc! {
         "$group": {
             "_id": "$role",
@@ -1039,7 +1158,7 @@ let results = collection
     .await?;
 ```
 
-Raw filters and pipelines must use serialized MongoDB field names. Unlike typed queries, the compiler cannot verify those paths or operator compatibility.
+Raw filters and pipelines must use serialized MongoDB field names. Unlike typed queries and typed aggregation stages, the compiler cannot verify those paths or operator compatibility.
 
 ---
 
@@ -1052,6 +1171,8 @@ Session and transaction lifecycle — `start_session`, `start_transaction`, `com
 Model helpers: `save_with_session`, `save_mut_with_session`, `find_by_id_with_session`, `update_by_id_with_session`, `delete_by_id_with_session`, `exists_with_session`, `count_with_session`, and `clear_with_session`.
 
 Typed-query terminals: `first_with_session`, `all_with_session`, `count_with_session`, `update_one_with_session`, `update_all_with_session`, `delete_one_with_session`, and `delete_all_with_session`. Filters, sorting, pagination, array filters, and the bulk-write modifier preflight behave exactly as in the non-session terminals.
+
+Aggregation terminals: `all_with_session` and `first_with_session` run the pipeline on the session and advance the result cursor with the same session, so a transaction's own uncommitted writes are visible to the pipeline. MongoDB restricts the write stages `$out` and `$merge` inside transactions; a raw stage violating those rules is rejected by the server as `OxiModError::Aggregation`.
 
 ```rust
 use oximod::{Model, Queryable};
@@ -1282,7 +1403,7 @@ Operation-time driver failures classify with a fixed precedence:
 
 1. `Connection` — MongoDB client/connectivity infrastructure failure: connection establishment, authentication, DNS resolution, TLS configuration, server selection, transport I/O, and connection-pool failure, during any operation (including index establishment).
 2. `Serialization` — BSON encoding or decoding failure, in either direction, through every read and write path.
-3. `Index` / `Aggregation` — remaining failures of the corresponding operation domain, such as MongoDB rejecting a conflicting index specification.
+3. `Index` / `Aggregation` — remaining failures of the corresponding operation domain, such as MongoDB rejecting a conflicting index specification or an invalid aggregation pipeline.
 4. `Database` — every remaining MongoDB/driver operation failure, including duplicate-key rejections. This is the conservative non-connectivity fallback.
 
 `Connection` classifies the failure only: it does not mean the operation never reached MongoDB, and it does not make retrying safe. Retry safety depends on the specific operation, its idempotency, and application policy. `Database` likewise does not guarantee that the server definitely received or rejected the operation.
@@ -1385,7 +1506,8 @@ match User::query().page(0, 20).all().await {
 | Explicit-client persistence                        | `_from` model methods                |
 | Raw filters with typed model results               | `Collection<Model>`                  |
 | Dynamic BSON documents                             | `Collection<Document>`               |
-| Aggregation pipelines                              | Direct MongoDB collection access     |
+| Aggregation pipelines                              | `Queryable::aggregate()` builder     |
+| Streaming or database-level aggregation            | Direct MongoDB collection access     |
 | Compound, partial/filtered, or unsupported index options | MongoDB driver index API       |
 | Transactional model and typed-query operations     | `_with_session` methods              |
 | Advanced session and driver features               | Direct MongoDB collection/client API |

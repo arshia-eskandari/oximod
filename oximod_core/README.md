@@ -9,6 +9,7 @@ Core runtime library for [OxiMod](https://github.com/arshia-eskandari/oximod), a
 * lifecycle hooks,
 * model validation errors,
 * typed filters, sorting, pagination, updates, and deletions,
+* typed aggregation pipeline construction and execution,
 * nested-document and array operations,
 * text-search and GeoJSON query support,
 * internal asynchronous initialization helpers.
