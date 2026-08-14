@@ -3,6 +3,9 @@
 /// Typed MongoDB aggregation pipeline construction and execution.
 pub mod aggregation;
 
+/// Typed MongoDB bulk-write batch construction and execution.
+pub mod bulk_write;
+
 /// Error and validation types used by OxiMod operations.
 pub mod error;
 

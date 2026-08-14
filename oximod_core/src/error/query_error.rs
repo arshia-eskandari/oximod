@@ -2,7 +2,8 @@
 //!
 //! These errors are detected before a typed query is sent to MongoDB. They
 //! cover invalid pagination values, limits outside MongoDB's supported range,
-//! and query modifiers that cannot be used with bulk write operations.
+//! and query modifiers that cannot be used with multi-document or bulk-write
+//! operations.
 
 use std::fmt;
 
@@ -46,10 +47,11 @@ pub enum QueryError {
         limit: u64,
     },
 
-    /// A bulk write was configured with an unsupported query modifier.
+    /// A multi-document or bulk-write operation was configured with an
+    /// unsupported query modifier.
     #[error("{operation} does not support the `{modifier}` query modifier")]
     UnsupportedBulkWriteModifier {
-        /// The bulk operation being configured.
+        /// The operation being configured.
         operation: BulkWriteOperation,
 
         /// The unsupported query modifier.
@@ -57,7 +59,17 @@ pub enum QueryError {
     },
 }
 
-/// A typed-query operation that may modify multiple documents.
+/// A write operation named by query-preflight diagnostics.
+///
+/// This enum identifies which operation rejected an unsupported query
+/// modifier in [`QueryError::UnsupportedBulkWriteModifier`]. It covers the
+/// multi-document typed-query operations (`Query::update_all` and
+/// `Query::delete_all`) and the operations queued through the
+/// `BulkWrite` builder.
+///
+/// It names operations for preflight diagnostics only; it is **not** the
+/// bulk-write builder's queued operation type and carries no operation
+/// state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulkWriteOperation {
     /// Delete all documents matching the query.
@@ -65,6 +77,21 @@ pub enum BulkWriteOperation {
 
     /// Update all documents matching the query.
     UpdateAll,
+
+    /// An update-one operation queued through the bulk-write builder.
+    UpdateOne,
+
+    /// An update-many operation queued through the bulk-write builder.
+    UpdateMany,
+
+    /// A replace-one operation queued through the bulk-write builder.
+    ReplaceOne,
+
+    /// A delete-one operation queued through the bulk-write builder.
+    DeleteOne,
+
+    /// A delete-many operation queued through the bulk-write builder.
+    DeleteMany,
 }
 
 impl fmt::Display for BulkWriteOperation {
@@ -72,6 +99,11 @@ impl fmt::Display for BulkWriteOperation {
         match self {
             Self::DeleteAll => formatter.write_str("delete_all"),
             Self::UpdateAll => formatter.write_str("update_all"),
+            Self::UpdateOne => formatter.write_str("bulk_write update_one"),
+            Self::UpdateMany => formatter.write_str("bulk_write update_many"),
+            Self::ReplaceOne => formatter.write_str("bulk_write replace_one"),
+            Self::DeleteOne => formatter.write_str("bulk_write delete_one"),
+            Self::DeleteMany => formatter.write_str("bulk_write delete_many"),
         }
     }
 }
@@ -90,6 +122,9 @@ pub enum QueryModifier {
 
     /// One-based query pagination.
     Pagination,
+
+    /// MongoDB array filters for filtered positional updates.
+    ArrayFilters,
 }
 
 impl fmt::Display for QueryModifier {
@@ -99,6 +134,7 @@ impl fmt::Display for QueryModifier {
             Self::Skip => formatter.write_str("skip"),
             Self::Limit => formatter.write_str("limit"),
             Self::Pagination => formatter.write_str("pagination"),
+            Self::ArrayFilters => formatter.write_str("array_filters"),
         }
     }
 }
@@ -164,6 +200,26 @@ mod tests {
     fn bulk_write_operations_have_stable_display_names() {
         assert_eq!(BulkWriteOperation::DeleteAll.to_string(), "delete_all");
         assert_eq!(BulkWriteOperation::UpdateAll.to_string(), "update_all");
+        assert_eq!(
+            BulkWriteOperation::UpdateOne.to_string(),
+            "bulk_write update_one"
+        );
+        assert_eq!(
+            BulkWriteOperation::UpdateMany.to_string(),
+            "bulk_write update_many"
+        );
+        assert_eq!(
+            BulkWriteOperation::ReplaceOne.to_string(),
+            "bulk_write replace_one"
+        );
+        assert_eq!(
+            BulkWriteOperation::DeleteOne.to_string(),
+            "bulk_write delete_one"
+        );
+        assert_eq!(
+            BulkWriteOperation::DeleteMany.to_string(),
+            "bulk_write delete_many"
+        );
     }
 
     #[test]
@@ -172,5 +228,6 @@ mod tests {
         assert_eq!(QueryModifier::Skip.to_string(), "skip");
         assert_eq!(QueryModifier::Limit.to_string(), "limit");
         assert_eq!(QueryModifier::Pagination.to_string(), "pagination");
+        assert_eq!(QueryModifier::ArrayFilters.to_string(), "array_filters");
     }
 }

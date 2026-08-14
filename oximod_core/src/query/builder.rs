@@ -7,8 +7,9 @@
 //!
 //! Filters and text searches apply to every execution method. Sorting applies
 //! to reads and single-document writes. Skipping, limiting, and pagination are
-//! applied by [`Query::all`]; bulk writes reject them rather than silently
-//! ignoring them. Array filters are used only by typed update operations.
+//! applied by [`Query::all`]; multi-document writes reject them rather than
+//! silently ignoring them. Array filters are used only by typed update
+//! operations.
 
 use std::marker::PhantomData;
 
@@ -304,7 +305,8 @@ where
     /// Limits the number of documents returned by [`Query::all`].
     ///
     /// A later call replaces the previously configured limit. The limit is
-    /// applied by [`Query::all`]. Bulk writes reject configured limits.
+    /// applied by [`Query::all`]. Multi-document and bulk writes reject
+    /// configured limits.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -330,7 +332,8 @@ where
     /// [`Query::all`].
     ///
     /// A later call replaces the previously configured offset. The offset is
-    /// applied by [`Query::all`]. Bulk writes reject configured offsets.
+    /// applied by [`Query::all`]. Multi-document and bulk writes reject
+    /// configured offsets.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -526,6 +529,68 @@ where
     pub(crate) fn into_filter_document(self) -> Document {
         Self::build_filter_document(self.filter, self.text)
     }
+
+    /// Decomposes the query into the state consumed by the bulk-write
+    /// builder.
+    ///
+    /// The filter document merges the typed filter with any configured text
+    /// search, exactly like every query execution method. Skip and limit are
+    /// reduced to presence flags because no bulk write model can carry them;
+    /// the bulk-write preflight rejects them instead of silently dropping
+    /// them.
+    pub(crate) fn into_parts(self) -> QueryParts {
+        let Self {
+            filter,
+            text,
+            sort,
+            limit,
+            skip,
+            error,
+            pagination,
+            array_filters,
+            marker: _,
+        } = self;
+
+        QueryParts {
+            filter: Self::build_filter_document(filter, text),
+            sort: sort.map(SortExpression::into_document),
+            has_skip: skip.is_some(),
+            has_limit: limit.is_some(),
+            pagination,
+            array_filters,
+            error,
+        }
+    }
+}
+
+/// The extracted state of a [`Query`], consumed by the bulk-write builder.
+///
+/// This keeps one source of truth for filter/text composition, sort
+/// documents, array filters, deferred construction errors, and modifier
+/// presence, so the bulk-write module never re-implements query
+/// serialization.
+#[derive(Debug)]
+pub(crate) struct QueryParts {
+    /// The merged filter and text-search document.
+    pub(crate) filter: Document,
+
+    /// The configured sort document, if any.
+    pub(crate) sort: Option<Document>,
+
+    /// Whether an offset was configured.
+    pub(crate) has_skip: bool,
+
+    /// Whether a limit was configured.
+    pub(crate) has_limit: bool,
+
+    /// Whether pagination was configured.
+    pub(crate) pagination: bool,
+
+    /// Configured array-filter documents.
+    pub(crate) array_filters: Vec<Document>,
+
+    /// The first deferred query-construction error, if any.
+    pub(crate) error: Option<QueryError>,
 }
 
 impl<M> Query<M>
