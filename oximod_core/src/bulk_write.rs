@@ -4,8 +4,9 @@
 //! API. Applications normally begin with
 //! [`Model::bulk_write`](crate::feature::model::Model::bulk_write) and queue
 //! insert, update, replace, and delete intentions against one model's
-//! collection before executing them as a single MongoDB
-//! [`bulkWrite`](mongodb::Client::bulk_write) command.
+//! collection before executing them as one driver bulk-write action
+//! ([`Client::bulk_write`](mongodb::Client::bulk_write)), never as per-item
+//! OxiMod writes.
 //!
 //! Public bulk-write types are re-exported from the main `oximod` crate, so
 //! applications should normally import them directly from `oximod`.

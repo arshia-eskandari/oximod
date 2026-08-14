@@ -1,7 +1,7 @@
 //! Integration tests for typed model-scoped bulk writes.
 //!
-//! These tests cover the audit-driven bulk-write workflows: single-command
-//! enqueue (A7), the ordered/unordered partial-failure matrix with driver
+//! These tests cover the audit-driven bulk-write workflows: single
+//! bulk-execution enqueue (A7), the ordered/unordered partial-failure matrix with driver
 //! per-operation failure indexes (A6), all-before-network validation, mixed
 //! operation kinds with verbose results, query-modifier preflight, session
 //! transactions, the lifecycle-hook boundary, and error-classification

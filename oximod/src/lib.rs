@@ -857,8 +857,9 @@
 //!
 //! `ModelType::bulk_write()` (a [`Model`] method) queues inserts, typed
 //! updates, replacements, and typed deletions — mixing operation kinds
-//! freely — against one model's collection and sends them to MongoDB as a
-//! **single** `bulkWrite` command, preserving queue order exactly:
+//! freely — against one model's collection and submits them to MongoDB as
+//! **one driver bulk-write action**, preserving queue order exactly and
+//! never expanding the batch into per-item OxiMod writes:
 //!
 //! ```rust,no_run
 //! # use mongodb::bson::oid::ObjectId;
@@ -1456,9 +1457,12 @@ pub use oximod_core::aggregation::Aggregation;
 /// method) and executed with `execute`, `execute_from`,
 /// `execute_with_session`, or their `_verbose` counterparts. The batch
 /// queues inserts, typed updates, replacements, and typed deletions —
-/// mixing operation kinds freely — against one model's collection and sends
-/// them to MongoDB as a **single** `bulkWrite` command, preserving queue
-/// order exactly.
+/// mixing operation kinds freely — against one model's collection and
+/// submits them to MongoDB as **one driver bulk-write action**, preserving
+/// queue order exactly and never expanding the batch into per-item OxiMod
+/// writes. (The MongoDB driver may split a very large batch into multiple
+/// server commands to satisfy batch limits; that splitting belongs to the
+/// driver.)
 ///
 /// Bulk writes require **MongoDB Server 8.0+**. Queued whole-model inserts
 /// and replacements run `#[validate]` for every queued value before any

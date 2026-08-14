@@ -83,8 +83,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     job("import-0002", "expired").save_from(client).await?;
 
     // One mixed batch: three inserts, one typed update, one typed deletion —
-    // sent to MongoDB as a single bulkWrite command in exactly this order.
-    // Every queued whole-model insert is validated before anything is sent.
+    // submitted to MongoDB as one driver bulk-write action in exactly this
+    // order, never as per-item OxiMod writes. Every queued whole-model
+    // insert is validated before anything is sent.
     let result = Job::bulk_write()
         .insert_many([
             job("import-0003", "queued"),

@@ -971,9 +971,10 @@ pub trait Model:
     ///
     /// The batch queues insert, update, replace, and delete intentions —
     /// mixing operation kinds freely — against this model's collection and
-    /// executes them as a **single** MongoDB `bulkWrite` command through
+    /// executes them as one driver bulk-write action through
     /// [`BulkWrite::execute`], [`BulkWrite::execute_from`], or
-    /// [`BulkWrite::execute_with_session`] (or their `_verbose` variants).
+    /// [`BulkWrite::execute_with_session`] (or their `_verbose` variants),
+    /// never as per-item OxiMod writes.
     ///
     /// # Example
     ///

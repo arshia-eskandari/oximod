@@ -39,7 +39,7 @@ Use OxiMod when you want concise, expressive model code and compile-time guidanc
 * Global-client and explicit-client persistence workflows
 * Type-aware filters, sorting, pagination, text search, and geospatial queries
 * Typed single-document and multi-document updates and deletions
-* Typed model-scoped bulk writes batching mixed operations into one MongoDB `bulkWrite` command
+* Typed model-scoped bulk writes batching mixed operations into one driver bulk-write action
 * First-class aggregation builder mixing typed stages, raw stages, and typed output
 * Typed nested paths for embedded documents and arrays of embedded models
 * Explicit session-aware operations for MongoDB transactions
@@ -807,7 +807,7 @@ let result = User::query()
 
 `update_all()` updates every matching document in one command, returns MongoDB's `UpdateResult`, and rejects sorting, skipping, limiting, and pagination instead of silently ignoring them.
 
-To batch several independent write intentions — including inserts and deletes — into one MongoDB command, see [Bulk writes](#bulk-writes).
+To batch several independent write intentions — including inserts and deletes — into one OxiMod bulk execution, see [Bulk writes](#bulk-writes).
 
 > **Warning:** An unfiltered `update_all()` affects every document in the collection.
 
@@ -849,7 +849,7 @@ let result = User::query()
 
 ## Bulk writes
 
-`ModelType::bulk_write()` (a `Model` method) queues multiple independent write intentions against one model's collection and sends them to MongoDB as a **single** `bulkWrite` command — never as one network call per queued operation. The batch may mix all six operation kinds freely, and OxiMod preserves the queue order exactly:
+`ModelType::bulk_write()` (a `Model` method) queues multiple independent write intentions against one model's collection and submits them to MongoDB as **one driver bulk-write action** — never by expanding the batch into per-item OxiMod save/update/delete calls. (The MongoDB driver may split a sufficiently large logical batch into multiple server commands to satisfy server/message batch limits; that splitting belongs to the driver.) The batch may mix all six operation kinds freely, and OxiMod preserves the queue order exactly:
 
 ```rust
 use oximod::{Model, Queryable};
@@ -1271,7 +1271,7 @@ Model helpers: `save_with_session`, `save_mut_with_session`, `find_by_id_with_se
 
 Typed-query terminals: `first_with_session`, `all_with_session`, `count_with_session`, `update_one_with_session`, `update_all_with_session`, `delete_one_with_session`, and `delete_all_with_session`. Filters, sorting, pagination, array filters, and the multi-document modifier preflight behave exactly as in the non-session terminals.
 
-Bulk-write terminals: `execute_with_session` and `execute_verbose_with_session` run the whole batch as one `bulkWrite` command inside the session's transaction. Queued whole-model validation still runs before the command is sent, hooks still do not run, and indexes are never established — initialize them before transactional work.
+Bulk-write terminals: `execute_with_session` and `execute_verbose_with_session` run the whole batch as one driver bulk-write action inside the session's transaction. Queued whole-model validation still runs before anything is sent, hooks still do not run, and indexes are never established — initialize them before transactional work.
 
 Aggregation terminals: `all_with_session` and `first_with_session` run the pipeline on the session and advance the result cursor with the same session, so a transaction's own uncommitted writes are visible to the pipeline. MongoDB restricts the write stages `$out` and `$merge` inside transactions; a raw stage violating those rules is rejected by the server as `OxiModError::Aggregation`.
 
@@ -1609,7 +1609,7 @@ match User::query().page(0, 20).all().await {
 | Explicit-client persistence                        | `_from` model methods                |
 | Raw filters with typed model results               | `Collection<Model>`                  |
 | Dynamic BSON documents                             | `Collection<Document>`               |
-| Batch mixed writes into one MongoDB command        | `ModelType::bulk_write()` builder    |
+| Batch mixed writes into one bulk execution         | `ModelType::bulk_write()` builder    |
 | Cross-namespace or raw-pipeline bulk writes        | `mongodb::Client::bulk_write`        |
 | Aggregation pipelines                              | `Queryable::aggregate()` builder     |
 | Streaming or database-level aggregation            | Direct MongoDB collection access     |

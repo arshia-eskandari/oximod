@@ -2,8 +2,9 @@
 //!
 //! This module contains [`BulkWrite`], the builder produced by
 //! [`Model::bulk_write`](crate::feature::model::Model::bulk_write). It stores
-//! typed write intentions in call order until an execution method sends them
-//! to MongoDB as one [`bulkWrite`](mongodb::Client::bulk_write) command.
+//! typed write intentions in call order until an execution method submits
+//! them to MongoDB as one driver bulk-write action
+//! ([`Client::bulk_write`](mongodb::Client::bulk_write)).
 
 use std::marker::PhantomData;
 
@@ -34,11 +35,14 @@ use crate::{
 /// than constructed directly.
 ///
 /// The builder queues insert, update, replace, and delete intentions against
-/// one model's collection and executes them as a **single** MongoDB
-/// [`bulkWrite`](mongodb::Client::bulk_write) command — never as one network
-/// call per queued operation. Operations execute in exactly the order they
-/// were queued (subject to MongoDB's unordered semantics when
-/// [`BulkWrite::ordered`] is set to `false`).
+/// one model's collection and executes them as **one driver bulk-write
+/// action** ([`Client::bulk_write`](mongodb::Client::bulk_write)) — never by
+/// expanding the batch into per-item OxiMod save/update/delete calls. The
+/// MongoDB driver may split a sufficiently large logical batch into multiple
+/// server commands to satisfy server/message batch limits; that splitting
+/// belongs to the driver and does not change OxiMod's guarantee. Operations
+/// execute in exactly the order they were queued (subject to MongoDB's
+/// unordered semantics when [`BulkWrite::ordered`] is set to `false`).
 ///
 /// # Example
 ///
@@ -717,8 +721,8 @@ where
         Ok((models, options))
     }
 
-    /// Executes the batch as one MongoDB `bulkWrite` command using the
-    /// global [`OxiClient`], returning summary counts.
+    /// Executes the batch as one driver bulk-write action using the global
+    /// [`OxiClient`], returning summary counts.
     ///
     /// See the [type-level documentation](BulkWrite) for validation, hook,
     /// index, ordering, and failure semantics. Bulk writes require MongoDB
@@ -755,8 +759,8 @@ where
     /// counts.
     ///
     /// This is the explicit-client counterpart to [`BulkWrite::execute`]:
-    /// the model collection is resolved from `client` and the single
-    /// `bulkWrite` command is issued through that same client, without any
+    /// the model collection is resolved from `client` and the driver
+    /// bulk-write action is issued through that same client, without any
     /// global-client dependency.
     ///
     /// # Parameters
@@ -792,7 +796,7 @@ where
     ///
     /// This is the session-aware counterpart to [`BulkWrite::execute`]: the
     /// model collection is resolved from the session's own client and the
-    /// single `bulkWrite` command executes with the session attached, so it
+    /// driver bulk-write action executes with the session attached, so it
     /// participates in any transaction active on that session and is rolled
     /// back if that transaction aborts.
     ///
