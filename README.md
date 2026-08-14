@@ -38,7 +38,8 @@ Use OxiMod when you want concise, expressive model code and compile-time guidanc
 * Declarative single-field MongoDB indexes
 * Global-client and explicit-client persistence workflows
 * Type-aware filters, sorting, pagination, text search, and geospatial queries
-* Typed single-document and bulk updates and deletions
+* Typed single-document and multi-document updates and deletions
+* Typed model-scoped bulk writes batching mixed operations into one MongoDB `bulkWrite` command
 * First-class aggregation builder mixing typed stages, raw stages, and typed output
 * Typed nested paths for embedded documents and arrays of embedded models
 * Explicit session-aware operations for MongoDB transactions
@@ -795,7 +796,7 @@ let updated = User::query()
 * returns the document after the update as `Option<Model>`;
 * ignores skip, limit, and pagination.
 
-### Bulk update
+### Multi-document update
 
 ```rust
 let result = User::query()
@@ -804,7 +805,9 @@ let result = User::query()
     .await?;
 ```
 
-`update_all()` returns MongoDB's `UpdateResult` and rejects sorting, skipping, limiting, and pagination instead of silently ignoring them.
+`update_all()` updates every matching document in one command, returns MongoDB's `UpdateResult`, and rejects sorting, skipping, limiting, and pagination instead of silently ignoring them.
+
+To batch several independent write intentions — including inserts and deletes — into one MongoDB command, see [Bulk writes](#bulk-writes).
 
 > **Warning:** An unfiltered `update_all()` affects every document in the collection.
 
@@ -829,7 +832,7 @@ let deleted = User::query()
 * returns the deleted document as `Option<Model>`;
 * ignores skip, limit, and pagination.
 
-### Bulk deletion
+### Multi-document deletion
 
 ```rust
 let result = User::query()
@@ -838,9 +841,105 @@ let result = User::query()
     .await?;
 ```
 
-`delete_all()` returns MongoDB's `DeleteResult` and rejects sorting, skipping, limiting, and pagination.
+`delete_all()` deletes every matching document in one command, returns MongoDB's `DeleteResult`, and rejects sorting, skipping, limiting, and pagination.
 
 > **Warning:** An unfiltered `delete_all()` affects every document in the collection.
+
+---
+
+## Bulk writes
+
+`ModelType::bulk_write()` (a `Model` method) queues multiple independent write intentions against one model's collection and sends them to MongoDB as a **single** `bulkWrite` command — never as one network call per queued operation. The batch may mix all six operation kinds freely, and OxiMod preserves the queue order exactly:
+
+```rust
+use oximod::{Model, Queryable};
+
+Job::init_indexes().await?; // establish the unique dedupe index first
+
+let result = Job::bulk_write()
+    .insert(Job::new().dedupe_key("job-1").status("queued"))
+    .insert_many(more_jobs)
+    .update_one(
+        Job::query().filter(|job| job.dedupe_key.eq("job-3")),
+        |job| job.status.set("ready"),
+    )
+    .update_many(
+        Job::query().filter(|job| job.status.eq("stale")),
+        |job| job.status.set("expired"),
+    )
+    .replace_one(
+        Job::query().filter(|job| job.dedupe_key.eq("job-4")),
+        replacement_job,
+    )
+    .delete_one(Job::query().filter(|job| job.dedupe_key.eq("job-5")))
+    .delete_many(Job::query().filter(|job| job.status.eq("expired")))
+    .ordered(false)
+    .execute()
+    .await?;
+
+println!("inserted {}", result.inserted_count);
+```
+
+Bulk writes require **MongoDB Server 8.0+**. OxiMod does not emulate the command on older servers: a server that cannot execute it fails through the ordinary bulk-write error path, and OxiMod never silently expands a batch into individual writes. Retryable-write behavior belongs to the MongoDB driver; OxiMod adds no retry loop.
+
+### Typed construction
+
+Update and delete operations consume ordinary `Query<M>` values, so filters, text search, and array filters reuse the exact typed construction and Serde-renamed paths of the rest of the query API, and updates reuse `UpdateExpression`. Modifiers a driver bulk model cannot represent are rejected locally — before any network communication — as `QueryError::UnsupportedBulkWriteModifier`, never silently dropped:
+
+* `update_one` and `replace_one` support a query sort (it selects which matching document is written); skip, limit, and pagination are rejected;
+* `update_many` supports array filters; sort, skip, limit, and pagination are rejected;
+* `delete_one` and `delete_many` cannot carry a sort (unlike `Query::delete_one`), and reject skip, limit, pagination, and array filters.
+
+### Validation, hooks, and indexes
+
+Whole model values queued through `insert`, `insert_many`, and `replace_one` run `#[validate]` for **every** queued value before any network communication: if the 101st queued insert is invalid, the batch returns `OxiModError::Validation` and zero writes are sent. Typed update expressions remain non-validating, exactly like `update_one()`/`update_all()`.
+
+Bulk-write operations are a separate execution surface. They preserve typed query/update construction and whole-model validation where applicable, but they do **not** invoke OxiMod lifecycle hooks.
+
+Executing a bulk write never establishes declared `#[index(...)]` specifications. Initialize indexes explicitly — especially unique constraints used as idempotency guards — with `init_indexes()` / `init_indexes_from(&client)` before bulk ingest.
+
+Replacements follow ordinary MongoDB semantics: `replace_one` rewrites the **whole stored document** with the serialized model, removing fields the Rust model does not declare. Prefer targeted typed updates when documents written by other application versions may exist.
+
+### Ordered and unordered execution
+
+MongoDB executes bulk writes in order by default and stops after the first failing operation. With `.ordered(false)`, the server continues attempting the remaining operations after a failure and may reorder execution for performance; do not depend on execution order when unordered. `.with_options(BulkWriteOptions)` passes the driver's full options through (ordered execution, server-side `bypass_document_validation`, comment, `let` variables, write concern); `bypass_document_validation` never disables OxiMod's client-side `#[validate]` preflight.
+
+### Execution and results
+
+Summary terminals return the driver's `SummaryBulkWriteResult` (inserted, matched, modified, upserted, and deleted counts); `_verbose` terminals return `VerboseBulkWriteResult` with per-operation results keyed by each operation's original queued index:
+
+* `execute()` / `execute_verbose()` — global client;
+* `execute_from(&client)` / `execute_verbose_from(&client)` — explicit client;
+* `execute_with_session(&mut session)` / `execute_verbose_with_session(&mut session)` — session/transaction execution through the session's own client.
+
+### Partial failures keep their operation indexes
+
+When individual writes fail, the returned `OxiModError::BulkWrite` preserves the driver's `mongodb::error::BulkWriteError`: `write_errors` maps each failure back to its **original queued operation index**, and `partial_result` describes the writes that succeeded. `OxiModError::bulk_write_error()` reaches that detail without manual downcasting:
+
+```rust
+match Job::bulk_write().insert_many(jobs).ordered(false).execute().await {
+    Ok(result) => println!("inserted {}", result.inserted_count),
+    Err(error) => {
+        if let Some(failure) = error.bulk_write_error() {
+            for (index, write_error) in &failure.write_errors {
+                eprintln!(
+                    "operation {index} failed with code {}: {}",
+                    write_error.code, write_error.message
+                );
+            }
+            if let Some(partial) = &failure.partial_result {
+                println!("partial result: {partial:?}");
+            }
+        }
+    }
+}
+```
+
+The full driver error also remains available through `std::error::Error::source`.
+
+### One model per batch
+
+A `BulkWrite<M>` batch targets one model and therefore one collection. MongoDB's `bulkWrite` can span namespaces; for cross-namespace batches — or driver capabilities outside the typed surface, such as raw update pipelines — use `mongodb::Client::bulk_write` directly. That escape hatch bypasses OxiMod validation and typed field-name checking for those operations.
 
 ---
 
@@ -1170,7 +1269,9 @@ Session and transaction lifecycle — `start_session`, `start_transaction`, `com
 
 Model helpers: `save_with_session`, `save_mut_with_session`, `find_by_id_with_session`, `update_by_id_with_session`, `delete_by_id_with_session`, `exists_with_session`, `count_with_session`, and `clear_with_session`.
 
-Typed-query terminals: `first_with_session`, `all_with_session`, `count_with_session`, `update_one_with_session`, `update_all_with_session`, `delete_one_with_session`, and `delete_all_with_session`. Filters, sorting, pagination, array filters, and the bulk-write modifier preflight behave exactly as in the non-session terminals.
+Typed-query terminals: `first_with_session`, `all_with_session`, `count_with_session`, `update_one_with_session`, `update_all_with_session`, `delete_one_with_session`, and `delete_all_with_session`. Filters, sorting, pagination, array filters, and the multi-document modifier preflight behave exactly as in the non-session terminals.
+
+Bulk-write terminals: `execute_with_session` and `execute_verbose_with_session` run the whole batch as one `bulkWrite` command inside the session's transaction. Queued whole-model validation still runs before the command is sent, hooks still do not run, and indexes are never established — initialize them before transactional work.
 
 Aggregation terminals: `all_with_session` and `first_with_session` run the pipeline on the session and advance the result cursor with the same session, so a transaction's own uncommitted writes are visible to the pipeline. MongoDB restricts the write stages `$out` and `$merge` inside transactions; a raw stage violating those rules is rejected by the server as `OxiModError::Aggregation`.
 
@@ -1403,8 +1504,10 @@ Operation-time driver failures classify with a fixed precedence:
 
 1. `Connection` — MongoDB client/connectivity infrastructure failure: connection establishment, authentication, DNS resolution, TLS configuration, server selection, transport I/O, and connection-pool failure, during any operation (including index establishment).
 2. `Serialization` — BSON encoding or decoding failure, in either direction, through every read and write path.
-3. `Index` / `Aggregation` — remaining failures of the corresponding operation domain, such as MongoDB rejecting a conflicting index specification or an invalid aggregation pipeline.
+3. `Index` / `Aggregation` / `BulkWrite` — remaining failures of the corresponding operation domain, such as MongoDB rejecting a conflicting index specification, an invalid aggregation pipeline, or a bulk write (including individual write failures within a batch and a server too old for `bulkWrite`).
 4. `Database` — every remaining MongoDB/driver operation failure, including duplicate-key rejections. This is the conservative non-connectivity fallback.
+
+A duplicate key **inside a bulk-write batch** therefore classifies as `BulkWrite` (the bulk-write domain refines it), while the same rejection through `save()` remains `Database`. Bulk-write failures preserve per-operation indexes and partial results — see [Bulk writes](#bulk-writes).
 
 `Connection` classifies the failure only: it does not mean the operation never reached MongoDB, and it does not make retrying safe. Retry safety depends on the specific operation, its idempotency, and application policy. `Database` likewise does not guarantee that the server definitely received or rejected the operation.
 
@@ -1478,7 +1581,7 @@ Typed-query configuration failures are exposed through `OxiModError::Query` and 
 * zero page sizes;
 * pagination overflow;
 * limits outside the driver's supported integer range;
-* unsupported sort, skip, limit, or pagination modifiers on bulk writes.
+* unsupported query modifiers on multi-document (`update_all` / `delete_all`) and bulk-write operations, reported as `QueryError::UnsupportedBulkWriteModifier` naming the operation (`BulkWriteOperation`) and the rejected modifier (`QueryModifier`).
 
 ```rust
 use oximod::{OxiModError, QueryError};
@@ -1506,6 +1609,8 @@ match User::query().page(0, 20).all().await {
 | Explicit-client persistence                        | `_from` model methods                |
 | Raw filters with typed model results               | `Collection<Model>`                  |
 | Dynamic BSON documents                             | `Collection<Document>`               |
+| Batch mixed writes into one MongoDB command        | `ModelType::bulk_write()` builder    |
+| Cross-namespace or raw-pipeline bulk writes        | `mongodb::Client::bulk_write`        |
 | Aggregation pipelines                              | `Queryable::aggregate()` builder     |
 | Streaming or database-level aggregation            | Direct MongoDB collection access     |
 | Compound, partial/filtered, or unsupported index options | MongoDB driver index API       |
@@ -1522,6 +1627,7 @@ The repository includes focused runnable examples covering:
 
 * aggregation;
 * basic persistence;
+* bulk writes;
 * `_id` workflows;
 * custom validation;
 * defaults;
@@ -1555,8 +1661,9 @@ MongoDB-backed examples read `MONGODB_URI` from the environment or a `.env` file
 * Compound and partial/filtered indexes require the MongoDB driver API; a derived composite-key field with `#[index(unique)]` is not a safe substitute for a compound unique index.
 * Session participation is explicit through the `_with_session` methods; a non-session OxiMod call issued while a transaction is open commits outside that transaction. Initialize declared indexes before transactional work — session-aware saves do not establish them.
 * Typed reads fail as a whole when any document in the selected result window cannot be deserialized; use the raw document collection to inspect or repair such documents.
-* Lifecycle hooks wrap only save and `_id` helper methods.
-* `clear()`, unfiltered `update_all()`, and unfiltered `delete_all()` can affect an entire collection.
+* Lifecycle hooks wrap only save and `_id` helper methods; bulk-write operations never invoke them.
+* Bulk writes require MongoDB Server 8.0+, validate queued whole-model inserts and replacements before any network communication, and preserve the driver's per-operation failure indexes and partial results through `OxiModError::BulkWrite`.
+* `clear()`, unfiltered `update_all()`, unfiltered `delete_all()`, and unfiltered bulk `update_many`/`delete_many` operations can affect an entire collection.
 * `GeoPoint`, `GeoPolygon`, and `NearQuery` construct MongoDB geometry and query documents but do not perform complete geospatial validity checks.
 * `index_max_retries` and `index_max_init_seconds` are accepted but are not currently enforced as hard limits.
 

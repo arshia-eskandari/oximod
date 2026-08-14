@@ -2,7 +2,8 @@
 //!
 //! These errors are detected before a typed query is sent to MongoDB. They
 //! cover invalid pagination values, limits outside MongoDB's supported range,
-//! and query modifiers that cannot be used with bulk write operations.
+//! and query modifiers that cannot be used with multi-document or bulk-write
+//! operations.
 
 use std::fmt;
 
@@ -46,10 +47,11 @@ pub enum QueryError {
         limit: u64,
     },
 
-    /// A bulk write was configured with an unsupported query modifier.
+    /// A multi-document or bulk-write operation was configured with an
+    /// unsupported query modifier.
     #[error("{operation} does not support the `{modifier}` query modifier")]
     UnsupportedBulkWriteModifier {
-        /// The bulk operation being configured.
+        /// The operation being configured.
         operation: BulkWriteOperation,
 
         /// The unsupported query modifier.

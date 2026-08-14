@@ -7,8 +7,9 @@
 //!
 //! Filters and text searches apply to every execution method. Sorting applies
 //! to reads and single-document writes. Skipping, limiting, and pagination are
-//! applied by [`Query::all`]; bulk writes reject them rather than silently
-//! ignoring them. Array filters are used only by typed update operations.
+//! applied by [`Query::all`]; multi-document writes reject them rather than
+//! silently ignoring them. Array filters are used only by typed update
+//! operations.
 
 use std::marker::PhantomData;
 
@@ -304,7 +305,8 @@ where
     /// Limits the number of documents returned by [`Query::all`].
     ///
     /// A later call replaces the previously configured limit. The limit is
-    /// applied by [`Query::all`]. Bulk writes reject configured limits.
+    /// applied by [`Query::all`]. Multi-document and bulk writes reject
+    /// configured limits.
     ///
     /// ```ignore
     /// let users = User::query()
@@ -330,7 +332,8 @@ where
     /// [`Query::all`].
     ///
     /// A later call replaces the previously configured offset. The offset is
-    /// applied by [`Query::all`]. Bulk writes reject configured offsets.
+    /// applied by [`Query::all`]. Multi-document and bulk writes reject
+    /// configured offsets.
     ///
     /// ```ignore
     /// let users = User::query()

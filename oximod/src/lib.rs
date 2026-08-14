@@ -23,7 +23,9 @@
 //! - typed and raw MongoDB collection access;
 //! - type-aware filters, sorting, pagination, text search, and geospatial
 //!   queries;
-//! - typed single-document and bulk updates and deletions;
+//! - typed single-document and multi-document updates and deletions;
+//! - typed model-scoped bulk writes batching mixed operations into one
+//!   MongoDB `bulkWrite` command;
 //! - a first-class aggregation builder mixing typed stages, raw stages, and
 //!   typed output;
 //! - explicit session-aware operations for MongoDB transactions.
@@ -844,11 +846,65 @@
 //! # }
 //! ```
 //!
-//! `update_all()` and `delete_all()` operate on every matching document and
-//! reject sorting, skipping, limiting, and pagination instead of silently
-//! ignoring them. An unfiltered bulk write affects the entire collection.
-//! Array filters configured with `array_filter()` are applied to typed update
+//! `update_all()` and `delete_all()` are multi-document operations: they
+//! affect every matching document in one command and reject sorting,
+//! skipping, limiting, and pagination instead of silently ignoring them. An
+//! unfiltered multi-document write affects the entire collection. Array
+//! filters configured with `array_filter()` are applied to typed update
 //! operations.
+//!
+//! ## Bulk writes
+//!
+//! `ModelType::bulk_write()` (a [`Model`] method) queues inserts, typed
+//! updates, replacements, and typed deletions — mixing operation kinds
+//! freely — against one model's collection and sends them to MongoDB as a
+//! **single** `bulkWrite` command, preserving queue order exactly:
+//!
+//! ```rust,no_run
+//! # use mongodb::bson::oid::ObjectId;
+//! # use oximod::{Model, OxiModError, Queryable};
+//! # use serde::{Deserialize, Serialize};
+//! # #[derive(Debug, Serialize, Deserialize, Model)]
+//! # #[db("app")]
+//! # #[collection("jobs")]
+//! # struct Job {
+//! #     #[serde(skip_serializing_if = "Option::is_none")]
+//! #     _id: Option<ObjectId>,
+//! #     #[index(unique)]
+//! #     dedupe_key: String,
+//! #     status: String,
+//! # }
+//! # async fn run() -> Result<(), OxiModError> {
+//! Job::init_indexes().await?; // bulk writes never establish indexes
+//!
+//! let result = Job::bulk_write()
+//!     .insert(Job::new().dedupe_key("job-1").status("queued"))
+//!     .update_one(
+//!         Job::query().filter(|job| job.dedupe_key.eq("job-2")),
+//!         |job| job.status.set("ready"),
+//!     )
+//!     .delete_many(Job::query().filter(|job| job.status.eq("expired")))
+//!     .ordered(false)
+//!     .execute()
+//!     .await?;
+//! # let _ = result;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Bulk writes require **MongoDB Server 8.0+** and are never emulated with
+//! per-item writes. Queued whole-model inserts and replacements run
+//! `#[validate]` for every queued value before any network communication;
+//! typed updates remain non-validating. Lifecycle hooks never run for bulk
+//! operations. Query modifiers a driver bulk model cannot represent fail
+//! locally instead of being dropped. Execution terminals mirror the rest of
+//! OxiMod: `execute`, `execute_from`, `execute_with_session`, and their
+//! `_verbose` counterparts returning per-operation results keyed by queued
+//! index. When individual writes fail, [`OxiModError::BulkWrite`] preserves
+//! the driver's per-operation failure indexes and partial result, reachable
+//! through [`OxiModError::bulk_write_error`]. See [`BulkWrite`] for the
+//! complete semantics; cross-namespace batches remain a
+//! `mongodb::Client::bulk_write` escape hatch.
 //!
 //! ## Aggregation
 //!
@@ -1321,7 +1377,7 @@ pub use oximod_macros::Model;
 /// # }
 /// ```
 ///
-/// # Bulk-write warning
+/// # Multi-document warning
 ///
 /// An unfiltered `update_all()` or `delete_all()` affects every document in the
 /// collection.
