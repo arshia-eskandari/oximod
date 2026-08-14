@@ -1,8 +1,8 @@
 //! Generation of collection-model `Queryable` implementations.
 //!
-//!query.rs`, so your passing local branch is the authoritative version for this cleanup. citeturn225033view2 Collection-backed models receive an implementation of
-//! `::oximod::Queryable`, allowing typed queries to begin at the document
-//! root.
+//! Collection-backed models receive an implementation of
+//! `::oximod::Queryable`, allowing typed queries and aggregations to begin at
+//! the document root.
 //!
 //! Embedded models do not receive this implementation. They receive only a
 //! `FieldSchema` implementation so their fields can participate in nested
