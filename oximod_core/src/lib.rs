@@ -21,5 +21,9 @@ pub mod feature;
 #[doc(hidden)]
 pub mod helpers;
 
+/// Explicit index drift inspection and conservative create-only
+/// reconciliation.
+pub mod index_reconciliation;
+
 /// Typed MongoDB query, sorting, update, deletion, and geospatial primitives.
 pub mod query;
