@@ -1,0 +1,21 @@
+[book]
+title = "The OxiMod Guide"
+authors = ["Arshia Eskandari"]
+language = "en"
+src = "src"
+
+[rust]
+edition = "2024"
+
+[build]
+# Missing chapters listed in SUMMARY.md fail the build instead of being
+# silently created as empty files.
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/arshia-eskandari/oximod"
+
+[output.html.playground]
+# Guide snippets depend on the oximod crate, which the Rust playground cannot
+# compile, so the run button is disabled.
+runnable = false
