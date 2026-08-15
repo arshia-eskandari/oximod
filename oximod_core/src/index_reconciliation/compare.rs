@@ -222,9 +222,9 @@ fn compute_differences(
         ));
     }
 
-    // Sparse is not a drift dimension for text indexes: they are always
-    // sparse and MongoDB ignores the creation option.
-    if !expected_text && !actual_text {
+    // Sparse is not a drift dimension for intrinsically sparse index types:
+    // the flag's presence or absence never changes their semantics.
+    if !is_intrinsically_sparse(expected) && !is_intrinsically_sparse(actual) {
         let expected_sparse = expected_options
             .and_then(|options| options.sparse)
             .unwrap_or(false);
@@ -476,6 +476,31 @@ fn is_text_declaration(expected: &IndexModel) -> bool {
 /// MongoDB's internal `_fts: "text"` key shape.
 fn is_text_listing(actual: &IndexModel) -> bool {
     matches!(actual.keys.get("_fts"), Some(Bson::String(kind)) if kind == "text")
+}
+
+/// Returns whether an index type is intrinsically sparse, making the
+/// `sparse` option meaningless as a drift dimension.
+///
+/// MongoDB documents text, 2d, 2dsphere (version 2 and later), and wildcard
+/// indexes as always sparse. Verified against MongoDB 8.0: the server
+/// persists an explicitly requested `sparse: true` verbatim in `listIndexes`
+/// for text, 2d, and 2dsphere indexes while ignoring it behaviorally, and
+/// rejects the option outright for wildcard indexes (code 67,
+/// CannotCreateIndex: "Index type 'wildcard' does not support the 'sparse'
+/// option"), so the flag never distinguishes two semantically different
+/// indexes of these types.
+///
+/// The key shape identifies the type for declarations and listings alike:
+/// text listings carry the internal `_fts: "text"` value, and wildcard keys
+/// use the `$**` field form.
+fn is_intrinsically_sparse(index: &IndexModel) -> bool {
+    index.keys.iter().any(|(field, value)| {
+        matches!(
+            value,
+            Bson::String(kind) if kind == "text" || kind == "2d" || kind == "2dsphere"
+        ) || field == "$**"
+            || field.ends_with(".$**")
+    })
 }
 
 /// Reconstructs the effective indexed fields and weights of a text
@@ -1456,6 +1481,76 @@ mod tests {
         let actual = [text_listing("content_text", doc! { "content": 1 }, |_| {})];
 
         assert_in_sync(&report(&[expected], Some(&actual), None));
+    }
+
+    #[test]
+    fn geo_sparse_is_not_a_drift_dimension() {
+        // 2dsphere (v2+) and 2d indexes are always sparse; the option has no
+        // semantic effect, so a declared flag must not drift against an
+        // equivalent index created without it.
+        let expected = declaration(doc! { "location": "2dsphere" }, |options| {
+            options.sparse = Some(true);
+        });
+        let actual = [listing(
+            "location_2dsphere",
+            doc! { "location": "2dsphere" },
+            |_| {},
+        )];
+        assert_in_sync(&report(&[expected], Some(&actual), None));
+
+        let expected = declaration(doc! { "position": "2d" }, |options| {
+            options.sparse = Some(true);
+        });
+        let actual = [listing("position_2d", doc! { "position": "2d" }, |_| {})];
+        assert_in_sync(&report(&[expected], Some(&actual), None));
+
+        // The inverse also holds: MongoDB persists an explicitly requested
+        // `sparse: true` in listIndexes for these types, and that persisted
+        // flag must not drift against a declaration that omitted it.
+        let expected = declaration(doc! { "location": "2dsphere" }, |_| {});
+        let actual = [listing(
+            "location_2dsphere",
+            doc! { "location": "2dsphere" },
+            |options| {
+                options.sparse = Some(true);
+            },
+        )];
+        assert_in_sync(&report(&[expected], Some(&actual), None));
+    }
+
+    #[test]
+    fn wildcard_sparse_is_not_a_drift_dimension() {
+        // Wildcard indexes are inherently sparse; MongoDB 8.0 rejects the
+        // `sparse` option for them outright (code 67, CannotCreateIndex), so
+        // no actual wildcard listing can carry it and a declared flag has no
+        // semantic content to drift on.
+        let expected = declaration(doc! { "attributes.$**": 1 }, |options| {
+            options.sparse = Some(true);
+        });
+        let actual = [listing(
+            "attributes.$**_1",
+            doc! { "attributes.$**": 1 },
+            |_| {},
+        )];
+
+        assert_in_sync(&report(&[expected], Some(&actual), None));
+    }
+
+    #[test]
+    fn ordinary_sparse_remains_a_drift_dimension() {
+        // For ordinary indexes the option is semantic: declared but absent
+        // on the server is real drift.
+        let expected = declaration(doc! { "rank": 1 }, |options| {
+            options.sparse = Some(true);
+        });
+        let actual = [listing("rank_1", doc! { "rank": 1 }, |_| {})];
+
+        let drift = report(&[expected], Some(&actual), None);
+
+        assert_eq!(
+            mismatch_candidates(&drift)[0].differences(),
+            &["sparse: expected true, actual false".to_string()]
+        );
     }
 
     #[test]

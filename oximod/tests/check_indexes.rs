@@ -893,3 +893,243 @@ async fn raw_text_index_on_other_field_blocks_text_declaration() -> TestResult {
 
     Ok(())
 }
+
+// Run test: cargo nextest run intrinsically_sparse_geo_declarations_ignore_missing_sparse_flag
+#[tokio::test]
+async fn intrinsically_sparse_geo_declarations_ignore_missing_sparse_flag() -> TestResult {
+    init().await?;
+
+    // 2dsphere (v2+) and 2d indexes are always sparse and ignore the
+    // `sparse` creation option, so a declared flag must not drift against
+    // equivalent raw indexes created without it.
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("ir_check_geo_sparse")]
+    pub struct GeoSparse {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(geo_2dsphere, sparse, name = "gs_sphere_idx")]
+        location: Vec<f64>,
+
+        #[index(geo_2d, sparse, name = "gs_flat_idx")]
+        position: Vec<f64>,
+    }
+
+    reset_collection::<GeoSparse>().await?;
+
+    let raw = GeoSparse::get_document_collection()?;
+    raw.create_index(
+        IndexModel::builder()
+            .keys(doc! { "location": "2dsphere" })
+            .options(
+                IndexOptions::builder()
+                    .name("gs_sphere_idx".to_string())
+                    .build(),
+            )
+            .build(),
+    )
+    .await?;
+    raw.create_index(
+        IndexModel::builder()
+            .keys(doc! { "position": "2d" })
+            .options(
+                IndexOptions::builder()
+                    .name("gs_flat_idx".to_string())
+                    .build(),
+            )
+            .build(),
+    )
+    .await?;
+
+    let report = GeoSparse::check_indexes().await?;
+
+    assert_eq!(report.declared().len(), 2);
+    assert!(
+        report.is_in_sync(),
+        "intrinsically sparse geo indexes must not drift on the sparse \
+         flag: {:?}",
+        report
+            .declared()
+            .iter()
+            .map(status_name)
+            .collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run wildcard_sparse_is_rejected_by_the_server_and_is_not_drift
+#[tokio::test]
+async fn wildcard_sparse_is_rejected_by_the_server_and_is_not_drift() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("ir_check_wildcard_sparse")]
+    pub struct WildcardSparse {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(wildcard, sparse, name = "ws_attrs_idx")]
+        attributes: Option<mongodb::bson::Document>,
+    }
+
+    reset_collection::<WildcardSparse>().await?;
+
+    let raw = WildcardSparse::get_document_collection()?;
+
+    // Pin the observed server behavior: wildcard indexes are inherently
+    // sparse, and MongoDB rejects the explicit option outright, so no
+    // actual wildcard listing can ever carry it.
+    let rejection = raw
+        .create_index(
+            IndexModel::builder()
+                .keys(doc! { "attributes.$**": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("ws_probe_idx".to_string())
+                        .sparse(true)
+                        .build(),
+                )
+                .build(),
+        )
+        .await
+        .expect_err("MongoDB should reject `sparse` on a wildcard index");
+    assert!(
+        format!("{rejection:?}").contains("CannotCreateIndex"),
+        "expected CannotCreateIndex (code 67), got {rejection:?}"
+    );
+
+    // The declared flag therefore has no semantic content: an equivalent
+    // wildcard index created without it satisfies the declaration.
+    raw.create_index(
+        IndexModel::builder()
+            .keys(doc! { "attributes.$**": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("ws_attrs_idx".to_string())
+                    .build(),
+            )
+            .build(),
+    )
+    .await?;
+
+    let report = WildcardSparse::check_indexes().await?;
+
+    assert!(
+        report.is_in_sync(),
+        "wildcard declarations must not drift on the sparse flag: {:?}",
+        report
+            .declared()
+            .iter()
+            .map(status_name)
+            .collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+// Run test: cargo nextest run locale_specific_collation_defaults_do_not_create_false_drift
+#[tokio::test]
+async fn locale_specific_collation_defaults_do_not_create_false_drift() -> TestResult {
+    init().await?;
+
+    // `fr_CA` carries a locale-specific collation default: omitted
+    // `backwards` resolves to true, unlike the generic default of false.
+    // Verified against MongoDB 8.0: both listCollections (the collection
+    // default) and listIndexes (the inherited index collation) materialize
+    // the full effective collation document — locale defaults included — so
+    // the effective comparison sees identical resolved values on both
+    // sides.
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("ir_check_locale_collation")]
+    pub struct LocaleCollation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(name = "lc_title_idx")]
+        title: String,
+    }
+
+    let collection = LocaleCollation::get_collection()?;
+    let _ = collection.drop().await;
+
+    collection
+        .client()
+        .database("test")
+        .create_collection("ir_check_locale_collation")
+        .collation(Collation::builder().locale("fr_CA".to_string()).build())
+        .await?;
+
+    LocaleCollation::init_indexes().await?;
+
+    let report = LocaleCollation::check_indexes().await?;
+
+    assert_single_in_sync(&report);
+
+    Ok(())
+}
+
+// Run test: cargo nextest run explicit_deviation_from_locale_default_reports_mismatched
+#[tokio::test]
+async fn explicit_deviation_from_locale_default_reports_mismatched() -> TestResult {
+    init().await?;
+
+    #[derive(Model, Serialize, Deserialize)]
+    #[db("test")]
+    #[collection("ir_check_locale_deviation")]
+    pub struct LocaleDeviation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        _id: Option<ObjectId>,
+
+        #[index(name = "ld_title_idx")]
+        title: String,
+    }
+
+    let collection = LocaleDeviation::get_collection()?;
+    let _ = collection.drop().await;
+
+    collection
+        .client()
+        .database("test")
+        .create_collection("ir_check_locale_deviation")
+        .collation(Collation::builder().locale("fr_CA".to_string()).build())
+        .await?;
+
+    // An otherwise matching raw index explicitly overrides `backwards` to
+    // false — deviating from the collection's effective `fr_CA` default of
+    // true. The declaration expects the inherited default, so this is real
+    // drift.
+    let mut deviating = Collation::builder().locale("fr_CA".to_string()).build();
+    deviating.backwards = Some(false);
+
+    LocaleDeviation::get_document_collection()?
+        .create_index(
+            IndexModel::builder()
+                .keys(doc! { "title": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("ld_title_idx".to_string())
+                        .collation(deviating)
+                        .build(),
+                )
+                .build(),
+        )
+        .await?;
+
+    let report = LocaleDeviation::check_indexes().await?;
+
+    assert_eq!(report.mismatched_count(), 1);
+    let differences = mismatch_differences(&report.declared()[0]);
+    assert_eq!(differences.len(), 1);
+    assert!(
+        differences[0].starts_with("collation:")
+            && differences[0].contains("backwards: true")
+            && differences[0].contains("backwards: false"),
+        "expected a backwards collation difference: {differences:?}"
+    );
+
+    Ok(())
+}

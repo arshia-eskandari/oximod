@@ -277,10 +277,11 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     /// report: a concurrent process may change indexes at
                     /// any moment.
                     ///
-                    /// Drift — missing, mismatched, or unmanaged indexes —
-                    /// is report data, not an error. Requires the
-                    /// `listCollections` and `listIndexes` privileges
-                    /// (MongoDB's built-in `read` role suffices).
+                    /// Missing and mismatched declarations, together with
+                    /// unmanaged indexes, are report data, not errors.
+                    /// Requires the `listCollections` and `listIndexes`
+                    /// privileges (MongoDB's built-in `read` role
+                    /// suffices).
                     ///
                     /// # Errors
                     ///
