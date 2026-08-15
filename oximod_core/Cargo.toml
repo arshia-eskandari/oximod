@@ -2,6 +2,7 @@
 name = "oximod_core"
 version = "0.6.0"
 edition = "2024"
+rust-version = "1.88"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "Core runtime components for OxiMod, a schema-aware MongoDB modeling library for Rust."
 license = "MIT"
@@ -12,7 +13,7 @@ categories = ["database", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1.89"
-mongodb = "3.5.1"
+mongodb = "3.8.0"
 thiserror = "2.0.18"
 serde = "1.0.228"
 

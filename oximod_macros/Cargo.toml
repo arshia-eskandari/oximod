@@ -2,6 +2,7 @@
 name = "oximod_macros"
 version = "0.6.0"
 edition = "2024"
+rust-version = "1.88"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
 description = "Procedural macros for the OxiMod MongoDB ODM."
 license = "MIT"
@@ -17,7 +18,7 @@ proc-macro = true
 syn = { version = "2.0.117", features = ["full"] }
 quote = "1.0.44"
 proc-macro2 = "1.0.106"
-mongodb = "3.5.1"
+mongodb = "3.8.0"
 thiserror = "2.0.18"
 oximod_core = { version = "0.6.0", path = "../oximod_core" }
 futures-util = "0.3.32"

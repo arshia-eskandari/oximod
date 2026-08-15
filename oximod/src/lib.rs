@@ -18,6 +18,8 @@
 //! - fluent construction with generated setters and field defaults;
 //! - aggregated field validation and custom validators;
 //! - single-field MongoDB index declarations;
+//! - explicit index drift inspection and conservative create-only index
+//!   reconciliation;
 //! - optional save and `_id`-helper lifecycle hooks;
 //! - global-client and explicit-client model operations;
 //! - typed and raw MongoDB collection access;
@@ -385,6 +387,45 @@
 //! recomputing the derived field, silently desynchronizing it; genuine
 //! duplicates can then persist while the index still appears healthy. Create
 //! a real MongoDB compound unique index through the driver instead.
+//!
+//! ## Index drift detection and reconciliation
+//!
+//! Beyond establishment, collection models generate an explicit inspection
+//! and reconciliation surface that is independent of the once-per-process
+//! establishment state in both directions:
+//!
+//! - `ModelType::check_indexes()` / `ModelType::check_indexes_from(&client)`
+//!   perform a read-only, point-in-time comparison of the declared
+//!   `#[index(...)]` specifications against the index metadata MongoDB
+//!   reports, returning an [`IndexDriftReport`]. Each declaration is
+//!   classified [`DeclaredIndexStatus::InSync`],
+//!   [`DeclaredIndexStatus::Missing`], or
+//!   [`DeclaredIndexStatus::Mismatched`] (with per-candidate differences).
+//!   Server indexes unrelated to any declaration — direct-driver compound,
+//!   partial, and other advanced indexes — are listed as unmanaged, never
+//!   counted as drift, and never touched; the built-in `_id_` index is
+//!   ignored. Inspection never creates the collection: an absent collection
+//!   reports every declaration missing. Requires the `listCollections` and
+//!   `listIndexes` privileges (the built-in `read` role suffices).
+//!
+//! - `ModelType::create_missing_indexes()` /
+//!   `ModelType::create_missing_indexes_from(&client)` re-inspect, create
+//!   **only** the declarations classified missing, then inspect again,
+//!   returning an [`IndexReconciliationReport`]. Mismatched declarations and
+//!   unmanaged indexes are never modified: no index is dropped, hidden,
+//!   unhidden, converted to unique, TTL-adjusted, or rebuilt, and `collMod`
+//!   is never used. When nothing is missing, no command is sent at all.
+//!   Additionally requires the `createIndex` privilege (the built-in
+//!   `readWrite` role suffices).
+//!
+//! Drift itself is report data, not an error; [`OxiModError`] is returned
+//! only when the inspection or creation operation fails. Both operations are
+//! point-in-time rather than transactional, and creating an index remains
+//! operationally consequential (build cost, unique-constraint failures over
+//! existing duplicates, TTL expiry of existing documents) — run
+//! reconciliation during controlled startup, deployment, or maintenance
+//! workflows. On sharded deployments this inspects the namespace-visible
+//! index metadata; it is not a per-shard consistency audit.
 //!
 //! ## Clients and collection access
 //!
@@ -1725,6 +1766,60 @@ pub use oximod_core::query::GeoPolygon;
 /// ```
 pub use oximod_core::query::NearQuery;
 
+/// Point-in-time comparison of a model's declared `#[index(...)]`
+/// specifications against the index metadata MongoDB reports.
+///
+/// Produced by the generated `check_indexes()` / `check_indexes_from(&client)`
+/// methods on collection models, and by the before/after inspection inside
+/// `create_missing_indexes*()`.
+///
+/// Each declaration is classified as [`DeclaredIndexStatus::InSync`],
+/// [`DeclaredIndexStatus::Missing`], or [`DeclaredIndexStatus::Mismatched`],
+/// in declaration order. Server indexes unrelated to any declaration are
+/// listed under [`IndexDriftReport::unmanaged`] — the built-in `_id_` index
+/// excepted — and never affect [`IndexDriftReport::is_in_sync`], because
+/// direct-driver compound, partial, and other advanced indexes are a
+/// supported escape hatch, not drift.
+///
+/// # Example
+///
+/// ```ignore
+/// let report = User::check_indexes_from(&client).await?;
+///
+/// if report.has_drift() {
+///     for status in report.declared() {
+///         // inspect Missing / Mismatched statuses
+///     }
+/// }
+/// ```
+pub use oximod_core::index_reconciliation::IndexDriftReport;
+
+/// Drift status of one declared `#[index(...)]` specification.
+///
+/// Only [`DeclaredIndexStatus::Missing`] declarations are eligible for
+/// `create_missing_indexes*()`. A [`DeclaredIndexStatus::Mismatched`]
+/// declaration is reported with its related server indexes and their
+/// differences; OxiMod never modifies an existing index to resolve it.
+pub use oximod_core::index_reconciliation::DeclaredIndexStatus;
+
+/// A server index related to a mismatched declaration, with the semantic
+/// differences that prevent it from counting as in sync.
+pub use oximod_core::index_reconciliation::IndexMismatchCandidate;
+
+/// Outcome of one conservative `create_missing_indexes*()` pass: the drift
+/// report before creation, the declarations submitted to MongoDB (only
+/// those classified missing), and the drift report observed afterwards.
+pub use oximod_core::index_reconciliation::IndexReconciliationReport;
+
+/// The MongoDB driver's index specification, re-exported for report
+/// ergonomics.
+///
+/// OxiMod's declared indexes are represented as driver [`IndexModel`]s, and
+/// drift reports expose both the declared and the server-reported models
+/// directly, so downstream tooling can consume raw index metadata without
+/// naming the transitive `mongodb` dependency.
+pub use mongodb::IndexModel;
+
 // --- Generated-code support ----------------------------------------------
 
 #[doc(hidden)]
@@ -1746,6 +1841,18 @@ pub mod _error {
 
 #[doc(hidden)]
 pub use futures_util as _futures_util;
+
+#[doc(hidden)]
+pub mod _index_reconciliation {
+    //! Hidden macro-support namespace for generated index reconciliation.
+    //!
+    //! Generated `check_indexes*()` and `create_missing_indexes*()` methods
+    //! resolve their collection and delegate here together with the model's
+    //! `_declared_indexes()`. This namespace is not supported public API;
+    //! consume the public report types re-exported from the crate root.
+
+    pub use oximod_core::index_reconciliation::{check_indexes, create_missing_indexes};
+}
 
 #[doc(hidden)]
 pub use mongodb as _mongodb;

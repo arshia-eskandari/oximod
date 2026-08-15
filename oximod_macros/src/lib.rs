@@ -174,6 +174,17 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     );
 
                 impl #name {
+                    // The one generated source of truth for this model's
+                    // declared `#[index(...)]` specifications: establishment
+                    // and reconciliation must consume the same IndexModels.
+                    #[doc(hidden)]
+                    fn _declared_indexes()
+                    -> Vec<::oximod::_mongodb::IndexModel> {
+                        vec![
+                            #(#indexes),*
+                        ]
+                    }
+
                     #[doc(hidden)]
                     #[cold]
                     #[inline(never)]
@@ -183,9 +194,7 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     ) -> Result<(), ::oximod::OxiModError> {
                         #index_once_async_ident
                             .run_once(|| async move {
-                                let indexes = vec![
-                                    #(#indexes),*
-                                ];
+                                let indexes = Self::_declared_indexes();
 
                                 if !indexes.is_empty() {
                                     collection
@@ -255,6 +264,149 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                         >::get_collection_from(client)?;
 
                         Self::_create_indexes(&collection).await
+                    }
+
+                    /// Compares this model's declared `#[index(...)]`
+                    /// specifications against the index metadata MongoDB
+                    /// currently reports, using the global client.
+                    ///
+                    /// The inspection is read-only: it never creates the
+                    /// collection or any index, and it is independent of the
+                    /// once-per-process establishment state used by
+                    /// `init_indexes()`. The result is a point-in-time
+                    /// report: a concurrent process may change indexes at
+                    /// any moment.
+                    ///
+                    /// Missing and mismatched declarations, together with
+                    /// unmanaged indexes, are report data, not errors.
+                    /// Requires the `listCollections` and `listIndexes`
+                    /// privileges (MongoDB's built-in `read` role
+                    /// suffices).
+                    ///
+                    /// # Errors
+                    ///
+                    /// Returns an error when the global client has not been
+                    /// initialized, an index error when MongoDB rejects the
+                    /// metadata inspection, or a connection error when the
+                    /// deployment cannot be reached.
+                    pub async fn check_indexes()
+                    -> Result<::oximod::IndexDriftReport, ::oximod::OxiModError> {
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection()?;
+
+                        ::oximod::_index_reconciliation::check_indexes(
+                            &collection,
+                            Self::_declared_indexes(),
+                        )
+                        .await
+                    }
+
+                    /// Compares this model's declared `#[index(...)]`
+                    /// specifications against the index metadata MongoDB
+                    /// currently reports, using the supplied client.
+                    ///
+                    /// This is the explicit-client counterpart to
+                    /// `check_indexes()` and does not require the global
+                    /// client to be initialized. See `check_indexes()` for
+                    /// the read-only, point-in-time semantics.
+                    ///
+                    /// # Errors
+                    ///
+                    /// Returns an index error when MongoDB rejects the
+                    /// metadata inspection, or a connection error when the
+                    /// deployment cannot be reached.
+                    pub async fn check_indexes_from(
+                        client: &::oximod::_mongodb::Client,
+                    ) -> Result<::oximod::IndexDriftReport, ::oximod::OxiModError> {
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection_from(client)?;
+
+                        ::oximod::_index_reconciliation::check_indexes(
+                            &collection,
+                            Self::_declared_indexes(),
+                        )
+                        .await
+                    }
+
+                    /// Creates only the declared `#[index(...)]`
+                    /// specifications that are currently missing from the
+                    /// server, using the global client.
+                    ///
+                    /// Declarations reported mismatched and unmanaged
+                    /// raw-driver indexes are never modified: this method
+                    /// sends at most one `createIndexes` command for the
+                    /// missing declarations and never drops, hides,
+                    /// unhides, or otherwise alters an existing index. When
+                    /// nothing is missing, no command is sent at all, so a
+                    /// model with zero declared indexes never creates its
+                    /// collection. The once-per-process establishment state
+                    /// used by `init_indexes()` is neither consulted nor
+                    /// modified.
+                    ///
+                    /// Creating an index is still operationally
+                    /// consequential: index builds consume resources, a
+                    /// unique index build fails when existing data violates
+                    /// uniqueness, and a new TTL index can make already
+                    /// expired documents immediately eligible for deletion.
+                    /// Use this during controlled startup, deployment, or
+                    /// maintenance workflows. Requires the `createIndex`
+                    /// privilege in addition to the inspection privileges
+                    /// (MongoDB's built-in `readWrite` role suffices).
+                    ///
+                    /// # Errors
+                    ///
+                    /// Returns an error when the global client has not been
+                    /// initialized, an index error when MongoDB rejects the
+                    /// inspection or creation, or a connection error when
+                    /// the deployment cannot be reached. A failed creation
+                    /// does not imply the server is unchanged; call
+                    /// `check_indexes()` again for current state.
+                    pub async fn create_missing_indexes()
+                    -> Result<::oximod::IndexReconciliationReport, ::oximod::OxiModError>
+                    {
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection()?;
+
+                        ::oximod::_index_reconciliation::create_missing_indexes(
+                            &collection,
+                            Self::_declared_indexes(),
+                        )
+                        .await
+                    }
+
+                    /// Creates only the declared `#[index(...)]`
+                    /// specifications that are currently missing from the
+                    /// server, using the supplied client.
+                    ///
+                    /// This is the explicit-client counterpart to
+                    /// `create_missing_indexes()` and does not require the
+                    /// global client to be initialized. See
+                    /// `create_missing_indexes()` for the conservative
+                    /// create-only semantics and operational caveats.
+                    ///
+                    /// # Errors
+                    ///
+                    /// Returns an index error when MongoDB rejects the
+                    /// inspection or creation, or a connection error when
+                    /// the deployment cannot be reached. A failed creation
+                    /// does not imply the server is unchanged; call
+                    /// `check_indexes_from()` again for current state.
+                    pub async fn create_missing_indexes_from(
+                        client: &::oximod::_mongodb::Client,
+                    ) -> Result<::oximod::IndexReconciliationReport, ::oximod::OxiModError>
+                    {
+                        let collection = <
+                            Self as ::oximod::_feature::model::Model
+                        >::get_collection_from(client)?;
+
+                        ::oximod::_index_reconciliation::create_missing_indexes(
+                            &collection,
+                            Self::_declared_indexes(),
+                        )
+                        .await
                     }
 
                     #[doc(hidden)]
@@ -479,6 +631,161 @@ mod tests {
             !generated.contains("init_indexes"),
             "embedded model unexpectedly received index initialization \
              methods: {generated}"
+        );
+    }
+
+    #[test]
+    fn reconciliation_methods_are_generated_for_collection_models_only() {
+        let collection_input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique)]
+                name: String,
+            }
+        };
+
+        let generated =
+            compact(expand_model(&collection_input).expect("collection model should expand"));
+
+        for expected in [
+            "pubasyncfncheck_indexes()->Result<::oximod::IndexDriftReport,::oximod::OxiModError>",
+            "pubasyncfncheck_indexes_from(client:&::oximod::_mongodb::Client,)",
+            "pubasyncfncreate_missing_indexes()->Result<::oximod::IndexReconciliationReport,\
+             ::oximod::OxiModError>",
+            "pubasyncfncreate_missing_indexes_from(client:&::oximod::_mongodb::Client,)",
+            "::oximod::_index_reconciliation::check_indexes(&collection,Self::_declared_indexes(),)",
+            "::oximod::_index_reconciliation::create_missing_indexes(&collection,\
+             Self::_declared_indexes(),)",
+        ] {
+            assert!(
+                generated.contains(expected),
+                "expected `{expected}` in generated collection model: \
+                 {generated}"
+            );
+        }
+
+        let embedded_input: DeriveInput = parse_quote! {
+            #[model(embedded)]
+            struct Address {
+                city: String,
+            }
+        };
+
+        let generated =
+            compact(expand_model(&embedded_input).expect("embedded model should expand"));
+
+        for unexpected in ["check_indexes", "create_missing_indexes"] {
+            assert!(
+                !generated.contains(unexpected),
+                "embedded model unexpectedly received `{unexpected}`: \
+                 {generated}"
+            );
+        }
+    }
+
+    #[test]
+    fn reconciliation_methods_never_touch_the_once_state() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique)]
+                name: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("collection model should expand"));
+
+        // The once-per-process establishment static appears exactly twice:
+        // its declaration and its single use inside `_create_indexes`. The
+        // reconciliation methods are independent of it by construction.
+        assert_eq!(
+            generated.matches("_INDEX_INIT_User").count(),
+            2,
+            "the OnceAsync state should only be declared and used by \
+             `_create_indexes`: {generated}"
+        );
+    }
+
+    #[test]
+    fn declared_indexes_helper_is_the_single_generated_index_source() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique, name = "name_idx")]
+                name: String,
+
+                #[index(order = "-1")]
+                age: i32,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("collection model should expand"));
+
+        // The helper holds the generated IndexModel expressions...
+        assert!(
+            generated.contains("fn_declared_indexes()->Vec<::oximod::_mongodb::IndexModel>{vec![",),
+            "expected the `_declared_indexes` helper in: {generated}"
+        );
+        for declaration in [
+            "doc!{stringify!(name):1",
+            ".unique(Some(true))",
+            ".name(Some(\"name_idx\".to_string()))",
+            "doc!{stringify!(age):-1",
+        ] {
+            assert!(
+                generated.contains(declaration),
+                "expected declaration tokens `{declaration}` in: {generated}"
+            );
+        }
+
+        // ...establishment consumes it instead of rebuilding declarations...
+        assert!(
+            generated.contains("letindexes=Self::_declared_indexes();"),
+            "expected `_create_indexes` to consume `_declared_indexes`: \
+             {generated}"
+        );
+
+        // ...and the IndexModel constructor appears exactly once per declared
+        // index, so no second generated declaration list can drift.
+        assert_eq!(
+            generated
+                .matches("::oximod::_mongodb::IndexModel::builder()")
+                .count(),
+            2,
+            "each declared index should be generated exactly once: {generated}"
+        );
+    }
+
+    #[test]
+    fn embedded_models_receive_no_declared_indexes_helper() {
+        let input: DeriveInput = parse_quote! {
+            #[model(embedded)]
+            struct Address {
+                city: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("embedded model should expand"));
+
+        assert!(
+            !generated.contains("_declared_indexes"),
+            "embedded model unexpectedly received `_declared_indexes`: \
+             {generated}"
         );
     }
 
