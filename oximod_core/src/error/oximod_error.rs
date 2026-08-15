@@ -12,13 +12,29 @@ pub type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 
 /// Represents a validation failure for a specific model field.
 ///
-/// Each error records the model field that failed validation and a
-/// human-readable description of the violated rule.
+/// Each error records the Rust model field name — or, for
+/// `#[validate(nested)]` descent, the nested validation path — identifying
+/// the failing value, together with a human-readable description of the
+/// violated rule.
+///
+/// Path examples:
+///
+/// ```text
+/// email
+/// address.postal_code
+/// items[1].sku
+/// addresses["billing"].postal_code
+/// ```
+///
+/// Nested paths use Rust model field names (not Serde/BSON names), quote and
+/// escape map keys, and are reported in deterministic order. They are
+/// human-readable diagnostics, not a stable machine-parseable schema.
 ///
 /// Validation errors are returned through [`OxiModError::Validation`].
 #[derive(Debug, Default)]
 pub struct ValidationError {
-    /// The model field that failed validation.
+    /// The Rust model field name or nested validation path identifying the
+    /// value that failed validation.
     pub field: String,
 
     /// A human-readable description of the validation failure.
