@@ -1,0 +1,5 @@
+error: Invalid #[validate]: `nested` does not accept arguments
+  --> tests/ui/validate/nested_with_args.rs:15:5
+   |
+15 |     #[validate(nested(city))]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^

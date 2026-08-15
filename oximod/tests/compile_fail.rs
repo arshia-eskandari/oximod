@@ -22,6 +22,18 @@ fn conflicting_index_declarations_are_rejected() {
 }
 
 #[test]
+fn nested_validation_misuse_is_rejected_and_supported_shapes_compile() {
+    let tests = trybuild::TestCases::new();
+
+    tests.compile_fail("tests/ui/validate/nested_on_scalar.rs");
+    tests.compile_fail("tests/ui/validate/nested_on_collection_model.rs");
+    tests.compile_fail("tests/ui/validate/nested_with_value.rs");
+    tests.compile_fail("tests/ui/validate/nested_with_args.rs");
+    tests.compile_fail("tests/ui/validate/nested_aliases_rejected.rs");
+    tests.pass("tests/ui/validate/nested_supported_shapes.rs");
+}
+
+#[test]
 fn standard_struct_attributes_are_accepted_and_unknown_attributes_are_named() {
     let tests = trybuild::TestCases::new();
 
