@@ -1725,6 +1725,60 @@ pub use oximod_core::query::GeoPolygon;
 /// ```
 pub use oximod_core::query::NearQuery;
 
+/// Point-in-time comparison of a model's declared `#[index(...)]`
+/// specifications against the index metadata MongoDB reports.
+///
+/// Produced by the generated `check_indexes()` / `check_indexes_from(&client)`
+/// methods on collection models, and by the before/after inspection inside
+/// `create_missing_indexes*()`.
+///
+/// Each declaration is classified as [`DeclaredIndexStatus::InSync`],
+/// [`DeclaredIndexStatus::Missing`], or [`DeclaredIndexStatus::Mismatched`],
+/// in declaration order. Server indexes unrelated to any declaration are
+/// listed under [`IndexDriftReport::unmanaged`] — the built-in `_id_` index
+/// excepted — and never affect [`IndexDriftReport::is_in_sync`], because
+/// direct-driver compound, partial, and other advanced indexes are a
+/// supported escape hatch, not drift.
+///
+/// # Example
+///
+/// ```ignore
+/// let report = User::check_indexes_from(&client).await?;
+///
+/// if report.has_drift() {
+///     for status in report.declared() {
+///         // inspect Missing / Mismatched statuses
+///     }
+/// }
+/// ```
+pub use oximod_core::index_reconciliation::IndexDriftReport;
+
+/// Drift status of one declared `#[index(...)]` specification.
+///
+/// Only [`DeclaredIndexStatus::Missing`] declarations are eligible for
+/// `create_missing_indexes*()`. A [`DeclaredIndexStatus::Mismatched`]
+/// declaration is reported with its related server indexes and their
+/// differences; OxiMod never modifies an existing index to resolve it.
+pub use oximod_core::index_reconciliation::DeclaredIndexStatus;
+
+/// A server index related to a mismatched declaration, with the semantic
+/// differences that prevent it from counting as in sync.
+pub use oximod_core::index_reconciliation::IndexMismatchCandidate;
+
+/// Outcome of one conservative `create_missing_indexes*()` pass: the drift
+/// report before creation, the declarations submitted to MongoDB (only
+/// those classified missing), and the drift report observed afterwards.
+pub use oximod_core::index_reconciliation::IndexReconciliationReport;
+
+/// The MongoDB driver's index specification, re-exported for report
+/// ergonomics.
+///
+/// OxiMod's declared indexes are represented as driver [`IndexModel`]s, and
+/// drift reports expose both the declared and the server-reported models
+/// directly, so downstream tooling can consume raw index metadata without
+/// naming the transitive `mongodb` dependency.
+pub use mongodb::IndexModel;
+
 // --- Generated-code support ----------------------------------------------
 
 #[doc(hidden)]
@@ -1746,6 +1800,18 @@ pub mod _error {
 
 #[doc(hidden)]
 pub use futures_util as _futures_util;
+
+#[doc(hidden)]
+pub mod _index_reconciliation {
+    //! Hidden macro-support namespace for generated index reconciliation.
+    //!
+    //! Generated `check_indexes*()` and `create_missing_indexes*()` methods
+    //! resolve their collection and delegate here together with the model's
+    //! `_declared_indexes()`. This namespace is not supported public API;
+    //! consume the public report types re-exported from the crate root.
+
+    pub use oximod_core::index_reconciliation::{check_indexes, create_missing_indexes};
+}
 
 #[doc(hidden)]
 pub use mongodb as _mongodb;
