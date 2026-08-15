@@ -481,25 +481,27 @@ fn is_text_listing(actual: &IndexModel) -> bool {
 /// Returns whether an index type is intrinsically sparse, making the
 /// `sparse` option meaningless as a drift dimension.
 ///
-/// MongoDB documents text, 2d, 2dsphere (version 2 and later), and wildcard
-/// indexes as always sparse. Verified against MongoDB 8.0: the server
-/// persists an explicitly requested `sparse: true` verbatim in `listIndexes`
-/// for text, 2d, and 2dsphere indexes while ignoring it behaviorally, and
-/// rejects the option outright for wildcard indexes (code 67,
-/// CannotCreateIndex: "Index type 'wildcard' does not support the 'sparse'
-/// option"), so the flag never distinguishes two semantically different
-/// indexes of these types.
+/// MongoDB documents text, 2d, and 2dsphere (version 2 and later) indexes
+/// as always sparse. Verified against MongoDB 8.0: the server persists an
+/// explicitly requested `sparse: true` verbatim in `listIndexes` for these
+/// types while ignoring it behaviorally, so the flag never distinguishes
+/// two semantically different indexes of these types. The key shape
+/// identifies the type for declarations and listings alike; text listings
+/// carry the internal `_fts: "text"` value.
 ///
-/// The key shape identifies the type for declarations and listings alike:
-/// text listings carry the internal `_fts: "text"` value, and wildcard keys
-/// use the `$**` field form.
+/// Wildcard indexes are deliberately NOT in this set even though they are
+/// also inherently sparse: MongoDB 8.0 rejects the `sparse` option for them
+/// outright (code 67, CannotCreateIndex), so a `sparse` wildcard
+/// declaration cannot actually be created. Treating an existing flagless
+/// wildcard index as satisfying such a declaration would hide that OxiMod
+/// could never recreate the declared desired state; the sparse difference
+/// therefore stays visible and the declaration reports `Mismatched`.
 fn is_intrinsically_sparse(index: &IndexModel) -> bool {
-    index.keys.iter().any(|(field, value)| {
+    index.keys.iter().any(|(_, value)| {
         matches!(
             value,
             Bson::String(kind) if kind == "text" || kind == "2d" || kind == "2dsphere"
-        ) || field == "$**"
-            || field.ends_with(".$**")
+        )
     })
 }
 
@@ -1519,11 +1521,13 @@ mod tests {
     }
 
     #[test]
-    fn wildcard_sparse_is_not_a_drift_dimension() {
-        // Wildcard indexes are inherently sparse; MongoDB 8.0 rejects the
-        // `sparse` option for them outright (code 67, CannotCreateIndex), so
-        // no actual wildcard listing can carry it and a declared flag has no
-        // semantic content to drift on.
+    fn uncreatable_wildcard_sparse_declaration_is_mismatched_not_in_sync() {
+        // MongoDB 8.0 rejects the `sparse` option on wildcard indexes
+        // outright (code 67, CannotCreateIndex), so this declaration cannot
+        // actually be created. An existing flagless wildcard index must not
+        // count as InSync — after it is dropped, OxiMod could not recreate
+        // the declared desired state — but it remains a logical-key
+        // candidate, so the declaration is Mismatched, never Missing.
         let expected = declaration(doc! { "attributes.$**": 1 }, |options| {
             options.sparse = Some(true);
         });
@@ -1533,7 +1537,13 @@ mod tests {
             |_| {},
         )];
 
-        assert_in_sync(&report(&[expected], Some(&actual), None));
+        let drift = report(&[expected], Some(&actual), None);
+
+        assert_eq!(
+            mismatch_candidates(&drift)[0].differences(),
+            &["sparse: expected true, actual false".to_string()]
+        );
+        assert_eq!(drift.missing_count(), 0);
     }
 
     #[test]

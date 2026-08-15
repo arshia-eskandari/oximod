@@ -959,9 +959,9 @@ async fn intrinsically_sparse_geo_declarations_ignore_missing_sparse_flag() -> T
     Ok(())
 }
 
-// Run test: cargo nextest run wildcard_sparse_is_rejected_by_the_server_and_is_not_drift
+// Run test: cargo nextest run wildcard_sparse_is_rejected_by_the_server_and_stays_mismatched
 #[tokio::test]
-async fn wildcard_sparse_is_rejected_by_the_server_and_is_not_drift() -> TestResult {
+async fn wildcard_sparse_is_rejected_by_the_server_and_stays_mismatched() -> TestResult {
     init().await?;
 
     #[derive(Model, Serialize, Deserialize)]
@@ -1001,8 +1001,12 @@ async fn wildcard_sparse_is_rejected_by_the_server_and_is_not_drift() -> TestRes
         "expected CannotCreateIndex (code 67), got {rejection:?}"
     );
 
-    // The declared flag therefore has no semantic content: an equivalent
-    // wildcard index created without it satisfies the declaration.
+    // Because the declaration itself cannot be created, an equivalent
+    // flagless wildcard index must not count as InSync: after it is
+    // dropped, OxiMod could not recreate the declared desired state. It
+    // remains a logical-key candidate, so the declaration is Mismatched —
+    // never Missing, which would make create_missing submit the
+    // uncreatable declaration blindly.
     raw.create_index(
         IndexModel::builder()
             .keys(doc! { "attributes.$**": 1 })
@@ -1017,14 +1021,13 @@ async fn wildcard_sparse_is_rejected_by_the_server_and_is_not_drift() -> TestRes
 
     let report = WildcardSparse::check_indexes().await?;
 
-    assert!(
-        report.is_in_sync(),
-        "wildcard declarations must not drift on the sparse flag: {:?}",
-        report
-            .declared()
-            .iter()
-            .map(status_name)
-            .collect::<Vec<_>>()
+    assert_eq!(report.mismatched_count(), 1);
+    assert_eq!(report.missing_count(), 0);
+    let differences = mismatch_differences(&report.declared()[0]);
+    assert_eq!(
+        differences,
+        ["sparse: expected true, actual false"],
+        "the only difference should be the sparse flag"
     );
 
     Ok(())
