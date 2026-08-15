@@ -15,13 +15,14 @@
 //!
 //! - inspection is read-only and never creates a collection or index;
 //! - reconciliation creates **only** declarations classified as
-//!   [`Missing`](DeclaredIndexStatus::Missing);
+//!   [`Missing`](crate::index_reconciliation::DeclaredIndexStatus::Missing);
 //! - mismatched declarations and unmanaged raw-driver indexes are reported,
 //!   never dropped, hidden, converted, or otherwise modified;
 //! - no `dropIndexes`, `collMod`, or any destructive administrative command
 //!   is ever issued by this module.
 //!
-//! Drift itself is report data, not an error: [`OxiModError`] is reserved
+//! Drift itself is report data, not an error:
+//! [`OxiModError`](crate::error::oximod_error::OxiModError) is reserved
 //! for failure to perform the inspection or creation operation.
 
 mod compare;

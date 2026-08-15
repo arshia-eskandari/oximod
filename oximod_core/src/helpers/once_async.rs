@@ -1,14 +1,18 @@
 //! Retry-aware asynchronous one-time initialization.
 //!
-//! [`OnceAsync`] ensures that at most one initialization future runs at a
+//! [`OnceAsync`](crate::helpers::once_async::OnceAsync) ensures that at most
+//! one initialization future runs at a
 //! time. Concurrent callers wait for the active attempt to finish. A
 //! successful attempt permanently completes the initializer, while a failed
 //! or cancelled attempt returns it to the uninitialized state so a later call
 //! can try again.
 //!
 //! Retry and duration options are currently diagnostic metadata. They can be
-//! inspected with [`OnceAsync::has_exceeded_retries`] and
-//! [`OnceAsync::is_stuck`], but [`OnceAsync::run_once`] does not independently
+//! inspected with
+//! [`OnceAsync::has_exceeded_retries`](crate::helpers::once_async::OnceAsync::has_exceeded_retries)
+//! and [`OnceAsync::is_stuck`](crate::helpers::once_async::OnceAsync::is_stuck),
+//! but [`OnceAsync::run_once`](crate::helpers::once_async::OnceAsync::run_once)
+//! does not independently
 //! stop an attempt or manufacture an error when a configured limit is reached.
 
 use std::{

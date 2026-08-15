@@ -2,12 +2,15 @@
 //!
 //! This module is OxiMod-internal macro-support infrastructure. It is the
 //! single owner of the policy that maps a [`mongodb::error::Error`] produced
-//! during an operation onto the public [`OxiModError`] failure-class
+//! during an operation onto the public
+//! [`OxiModError`](crate::error::oximod_error::OxiModError) failure-class
 //! contract; generated and non-generated call sites both route through it
 //! instead of matching [`mongodb::error::ErrorKind`] locally.
 //!
 //! It is not part of OxiMod's supported public API. Consumers classify
-//! failures through the public [`OxiModError`] variants and, for driver
+//! failures through the public
+//! [`OxiModError`](crate::error::oximod_error::OxiModError) variants and, for
+//! driver
 //! detail, through [`std::error::Error::source`].
 //!
 //! The deterministic precedence is:

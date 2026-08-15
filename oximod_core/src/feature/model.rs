@@ -1,8 +1,10 @@
 //! Runtime traits for collection-backed and embedded OxiMod models.
 //!
-//! The public [`Model`] trait exposes persistence operations for models backed
+//! The public [`Model`](crate::feature::model::Model) trait exposes
+//! persistence operations for models backed
 //! by their own MongoDB collections. Generated code uses the hidden
-//! [`ModelCore`] trait and mode markers to share validation behavior with
+//! [`ModelCore`](crate::feature::model::ModelCore) trait and mode markers to
+//! share validation behavior with
 //! models declared using `#[model(embedded)]`.
 
 use crate::bulk_write::BulkWrite;
