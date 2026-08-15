@@ -1,14 +1,7 @@
 //! Custom-validator token generation.
 //!
-//! A custom validation function receives a borrowed field value and returns:
-//!
-//! ```text
-//! Result<(), field value and returns:
-//!
-// E>
-//! ```
-//!
-//! where the error implements `ToString`.
+//! A custom validation function receives a borrowed field value and returns
+//! `Result<(), E>`, where `E` implements `ToString`.
 //!
 //! For an `Option<T>` field, the custom validator receives `&T` and runs only
 //! when the field contains `Some(value)`. The surrounding optional-field block

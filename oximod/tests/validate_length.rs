@@ -321,7 +321,9 @@ async fn test_array_length_violation() -> TestResult {
 
     Book::clear().await?;
 
-    let too_short = Book::default().ratings([4, 5, 6]); // compile-time fixed length, uses min/max-equal shape
+    // An [i32; 3] always satisfies min_length = 3 / max_length = 3, so this
+    // save is expected to succeed.
+    let too_short = Book::default().ratings([4, 5, 6]);
 
     let result = too_short.save().await?;
     assert_ne!(result, ObjectId::default());

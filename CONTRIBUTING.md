@@ -26,7 +26,7 @@ cd oximod
 cargo nextest run
 
 # Run examples
-cargo run --example basic_usage
+cargo run -p oximod --example basic_usage
 ```
 
 ## 🛠 Branch Naming Conventions
@@ -63,6 +63,19 @@ cargo nextest run saves_document_without_id_correctly
 ```
 
 Use `.clear()` in tests to reset state between runs.
+
+## 📖 Documentation
+
+The long-form documentation lives in the OxiMod Guide under `docs/` (built
+with [mdBook](https://rust-lang.github.io/mdBook/)), and the root
+`README.md` must stay byte-identical to `oximod/README.md`. When touching
+documentation, verify with:
+
+```bash
+mdbook build docs
+cmp README.md oximod/README.md
+cargo test --doc --workspace
+```
 
 ## 📜 Licensing
 

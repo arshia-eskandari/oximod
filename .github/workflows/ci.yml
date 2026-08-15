@@ -47,6 +47,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Check README copies are identical
+        run: cmp README.md oximod/README.md
+
       - name: Run tests with nextest
         run: cargo nextest run --no-fail-fast --all-targets --all-features
 
@@ -55,6 +58,14 @@ jobs:
 
       - name: Build docs
         run: cargo doc --workspace --all-features --no-deps
+
+      - name: Install mdBook
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook@0.5.4
+
+      - name: Build OxiMod Guide
+        run: mdbook build docs
 
   # Proves OxiMod and its dependency graph compile and pass the
   # database-free unit suites at the declared minimum supported Rust

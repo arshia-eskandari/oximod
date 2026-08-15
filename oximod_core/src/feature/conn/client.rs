@@ -1,6 +1,7 @@
 //! MongoDB client management for OxiMod.
 //!
-//! [`OxiClient`] supports a globally initialized MongoDB client for ordinary
+//! [`OxiClient`](crate::feature::conn::client::OxiClient) supports a globally
+//! initialized MongoDB client for ordinary
 //! model operations and instance-level clients for explicit-client workflows.
 
 use crate::error::oximod_error::OxiModError;

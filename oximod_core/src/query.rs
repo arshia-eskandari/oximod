@@ -1,9 +1,11 @@
 //! Type-safe MongoDB queries and updates.
 //!
 //! This module contains the runtime building blocks for OxiMod's typed-query
-//! API. Applications normally begin with [`Queryable::query`] and construct
+//! API. Applications normally begin with
+//! [`Queryable::query`](crate::query::Queryable::query) and construct
 //! filters, sorting, pagination, updates, deletions, text searches, and
-//! geospatial queries through generated [`Field`] values.
+//! geospatial queries through generated [`Field`](crate::query::Field)
+//! values.
 //!
 //! Public query types are re-exported from the main `oximod` crate, so
 //! applications should normally import them directly from `oximod`.

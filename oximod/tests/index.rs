@@ -505,7 +505,7 @@ async fn index_creation_errors_name_the_collection() -> TestResult {
 
     // Two models sharing one collection may still conflict at the server:
     // the same index name over different keys is rejected with
-    // IndexOptionsConflict. This is deliberately not a compile-time conflict,
+    // IndexKeySpecsConflict. This is deliberately not a compile-time conflict,
     // so it exercises the runtime index-creation error surface.
     #[derive(Model, Serialize, Deserialize)]
     #[db("test")]

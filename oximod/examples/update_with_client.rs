@@ -18,9 +18,10 @@
 //! Explicit-client methods are useful for dependency injection, integration
 //! tests, and applications that manage more than one MongoDB connection.
 //!
-//! Typed queries started with `Model::query()` currently use OxiMod's global
-//! client. For arbitrary queries in an explicit-client workflow, use the typed
-//! collection returned by `get_collection_from()`.
+//! Sessionless typed queries started with `Model::query()` currently use
+//! OxiMod's global client; the `_with_session` terminals run through the
+//! session's own client instead. For arbitrary queries in an explicit-client
+//! workflow, use the typed collection returned by `get_collection_from()`.
 //!
 //! Set `MONGODB_URI` in the environment or in a `.env` file before running
 //! the example.

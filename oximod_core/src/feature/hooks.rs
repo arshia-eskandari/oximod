@@ -96,8 +96,9 @@ where
     /// Runs before an immutable save operation.
     ///
     /// This hook runs before validation and insertion when the model is saved
-    /// through [`Model::save`](crate::feature::model::Model::save) or
-    /// [`Model::save_from`](crate::feature::model::Model::save_from).
+    /// through [`Model::save`](crate::feature::model::Model::save),
+    /// [`Model::save_from`](crate::feature::model::Model::save_from), or
+    /// [`Model::save_with_session`](crate::feature::model::Model::save_with_session).
     ///
     /// Use this hook for checks or side effects that do not mutate the model.
     /// To mutate the model before saving, use [`Hooks::pre_save_mut`].
@@ -112,8 +113,9 @@ where
     /// Runs before a mutable save operation.
     ///
     /// This hook runs before validation and insertion when the model is saved
-    /// through [`Model::save_mut`](crate::feature::model::Model::save_mut) or
-    /// [`Model::save_from_mut`](crate::feature::model::Model::save_from_mut).
+    /// through [`Model::save_mut`](crate::feature::model::Model::save_mut),
+    /// [`Model::save_from_mut`](crate::feature::model::Model::save_from_mut), or
+    /// [`Model::save_mut_with_session`](crate::feature::model::Model::save_mut_with_session).
     ///
     /// It can normalize values, populate derived fields, set timestamps, or
     /// perform other in-place preparation before persistence.
@@ -128,8 +130,9 @@ where
     /// Runs after an immutable save operation succeeds.
     ///
     /// This hook runs after insertion when the model is saved through
-    /// [`Model::save`](crate::feature::model::Model::save) or
-    /// [`Model::save_from`](crate::feature::model::Model::save_from).
+    /// [`Model::save`](crate::feature::model::Model::save),
+    /// [`Model::save_from`](crate::feature::model::Model::save_from), or
+    /// [`Model::save_with_session`](crate::feature::model::Model::save_with_session).
     ///
     /// # Errors
     ///
@@ -142,8 +145,9 @@ where
     /// Runs after a mutable save operation succeeds.
     ///
     /// This hook runs after insertion when the model is saved through
-    /// [`Model::save_mut`](crate::feature::model::Model::save_mut) or
-    /// [`Model::save_from_mut`](crate::feature::model::Model::save_from_mut).
+    /// [`Model::save_mut`](crate::feature::model::Model::save_mut),
+    /// [`Model::save_from_mut`](crate::feature::model::Model::save_from_mut), or
+    /// [`Model::save_mut_with_session`](crate::feature::model::Model::save_mut_with_session).
     ///
     /// Mutations made here affect only the in-memory model. They are not
     /// persisted unless the model is saved again.
@@ -159,8 +163,9 @@ where
     /// Runs before a document is updated by `_id`.
     ///
     /// This hook runs for
-    /// [`Model::update_by_id`](crate::feature::model::Model::update_by_id) and
-    /// [`Model::update_by_id_from`](crate::feature::model::Model::update_by_id_from).
+    /// [`Model::update_by_id`](crate::feature::model::Model::update_by_id),
+    /// [`Model::update_by_id_from`](crate::feature::model::Model::update_by_id_from), and
+    /// [`Model::update_by_id_with_session`](crate::feature::model::Model::update_by_id_with_session).
     ///
     /// # Parameters
     ///
@@ -177,8 +182,9 @@ where
     /// Runs after a document has been updated by `_id`.
     ///
     /// This hook runs after
-    /// [`Model::update_by_id`](crate::feature::model::Model::update_by_id) or
-    /// [`Model::update_by_id_from`](crate::feature::model::Model::update_by_id_from)
+    /// [`Model::update_by_id`](crate::feature::model::Model::update_by_id),
+    /// [`Model::update_by_id_from`](crate::feature::model::Model::update_by_id_from), or
+    /// [`Model::update_by_id_with_session`](crate::feature::model::Model::update_by_id_with_session)
     /// succeeds.
     ///
     /// # Parameters
@@ -197,8 +203,9 @@ where
     /// Runs before a document is deleted by `_id`.
     ///
     /// This hook runs for
-    /// [`Model::delete_by_id`](crate::feature::model::Model::delete_by_id) and
-    /// [`Model::delete_by_id_from`](crate::feature::model::Model::delete_by_id_from).
+    /// [`Model::delete_by_id`](crate::feature::model::Model::delete_by_id),
+    /// [`Model::delete_by_id_from`](crate::feature::model::Model::delete_by_id_from), and
+    /// [`Model::delete_by_id_with_session`](crate::feature::model::Model::delete_by_id_with_session).
     ///
     /// # Parameters
     ///
@@ -214,8 +221,9 @@ where
     /// Runs after a document has been deleted by `_id`.
     ///
     /// This hook runs after
-    /// [`Model::delete_by_id`](crate::feature::model::Model::delete_by_id) or
-    /// [`Model::delete_by_id_from`](crate::feature::model::Model::delete_by_id_from)
+    /// [`Model::delete_by_id`](crate::feature::model::Model::delete_by_id),
+    /// [`Model::delete_by_id_from`](crate::feature::model::Model::delete_by_id_from), or
+    /// [`Model::delete_by_id_with_session`](crate::feature::model::Model::delete_by_id_with_session)
     /// succeeds.
     ///
     /// # Parameters
@@ -233,8 +241,9 @@ where
     /// Runs before a document is fetched by `_id`.
     ///
     /// This hook runs for
-    /// [`Model::find_by_id`](crate::feature::model::Model::find_by_id) and
-    /// [`Model::find_by_id_from`](crate::feature::model::Model::find_by_id_from).
+    /// [`Model::find_by_id`](crate::feature::model::Model::find_by_id),
+    /// [`Model::find_by_id_from`](crate::feature::model::Model::find_by_id_from), and
+    /// [`Model::find_by_id_with_session`](crate::feature::model::Model::find_by_id_with_session).
     ///
     /// # Parameters
     ///

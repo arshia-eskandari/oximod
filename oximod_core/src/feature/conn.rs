@@ -1,6 +1,6 @@
 //! MongoDB client initialization and access.
 //!
-//! This module contains [`OxiClient`](client::OxiClient), OxiMod’s wrapper
+//! This module contains [`OxiClient`](crate::feature::conn::client::OxiClient), OxiMod’s wrapper
 //! around the MongoDB Rust driver client. It supports both globally initialized
 //! and explicitly supplied client workflows.
 

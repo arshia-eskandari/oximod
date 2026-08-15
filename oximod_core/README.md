@@ -10,6 +10,7 @@ Core runtime library for [OxiMod](https://github.com/arshia-eskandari/oximod), a
 * model validation errors,
 * typed filters, sorting, pagination, updates, and deletions,
 * typed aggregation pipeline construction and execution,
+* typed bulk-write batch construction and execution,
 * index drift inspection and create-only index reconciliation,
 * nested-document and array operations,
 * text-search and GeoJSON query support,
@@ -19,7 +20,7 @@ Most applications should depend on the main `oximod` crate rather than using `ox
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](https://github.com/arshia-eskandari/oximod/blob/main/LICENSE).
 
 ## Contributions
 

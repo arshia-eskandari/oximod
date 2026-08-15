@@ -23,5 +23,5 @@ default-features = false
 features = ["std"]
 
 [features]
-# Enables diagnostic output in release builds.
+# Reserved flag; no code is currently gated on it.
 debug-print = []

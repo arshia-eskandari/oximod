@@ -267,7 +267,7 @@ pub enum OxiModError {
     Validation(ValidationErrors),
 
     /// General MongoDB/driver operation failure that is not classified as
-    /// `Connection`, `Serialization`, `Index`, or `Aggregation`.
+    /// `Connection`, `Serialization`, `Index`, `Aggregation`, or `BulkWrite`.
     ///
     /// Covers server-side operation failures such as write rejections —
     /// including duplicate key, whose server code 11000 remains recoverable

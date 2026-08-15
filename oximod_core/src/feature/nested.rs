@@ -1,7 +1,9 @@
 //! Path-aware nested validation runtime used by generated models.
 //!
 //! `#[validate(nested)]` descends from a containing model into embedded
-//! OxiMod models through the [`NestedValidate`] trait. The derive macro
+//! OxiMod models through the
+//! [`NestedValidate`](crate::feature::nested::NestedValidate) trait. The
+//! derive macro
 //! implements the trait for `#[model(embedded)]` types, while this module
 //! provides the recursive container adapters and the path helpers that keep
 //! descendant error attribution unambiguous:
