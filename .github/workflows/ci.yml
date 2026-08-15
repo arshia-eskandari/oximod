@@ -55,3 +55,31 @@ jobs:
 
       - name: Build docs
         run: cargo doc --workspace --all-features --no-deps
+
+  # Proves OxiMod and its dependency graph compile and pass the
+  # database-free unit suites at the declared minimum supported Rust
+  # version (rust-version in the crate manifests). The MongoDB
+  # integration suite runs only on stable above.
+  msrv:
+    runs-on: ubuntu-latest
+
+    env:
+      RUST_BACKTRACE: full
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Rust (1.88.0, minimum supported)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.88.0
+          override: true
+
+      - name: Check workspace at the minimum supported Rust version
+        run: cargo check --workspace --all-targets --all-features
+
+      - name: Run database-free unit tests
+        run: |
+          cargo test -p oximod_core
+          cargo test -p oximod_macros

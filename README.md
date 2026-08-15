@@ -66,7 +66,7 @@ Add `async-trait` when implementing lifecycle hooks:
 cargo add async-trait
 ```
 
-A MongoDB server and connection URI are required for persistence and query execution.
+A MongoDB server and connection URI are required for persistence and query execution. OxiMod requires Rust 1.88 or newer, the minimum supported by the MongoDB Rust driver (3.8+) it builds on.
 
 ---
 
