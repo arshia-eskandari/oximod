@@ -18,6 +18,8 @@
 //! - fluent construction with generated setters and field defaults;
 //! - aggregated field validation and custom validators;
 //! - single-field MongoDB index declarations;
+//! - explicit index drift inspection and conservative create-only index
+//!   reconciliation;
 //! - optional save and `_id`-helper lifecycle hooks;
 //! - global-client and explicit-client model operations;
 //! - typed and raw MongoDB collection access;
@@ -385,6 +387,45 @@
 //! recomputing the derived field, silently desynchronizing it; genuine
 //! duplicates can then persist while the index still appears healthy. Create
 //! a real MongoDB compound unique index through the driver instead.
+//!
+//! ## Index drift detection and reconciliation
+//!
+//! Beyond establishment, collection models generate an explicit inspection
+//! and reconciliation surface that is independent of the once-per-process
+//! establishment state in both directions:
+//!
+//! - `ModelType::check_indexes()` / `ModelType::check_indexes_from(&client)`
+//!   perform a read-only, point-in-time comparison of the declared
+//!   `#[index(...)]` specifications against the index metadata MongoDB
+//!   reports, returning an [`IndexDriftReport`]. Each declaration is
+//!   classified [`DeclaredIndexStatus::InSync`],
+//!   [`DeclaredIndexStatus::Missing`], or
+//!   [`DeclaredIndexStatus::Mismatched`] (with per-candidate differences).
+//!   Server indexes unrelated to any declaration — direct-driver compound,
+//!   partial, and other advanced indexes — are listed as unmanaged, never
+//!   counted as drift, and never touched; the built-in `_id_` index is
+//!   ignored. Inspection never creates the collection: an absent collection
+//!   reports every declaration missing. Requires the `listCollections` and
+//!   `listIndexes` privileges (the built-in `read` role suffices).
+//!
+//! - `ModelType::create_missing_indexes()` /
+//!   `ModelType::create_missing_indexes_from(&client)` re-inspect, create
+//!   **only** the declarations classified missing, then inspect again,
+//!   returning an [`IndexReconciliationReport`]. Mismatched declarations and
+//!   unmanaged indexes are never modified: no index is dropped, hidden,
+//!   unhidden, converted to unique, TTL-adjusted, or rebuilt, and `collMod`
+//!   is never used. When nothing is missing, no command is sent at all.
+//!   Additionally requires the `createIndex` privilege (the built-in
+//!   `readWrite` role suffices).
+//!
+//! Drift itself is report data, not an error; [`OxiModError`] is returned
+//! only when the inspection or creation operation fails. Both operations are
+//! point-in-time rather than transactional, and creating an index remains
+//! operationally consequential (build cost, unique-constraint failures over
+//! existing duplicates, TTL expiry of existing documents) — run
+//! reconciliation during controlled startup, deployment, or maintenance
+//! workflows. On sharded deployments this inspects the namespace-visible
+//! index metadata; it is not a per-shard consistency audit.
 //!
 //! ## Clients and collection access
 //!
