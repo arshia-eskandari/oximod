@@ -71,7 +71,8 @@ pub enum LitNum {
 ///   - The string must contain this value.
 ///
 /// - `alphanumeric`: (Optional) Only letters and digits allowed.
-///   - Matches `/^[a-zA-Z0-9]+$/`.
+///   - Every character must be an ASCII letter or digit; an empty string
+///     passes (combine with `non_empty` to reject it).
 ///
 /// - `email`: (Optional) Must be a valid email format.
 ///   - Uses a basic email regex.
@@ -135,10 +136,12 @@ pub enum LitNum {
 /// The function must have the signature:
 ///
 /// ```text
-/// fn(&T) -> Result<(), String>
+/// fn(&T) -> Result<(), E>
 /// ```
 ///
-/// where `T` is the field type.
+/// where `T` is the field type and `E` implements `ToString`. For an
+/// `Option<T>` field, the validator receives `&T` and runs only when the
+/// field contains `Some(value)`.
 ///
 /// Example:
 ///
@@ -158,7 +161,8 @@ pub enum LitNum {
 /// name: String
 /// ```
 ///
-/// Custom validators run after built-in validations.
+/// Custom validators run in addition to built-in validations; all resulting
+/// errors are aggregated into one validation failure.
 ///
 /// # Example
 ///

@@ -179,8 +179,9 @@
 //! - user functions: `custom(path)`.
 //!
 //! The derive macro rejects incompatible built-in validators at compile time.
-//! Custom validators return `Result<(), String>`. For `Option<T>`, validators
-//! other than `required` operate on the inner value when it is present.
+//! Custom validators may return any error type implementing `ToString`. For
+//! `Option<T>`, validators other than `required` operate on the inner value
+//! when it is present.
 //!
 //! Validation descends into an embedded model only where the containing field
 //! explicitly opts in with `#[validate(nested)]`. One marker descends

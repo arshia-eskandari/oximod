@@ -136,12 +136,6 @@ fn check_float_fits_primitive(span: Span, v: f64, prim: PrimitiveNum) -> Option<
 /// - Emits compile_error! into `compile_errors` if the field is non-numeric,
 ///   or the literal doesn't fit the field's primitive.
 /// - Returns Some(rhs_tokens) if OK, None if a compile_error! was emitted.
-///
-/// Requirements:
-/// - `emit_int_lit`, `emit_float_from_int`, `emit_float_from_float`
-/// - `parse_u128_for_range`, `parse_f64_for_range`
-/// - `check_int_fits_primitive`, `check_float_fits_primitive`
-/// - `PrimitiveNum` enum + `primitive_of(...)` already in your module
 pub fn rhs_for_numeric_bound(
     prim: PrimitiveNum,
     bound: &LitNum,

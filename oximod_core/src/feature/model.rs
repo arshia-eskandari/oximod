@@ -248,7 +248,7 @@ pub trait Model:
     /// # Errors
     ///
     /// Returns [`OxiModError`] if validation, serialization, collection access,
-    /// or insertion fails.
+    /// index establishment, or insertion fails.
     async fn save_from(&self, client: &Client) -> Result<ObjectId, OxiModError>;
 
     /// Persists this model instance using an explicit MongoDB client with mutable access.
@@ -278,7 +278,7 @@ pub trait Model:
     /// # Errors
     ///
     /// Returns [`OxiModError`] if validation, serialization, collection access,
-    /// hook execution, or insertion fails.
+    /// hook execution, index establishment, or insertion fails.
     async fn save_from_mut(&mut self, client: &Client) -> Result<ObjectId, OxiModError>;
 
     /// Deletes all documents in this model's collection using an explicit client.
@@ -771,6 +771,7 @@ pub trait Model:
     /// - validation fails,
     /// - serialization fails,
     /// - collection resolution fails,
+    /// - index establishment fails,
     /// - or insertion fails.
     async fn save(&self) -> Result<ObjectId, OxiModError> {
         let client_arc = OxiClient::global()?;
@@ -805,6 +806,7 @@ pub trait Model:
     /// - validation fails,
     /// - serialization fails,
     /// - collection resolution fails,
+    /// - index establishment fails,
     /// - or insertion fails.
     async fn save_mut(&mut self) -> Result<ObjectId, OxiModError> {
         let client_arc = OxiClient::global()?;

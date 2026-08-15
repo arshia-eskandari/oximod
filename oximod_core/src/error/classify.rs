@@ -32,8 +32,8 @@ use super::oximod_error::OxiModError;
 /// Operation domain of a failing driver call.
 ///
 /// The domain refines otherwise-general operational failures into the
-/// domain-specific `Index` and `Aggregation` variants. It never overrides the
-/// `Connection` or `Serialization` classification.
+/// domain-specific `Index`, `Aggregation`, and `BulkWrite` variants. It never
+/// overrides the `Connection` or `Serialization` classification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OperationDomain {
     /// An ordinary CRUD, query, or count operation.

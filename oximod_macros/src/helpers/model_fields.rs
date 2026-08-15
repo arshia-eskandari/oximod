@@ -49,7 +49,7 @@ pub struct FieldTokenStreams {
 ///   documents do not own an independent MongoDB collection.
 /// - Expands `#[validate(...)]` attributes into validation tokens for both
 ///   collection-backed and embedded models.
-/// - Expands `#[default = "..."]` attributes into custom initialization
+/// - Expands `#[default(...)]` attributes into custom initialization
 ///   expressions for both model kinds, falling back to `Default::default()`
 ///   otherwise.
 /// - Collects all generated tokens into the provided vectors for setters,

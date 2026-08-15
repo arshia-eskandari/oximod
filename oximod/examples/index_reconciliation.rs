@@ -18,8 +18,9 @@
 //!   but never modified.
 //!
 //! Creating a missing index is still operationally consequential: index
-//! builds consume resources, a unique build fails over existing duplicate
-//! data, and a new TTL index can immediately expire old documents. Run
+//! builds consume resources, a unique index build fails when existing data
+//! contains duplicates, and a new TTL index can immediately expire old
+//! documents. Run
 //! reconciliation during controlled startup, deployment, or maintenance
 //! workflows.
 //!
