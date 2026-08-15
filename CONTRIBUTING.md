@@ -26,7 +26,7 @@ cd oximod
 cargo nextest run
 
 # Run examples
-cargo run --example basic_usage
+cargo run -p oximod --example basic_usage
 ```
 
 ## 🛠 Branch Naming Conventions

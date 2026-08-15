@@ -57,7 +57,7 @@ Each feature is covered in depth by a chapter of the
 Add OxiMod and the dependencies used by your models and async runtime:
 
 ```bash
-cargo add oximod mongodb
+cargo add oximod mongodb@3.8.0
 cargo add serde --features derive
 cargo add tokio --features macros,rt-multi-thread
 ```
@@ -69,8 +69,8 @@ cargo add async-trait
 ```
 
 A MongoDB server and connection URI are required for persistence and query
-execution. OxiMod requires Rust 1.88 or newer, the minimum supported by the
-MongoDB Rust driver (3.8+) it builds on.
+execution. OxiMod requires Rust 1.88 or newer and targets MongoDB Rust driver
+3.8.0 or newer compatible 3.x releases.
 
 ## Quick start
 
