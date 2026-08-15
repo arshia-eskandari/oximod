@@ -1,0 +1,5 @@
+error: Invalid #[validate]: `nested` is a flag and does not take a value
+  --> tests/ui/validate/nested_with_value.rs:15:5
+   |
+15 |     #[validate(nested = true)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^

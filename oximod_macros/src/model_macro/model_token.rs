@@ -16,34 +16,81 @@ use quote::quote;
 use crate::helpers::ModelKind;
 
 /// Generates validation support for a collection or embedded model.
+///
+/// Embedded models additionally implement the hidden `NestedValidate`
+/// trait, which owns the generated field rules; their `ModelCore::validate`
+/// delegates to it with an empty path prefix so top-level attribution is
+/// unchanged and each rule is generated exactly once. Collection models keep
+/// their rules inline and are not nested-validation leaves.
 pub fn generate_model_token(
     name: &Ident,
     kind: ModelKind,
     validations: Vec<TokenStream>,
 ) -> TokenStream {
-    let mode = match kind {
-        ModelKind::Collection => {
+    let (mode, rule_owner, validate_body) = match kind {
+        ModelKind::Collection => (
             quote! {
                 ::oximod::_feature::model::Collection
-            }
-        }
+            },
+            quote! {},
+            quote! {
+                let mut validation_errors = Vec::new();
 
-        ModelKind::Embedded => {
+                #(#validations)*
+            },
+        ),
+
+        ModelKind::Embedded => (
             quote! {
                 ::oximod::_feature::model::Embedded
-            }
-        }
+            },
+            quote! {
+                impl ::oximod::_feature::nested::NestedValidate for #name {
+                    fn collect_nested_validation_errors(
+                        &self,
+                        path: &str,
+                        errors: &mut Vec<::oximod::ValidationError>,
+                    ) {
+                        let mut validation_errors:
+                            Vec<::oximod::ValidationError> = Vec::new();
+
+                        #(#validations)*
+
+                        for mut validation_error in validation_errors {
+                            validation_error.field =
+                                ::oximod::_feature::nested::join_path(
+                                    path,
+                                    &validation_error.field,
+                                );
+
+                            errors.push(validation_error);
+                        }
+                    }
+                }
+            },
+            quote! {
+                let mut validation_errors = Vec::new();
+
+                <
+                    Self as ::oximod::_feature::nested::NestedValidate
+                >::collect_nested_validation_errors(
+                    self,
+                    "",
+                    &mut validation_errors,
+                );
+            },
+        ),
     };
 
     quote! {
+        #rule_owner
+
         impl ::oximod::_feature::model::ModelCore<#mode> for #name {
             #[inline]
             fn validate(
                 &self,
             ) -> Result<(), ::oximod::OxiModError> {
-                let mut validation_errors = Vec::new();
-
-                #(#validations)*
+                #validate_body
 
                 if validation_errors.is_empty() {
                     Ok(())
@@ -172,6 +219,89 @@ mod tests {
 Err(::oximod::OxiModError::validations(validation_errors,),)}"
             ),
             "generated validation should aggregate all errors; \
+             generated tokens: {generated}"
+        );
+    }
+
+    #[test]
+    fn embedded_models_implement_nested_validate() {
+        let name = format_ident!("Address");
+
+        let generated = compact(generate_model_token(
+            &name,
+            ModelKind::Embedded,
+            vec![quote! {
+                validation_errors.push(rule_error);
+            }],
+        ));
+
+        assert!(
+            generated.contains("impl::oximod::_feature::nested::NestedValidateforAddress"),
+            "embedded models should implement NestedValidate; \
+             generated tokens: {generated}"
+        );
+
+        assert!(
+            generated
+                .contains("::oximod::_feature::nested::join_path(path,&validation_error.field,)"),
+            "collected errors should be path-prefixed through join_path; \
+             generated tokens: {generated}"
+        );
+    }
+
+    #[test]
+    fn embedded_validate_delegates_to_nested_validate_with_empty_path() {
+        let name = format_ident!("Address");
+
+        let generated = compact(generate_model_token(
+            &name,
+            ModelKind::Embedded,
+            vec![quote! {
+                validation_errors.push(rule_error);
+            }],
+        ));
+
+        assert!(
+            generated.contains(
+                "<Selfas::oximod::_feature::nested::NestedValidate>\
+::collect_nested_validation_errors(self,\"\",&mutvalidation_errors,)"
+            ),
+            "embedded validate() should delegate with an empty path prefix; \
+             generated tokens: {generated}"
+        );
+
+        let rule_occurrences = generated
+            .matches("validation_errors.push(rule_error);")
+            .count();
+
+        assert_eq!(
+            rule_occurrences, 1,
+            "each validation rule should be generated exactly once; \
+             generated tokens: {generated}"
+        );
+    }
+
+    #[test]
+    fn collection_models_are_not_nested_validation_leaves() {
+        let name = format_ident!("User");
+
+        let generated = compact(generate_model_token(
+            &name,
+            ModelKind::Collection,
+            vec![quote! {
+                validation_errors.push(rule_error);
+            }],
+        ));
+
+        assert!(
+            !generated.contains("NestedValidateforUser"),
+            "collection models should not implement NestedValidate; \
+             generated tokens: {generated}"
+        );
+
+        assert!(
+            generated.contains("validation_errors.push(rule_error);"),
+            "collection models should keep their rules inline; \
              generated tokens: {generated}"
         );
     }

@@ -198,6 +198,23 @@ pub fn generate_validate_model_tokens(
         build_checks.checks.push(grouped);
     }
 
+    // Nested descent runs after the field's own rules, so container-level
+    // errors (`required`, `non_empty`, ...) precede descendant errors. The
+    // whole field value is handed to `NestedValidate`; container adapters
+    // handle `Option`/`Vec`/`HashMap` unwrapping, and an unsupported field
+    // type fails to compile at this call with the field's span.
+    if validate_args.nested {
+        build_checks
+            .checks
+            .push(quote_spanned! { field_ident.span() =>
+                ::oximod::_feature::nested::NestedValidate::collect_nested_validation_errors(
+                    &self.#field_ident,
+                    #field_name_lit,
+                    &mut validation_errors,
+                );
+            });
+    }
+
     build_checks.checks
 }
 
@@ -482,6 +499,77 @@ mod tests {
             !generated.contains("compile_error!"),
             "valid numeric rules should not generate compile errors: \
              {generated}"
+        );
+    }
+
+    #[test]
+    fn nested_rule_generates_a_collect_call_on_the_whole_field() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("address");
+        let field_ty: Type = parse_quote!(Address);
+
+        let args = ValidateArgs {
+            nested: true,
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        assert!(
+            generated.contains(
+                "::oximod::_feature::nested::NestedValidate::collect_nested_validation_errors(\
+&self.address,\"address\",&mutvalidation_errors,);"
+            ),
+            "nested rule should collect through the hidden trait: {generated}"
+        );
+
+        assert!(
+            !generated.contains("compile_error!"),
+            "nested alone should not generate compile errors: {generated}"
+        );
+    }
+
+    #[test]
+    fn nested_descent_runs_after_the_fields_own_rules() {
+        let struct_ident = format_ident!("User");
+        let field_ident = format_ident!("address");
+        let field_ty: Type = parse_quote!(Option<Address>);
+
+        let args = ValidateArgs {
+            required: true,
+            nested: true,
+            ..Default::default()
+        };
+
+        let generated = compact(&generate_validate_model_tokens(
+            &struct_ident,
+            &field_ident,
+            &field_ty,
+            args,
+        ));
+
+        let required = generated
+            .find("ifself.address.is_none()")
+            .expect("required check should be generated");
+
+        let nested = generated
+            .find("collect_nested_validation_errors")
+            .expect("nested collect should be generated");
+
+        assert!(
+            required < nested,
+            "container-level rules should precede nested descent: {generated}"
+        );
+
+        assert!(
+            generated.contains("&self.address,"),
+            "nested descent should receive the whole Option field so the \
+             container adapter handles None: {generated}"
         );
     }
 

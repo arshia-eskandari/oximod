@@ -1,0 +1,17 @@
+error: Invalid #[validate]: unknown attribute key
+  --> tests/ui/validate/nested_aliases_rejected.rs:16:5
+   |
+16 |     #[validate(dive)]
+   |     ^^^^^^^^^^^^^^^^^
+
+error: Invalid #[validate]: unknown attribute key
+  --> tests/ui/validate/nested_aliases_rejected.rs:23:5
+   |
+23 |     #[validate(each)]
+   |     ^^^^^^^^^^^^^^^^^
+
+error: Invalid #[validate]: unknown attribute key
+  --> tests/ui/validate/nested_aliases_rejected.rs:30:5
+   |
+30 |     #[validate(items)]
+   |     ^^^^^^^^^^^^^^^^^^

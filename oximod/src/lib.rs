@@ -251,6 +251,7 @@
 //!   `alphanumeric`;
 //! - numbers: `min`, `max`, exclusive bounds, and sign rules;
 //! - integers: `multiple_of`;
+//! - nested embedded models: `nested`;
 //! - user functions: `custom(path)`.
 //!
 //! The derive macro rejects incompatible built-in validators at compile time.
@@ -261,18 +262,13 @@
 //! typed update expressions. Those operations modify stored documents directly
 //! through MongoDB.
 //!
-//! ### Validation does not descend into embedded models
+//! ### Nested validation of embedded models
 //!
-//! Validating a model evaluates only the rules declared on that model's own
-//! fields. `#[validate(...)]` rules declared inside an embedded model are
-//! **not** evaluated when a containing model is validated or saved: the
-//! parent can validate and save successfully while an embedded value violates
-//! its own rules. This applies to every container shape, including bare
-//! embedded fields, `Option<Embedded>`, and `Vec<Embedded>`. The embedded
-//! type's own `validate()` method works normally when called directly.
-//!
-//! To enforce embedded rules through the parent, add a custom validator to
-//! the containing field and delegate to the embedded value's `validate()`:
+//! Validation descends into an embedded model only where the containing
+//! field explicitly opts in with `#[validate(nested)]`. A field without the
+//! attribute keeps the no-descent behavior: the parent validates and saves
+//! without evaluating the embedded value's own rules, while the embedded
+//! type's `validate()` method works normally when called directly.
 //!
 //! ```rust
 //! use oximod::Model;
@@ -285,27 +281,61 @@
 //!     city: String,
 //! }
 //!
-//! fn validate_address(address: &Address) -> Result<(), String> {
-//!     address.validate().map_err(|error| error.to_string())
-//! }
-//!
 //! #[derive(Debug, Serialize, Deserialize, Model)]
 //! #[model(embedded)]
 //! struct Profile {
-//!     #[validate(custom(validate_address))]
+//!     #[validate(nested)]
 //!     address: Address,
+//!
+//!     #[validate(nested)]
+//!     previous_addresses: Vec<Address>,
 //! }
 //!
-//! let profile = Profile::new().address(Address::new().city(""));
-//! assert!(profile.validate().is_err());
+//! let profile = Profile::new()
+//!     .address(Address::new().city(""))
+//!     .previous_addresses(vec![
+//!         Address::new().city("City1"),
+//!         Address::new().city(""),
+//!     ]);
+//!
+//! let error = profile.validate().expect_err("nested violations are reported");
+//!
+//! let fields: Vec<&str> = error
+//!     .validation_errors()
+//!     .unwrap_or_default()
+//!     .iter()
+//!     .map(|failure| failure.field.as_str())
+//!     .collect();
+//!
+//! assert_eq!(fields, ["address.city", "previous_addresses[1].city"]);
 //! ```
 //!
-//! A pre-save hook can serve as an alternative save-time guard. When hooks
-//! are used this way, implement **both** [`Hooks::pre_save`] and
-//! [`Hooks::pre_save_mut`] if the application uses both save forms: `save()`
-//! and `save_from()` run only `pre_save`, while `save_mut()` and
-//! `save_from_mut()` run only `pre_save_mut`, so a guard implemented in one
-//! hook does not protect the other save form.
+//! One marker descends recursively through supported container wrappers —
+//! `Option<T>`, `Vec<T>`, `HashMap<String, T>`, and recursive combinations
+//! such as `Vec<Option<T>>` — until it reaches the embedded model. Each
+//! model-to-model containment edge remains opt-in, so descending further
+//! into an embedded model's own embedded fields requires `nested` on those
+//! fields as well. Marking a field whose type does not resolve to an
+//! embedded model fails at compile time.
+//!
+//! Container semantics compose with the existing rules: `None` and empty
+//! containers produce no nested errors (use `required` or `non_empty` to
+//! reject them), and container-level and descendant failures aggregate with
+//! the rest of the model's errors.
+//!
+//! Descendant failures keep their exact messages and report path-aware
+//! [`ValidationError::field`] values such as `address.city`,
+//! `items[1].sku`, and `addresses["billing"].postal_code`. Paths use Rust
+//! model field names (not Serde/BSON names), map keys are quoted and
+//! escaped, and error order is deterministic: declaration order, depth
+//! first, ascending vector indexes, and lexicographically sorted map keys.
+//!
+//! Nested validation applies anywhere whole-model validation already runs —
+//! `validate()`, every save form including session-aware saves, and the
+//! bulk-write insert/replace preflight. Typed and raw update expressions
+//! remain non-validating. A custom validator that delegates to the embedded
+//! value's `validate()` remains supported but is no longer required merely
+//! to descend.
 //!
 //! ## Indexes
 //!
@@ -1098,7 +1128,10 @@ pub use oximod_core::error::query_error::QueryModifier;
 /// One field-level validation failure.
 ///
 /// The public [`ValidationError::field`] and [`ValidationError::message`]
-/// members identify the failed model field and describe the violated rule.
+/// members identify the failing value and describe the violated rule.
+/// `field` holds the Rust model field name or, for `#[validate(nested)]`
+/// descent, a nested validation path such as `address.postal_code` or
+/// `items[1].sku`.
 pub use oximod_core::error::oximod_error::ValidationError;
 
 /// All field-level failures collected during one model validation pass.
@@ -1281,9 +1314,10 @@ pub use oximod_core::feature::model::Model;
 ///
 /// - `#[default(expression)]` replaces `Default::default()` during `new()`;
 /// - `#[validate(...)]` adds compile-time-checked built-in or custom rules.
-///   Rules apply to the model's own fields only: validation does not descend
-///   into embedded models. See the crate-level Validation section for the
-///   custom-validator and hook remedies;
+///   Rules apply to the model's own fields; embedded-model rules are
+///   evaluated through the parent only where a field opts in with
+///   `#[validate(nested)]`. See the crate-level Validation section for the
+///   nested-descent semantics;
 /// - `#[index(...)]` declares a single-field MongoDB index on a collection
 ///   model. Declared indexes are not created by deriving the model: they are
 ///   established lazily before document insertion during save, or explicitly

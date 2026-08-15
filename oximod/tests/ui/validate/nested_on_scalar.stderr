@@ -1,0 +1,19 @@
+error[E0277]: `#[validate(nested)]` is not supported for `std::string::String`
+  --> tests/ui/validate/nested_on_scalar.rs:16:5
+   |
+16 |     name: String,
+   |     ^^^^ `#[validate(nested)]` requires an embedded OxiMod model or a supported container of one
+   |
+   = help: the trait `oximod::_feature::nested::NestedValidate` is not implemented for `std::string::String`
+   = note: `nested` descends into `#[model(embedded)]` models, optionally wrapped in `Option<T>`, `Vec<T>`, or `HashMap<String, T>` (recursively combined)
+help: the following other types implement trait `oximod::_feature::nested::NestedValidate`
+  --> $WORKSPACE/oximod_core/src/feature/nested.rs
+   |
+   | impl<T: NestedValidate> NestedValidate for Option<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `std::option::Option<T>`
+...
+   | impl<T: NestedValidate> NestedValidate for Vec<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Vec<T>`
+...
+   | impl<T: NestedValidate> NestedValidate for HashMap<String, T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `HashMap<std::string::String, T>`

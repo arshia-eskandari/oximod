@@ -333,7 +333,10 @@ Validation also runs automatically before:
 * `save()`;
 * `save_mut()`;
 * `save_from()`;
-* `save_from_mut()`.
+* `save_from_mut()`;
+* `save_with_session()`;
+* `save_mut_with_session()`;
+* bulk-write `insert`, `insert_many`, and `replace_one` execution (as the whole-model preflight).
 
 For hook-enabled saves, the corresponding pre-save hook runs before validation, allowing mutable hooks to normalize or populate values before they are checked.
 
@@ -389,6 +392,14 @@ String validation supports `String`, `str`-like values, and supported `Cow<str>`
 | ----------------- | ----------------------------------- |
 | `multiple_of = N` | Requires exact divisibility by `N`. |
 
+#### Nested embedded models
+
+| Validator | Description                                                             |
+| --------- | ----------------------------------------------------------------------- |
+| `nested`  | Recursively validates embedded OxiMod models reached through the field. |
+
+`nested` is valid only on fields whose type resolves through the supported containers to a `#[model(embedded)]` model; other target types are rejected at compile time. See [Validation and embedded models](#validation-and-embedded-models).
+
 ### Custom validators
 
 A custom validator is an ordinary function referenced by path:
@@ -412,9 +423,64 @@ The function receives `&T` and may return any error implementing `ToString`. For
 
 ### Validation and embedded models
 
-Validating a model evaluates only the rules declared on that model's own fields. `#[validate(...)]` rules declared inside an embedded model are **not** evaluated when a containing model is validated or saved: the parent can validate and save successfully while an embedded value violates its own rules. This applies to every container shape, including bare embedded fields, `Option<Embedded>`, and `Vec<Embedded>`. The embedded type's own `validate()` works normally when called directly.
+Validation descends into an embedded model only where the containing field explicitly opts in with `#[validate(nested)]`. A field without the attribute keeps the previous behavior: the parent validates and saves without evaluating the embedded value's own rules, and the embedded type's `validate()` works normally when called directly.
 
-To enforce embedded rules through the parent, add a custom validator on the containing field and delegate to the embedded value's `validate()`:
+```rust
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[model(embedded)]
+struct Address {
+    #[validate(non_empty)]
+    city: String,
+
+    #[validate(pattern = r"^[0-9]{5}$")]
+    postal_code: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Model)]
+#[db("app")]
+#[collection("users")]
+struct User {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    _id: Option<ObjectId>,
+
+    #[validate(nested)]
+    address: Address,
+
+    #[validate(nested)]
+    previous_addresses: Vec<Address>,
+}
+```
+
+One `nested` marker descends recursively through supported container wrappers until it reaches the embedded model:
+
+* a bare embedded field;
+* `Option<Embedded>`;
+* `Vec<Embedded>`;
+* `HashMap<String, Embedded>`;
+* recursive combinations such as `Vec<Option<Embedded>>`, `Option<Vec<Embedded>>`, and `HashMap<String, Vec<Option<Embedded>>>`.
+
+Each model-to-model containment edge remains opt-in: when an embedded model contains another embedded model, the inner containing field must also carry `#[validate(nested)]` for validation to descend further. Marking a field whose type does not resolve to an embedded model (such as a scalar or a collection-backed model) fails at compile time.
+
+Container semantics compose with the existing rules:
+
+* `None` produces no nested errors; add `required` to reject absence;
+* empty vectors and maps produce no nested errors; add `non_empty` to reject emptiness;
+* the field's own rules and its descendants' rules are all evaluated and aggregated together with the rest of the model's failures.
+
+Descendant failures keep their exact messages and report path-aware `field` values:
+
+```text
+address.postal_code
+previous_addresses[1].city
+addresses["billing"].postal_code
+orders[2].shipping_address.postal_code
+```
+
+Paths use Rust model field names, matching top-level validation attribution; Serde/BSON renames affect stored documents and typed queries, not validation paths. Map keys are quoted with `"` and `\` escaped, so keys containing dots, spaces, brackets, or quotes cannot masquerade as path segments. Error order is deterministic: parent declaration order, depth-first into each nested model's own declaration order, vector elements in ascending index order, and map entries in lexicographically sorted key order. The path strings are deterministic and human-readable; they are not a stable machine-parseable schema.
+
+Because `#[validate(nested)]` changes what the model's own validation evaluates, it applies automatically anywhere whole-model validation already runs: `validate()`, every save form (including session-aware saves), and the bulk-write insert/replace preflight. Typed and raw update expressions remain non-validating (see [Validation and updates](#validation-and-updates)).
+
+The previous custom-validator delegation pattern remains valid — for example to combine descent with cross-field checks — but is no longer required merely to descend into an embedded value:
 
 ```rust
 fn validate_address(address: &Address) -> Result<(), String> {
@@ -427,7 +493,7 @@ fn validate_address(address: &Address) -> Result<(), String> {
 address: Address,
 ```
 
-A pre-save hook can serve as an alternative save-time guard. When hooks are used this way, implement **both** `pre_save` and `pre_save_mut` if the application uses both save forms: `save()`/`save_from()` run only `pre_save`, and `save_mut()`/`save_from_mut()` run only `pre_save_mut`, so a guard implemented in one hook does not protect the other save form.
+Custom delegation reports the child's failures as one error attributed to the containing field, while `nested` reports each descendant failure under its own path. Pre-save hook guards likewise remain possible but are no longer required for descent; lifecycle hooks are unchanged by nested validation.
 
 ### Validation and updates
 
@@ -1638,7 +1704,8 @@ The repository includes focused runnable examples covering:
 * typed updates;
 * explicit-client workflows;
 * structured validation errors;
-* built-in validation.
+* built-in validation;
+* nested embedded-model validation.
 
 Browse them in [`oximod/examples`](https://github.com/arshia-eskandari/oximod/tree/main/oximod/examples).
 
@@ -1656,7 +1723,7 @@ MongoDB-backed examples read `MONGODB_URI` from the environment or a `.env` file
 
 * Typed-query execution requires the global client, except for the `_with_session` terminals, which use the session's own client.
 * Typed and raw update operations do not automatically run model validation.
-* Validation does not descend into embedded models; enforce embedded rules with a custom validator on the containing field or with pre-save hooks (covering both `pre_save` and `pre_save_mut`).
+* Validation descends into embedded models only where the containing field opts in with `#[validate(nested)]`; fields without the attribute do not evaluate embedded rules through the parent.
 * Generated indexes are single-field and are initialized lazily during saves, or explicitly at startup with `init_indexes()` / `init_indexes_from(&client)`; initialization is once per process and does not re-establish indexes dropped externally afterward.
 * Compound and partial/filtered indexes require the MongoDB driver API; a derived composite-key field with `#[index(unique)]` is not a safe substitute for a compound unique index.
 * Session participation is explicit through the `_with_session` methods; a non-session OxiMod call issued while a transaction is open commits outside that transaction. Initialize declared indexes before transactional work — session-aware saves do not establish them.

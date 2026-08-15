@@ -116,6 +116,18 @@ pub enum LitNum {
 /// - `required`: (Optional) Value must be present.
 ///   - `None` will cause validation error.
 ///
+/// # Nested validation
+///
+/// Applies to embedded OxiMod models and supported containers of them.
+///
+/// - `nested`: (Optional) Recursively validate the embedded value.
+///   - Valid on a field whose type is an embedded OxiMod model or a
+///     supported container (`Option`, `Vec`, `HashMap<String, _>`, and
+///     recursive combinations) of one.
+///   - Descendant validation errors are reported with path-aware field
+///     names such as `address.postal_code` or `items[1].sku`.
+///   - Default: no descent into embedded models.
+///
 /// # Custom validation
 ///
 /// Allows using a user-defined function.
@@ -205,6 +217,9 @@ pub struct ValidateArgs {
 
     // must be optional
     pub required: bool,
+
+    // must be an embedded OxiMod model or a supported container of one
+    pub nested: bool,
 
     pub custom: Option<syn::Path>,
 }

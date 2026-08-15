@@ -14,3 +14,6 @@ pub mod hooks;
 
 /// Runtime traits and mode markers used by generated models.
 pub mod model;
+
+/// Path-aware nested validation runtime for `#[validate(nested)]`.
+pub mod nested;
