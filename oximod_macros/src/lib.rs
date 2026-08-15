@@ -174,6 +174,17 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     );
 
                 impl #name {
+                    // The one generated source of truth for this model's
+                    // declared `#[index(...)]` specifications: establishment
+                    // and reconciliation must consume the same IndexModels.
+                    #[doc(hidden)]
+                    fn _declared_indexes()
+                    -> Vec<::oximod::_mongodb::IndexModel> {
+                        vec![
+                            #(#indexes),*
+                        ]
+                    }
+
                     #[doc(hidden)]
                     #[cold]
                     #[inline(never)]
@@ -183,9 +194,7 @@ fn expand_model(input: &DeriveInput) -> Result<TokenStream2, TokenStream2> {
                     ) -> Result<(), ::oximod::OxiModError> {
                         #index_once_async_ident
                             .run_once(|| async move {
-                                let indexes = vec![
-                                    #(#indexes),*
-                                ];
+                                let indexes = Self::_declared_indexes();
 
                                 if !indexes.is_empty() {
                                     collection
@@ -479,6 +488,79 @@ mod tests {
             !generated.contains("init_indexes"),
             "embedded model unexpectedly received index initialization \
              methods: {generated}"
+        );
+    }
+
+    #[test]
+    fn declared_indexes_helper_is_the_single_generated_index_source() {
+        let input: DeriveInput = parse_quote! {
+            #[db("app")]
+            #[collection("users")]
+            struct User {
+                _id: Option<
+                    ::oximod::_mongodb::bson::oid::ObjectId
+                >,
+
+                #[index(unique, name = "name_idx")]
+                name: String,
+
+                #[index(order = "-1")]
+                age: i32,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("collection model should expand"));
+
+        // The helper holds the generated IndexModel expressions...
+        assert!(
+            generated.contains("fn_declared_indexes()->Vec<::oximod::_mongodb::IndexModel>{vec![",),
+            "expected the `_declared_indexes` helper in: {generated}"
+        );
+        for declaration in [
+            "doc!{stringify!(name):1",
+            ".unique(Some(true))",
+            ".name(Some(\"name_idx\".to_string()))",
+            "doc!{stringify!(age):-1",
+        ] {
+            assert!(
+                generated.contains(declaration),
+                "expected declaration tokens `{declaration}` in: {generated}"
+            );
+        }
+
+        // ...establishment consumes it instead of rebuilding declarations...
+        assert!(
+            generated.contains("letindexes=Self::_declared_indexes();"),
+            "expected `_create_indexes` to consume `_declared_indexes`: \
+             {generated}"
+        );
+
+        // ...and the IndexModel constructor appears exactly once per declared
+        // index, so no second generated declaration list can drift.
+        assert_eq!(
+            generated
+                .matches("::oximod::_mongodb::IndexModel::builder()")
+                .count(),
+            2,
+            "each declared index should be generated exactly once: {generated}"
+        );
+    }
+
+    #[test]
+    fn embedded_models_receive_no_declared_indexes_helper() {
+        let input: DeriveInput = parse_quote! {
+            #[model(embedded)]
+            struct Address {
+                city: String,
+            }
+        };
+
+        let generated = compact(expand_model(&input).expect("embedded model should expand"));
+
+        assert!(
+            !generated.contains("_declared_indexes"),
+            "embedded model unexpectedly received `_declared_indexes`: \
+             {generated}"
         );
     }
 
