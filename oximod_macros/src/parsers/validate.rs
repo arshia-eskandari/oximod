@@ -7,6 +7,7 @@
 //! - numeric bounds and sign rules;
 //! - integer divisibility rules;
 //! - required optional fields;
+//! - nested embedded-model validation;
 //! - custom validator function paths.
 //!
 //! This module parses attribute syntax into `ValidateArgs`. Compatibility
@@ -31,6 +32,7 @@ use crate::{
 /// - a validation value has the wrong literal type;
 /// - a numeric bound is not a numeric literal;
 /// - `multiple_of` is zero;
+/// - `nested` is given a value or arguments;
 /// - more than one custom validator is supplied;
 /// - a custom validator contains an invalid function path;
 /// - an unknown validation option is supplied.
@@ -148,6 +150,16 @@ pub fn parse_validate_args(attr: &Attribute) -> syn::Result<ValidateArgs> {
 
             litint_strictly_positive(&literal)?;
             args.multiple_of = Some(literal);
+        } else if meta.path.is_ident("nested") {
+            if meta.input.peek(syn::Token![=]) {
+                return Err(meta.error("`nested` is a flag and does not take a value"));
+            }
+
+            if meta.input.peek(syn::token::Paren) {
+                return Err(meta.error("`nested` does not accept arguments"));
+            }
+
+            args.nested = true;
         } else if meta.path.is_ident("custom") {
             if args.custom.is_some() {
                 return Err(meta.error("duplicate `custom` validator"));
@@ -355,5 +367,83 @@ mod tests {
         let error = parse_validate_args(&attr).expect_err("unknown validation should fail");
 
         assert_eq!(error.to_string(), "unknown attribute key");
+    }
+
+    #[test]
+    fn parses_nested_flag() {
+        let attr: Attribute = parse_quote! {
+            #[validate(nested)]
+        };
+
+        let args = parse_validate_args(&attr).expect("nested flag should parse");
+
+        assert!(args.nested);
+    }
+
+    #[test]
+    fn nested_composes_with_existing_rules() {
+        let attr: Attribute = parse_quote! {
+            #[validate(required, nested)]
+        };
+
+        let args = parse_validate_args(&attr).expect("nested should compose with required");
+
+        assert!(args.required);
+        assert!(args.nested);
+    }
+
+    #[test]
+    fn duplicate_nested_flags_are_tolerated_like_other_flags() {
+        // Duplicate boolean flags (`required, required`, `non_empty,
+        // non_empty`) are silently idempotent today; `nested` follows the
+        // same policy.
+        let attr: Attribute = parse_quote! {
+            #[validate(nested, nested)]
+        };
+
+        let args = parse_validate_args(&attr).expect("duplicate nested should stay idempotent");
+
+        assert!(args.nested);
+    }
+
+    #[test]
+    fn nested_rejects_a_value() {
+        let attr: Attribute = parse_quote! {
+            #[validate(nested = true)]
+        };
+
+        let error = parse_validate_args(&attr).expect_err("nested with a value should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "`nested` is a flag and does not take a value"
+        );
+    }
+
+    #[test]
+    fn nested_rejects_arguments() {
+        let attr: Attribute = parse_quote! {
+            #[validate(nested(address))]
+        };
+
+        let error = parse_validate_args(&attr).expect_err("nested with arguments should fail");
+
+        assert_eq!(error.to_string(), "`nested` does not accept arguments");
+    }
+
+    #[test]
+    fn nested_aliases_remain_unknown_keys() {
+        for alias in ["dive", "each", "items"] {
+            let attr: Attribute =
+                syn::parse_str::<syn::ItemStruct>(&format!("#[validate({alias})] struct Probe;"))
+                    .expect("probe struct should parse")
+                    .attrs
+                    .remove(0);
+
+            let error =
+                parse_validate_args(&attr).expect_err("nested aliases should stay unsupported");
+
+            assert_eq!(error.to_string(), "unknown attribute key");
+        }
     }
 }
