@@ -1,6 +1,6 @@
 [package]
 name = "oximod_macros"
-version = "0.6.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.88"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
@@ -20,7 +20,7 @@ quote = "1.0.44"
 proc-macro2 = "1.0.106"
 mongodb = "3.8.0"
 thiserror = "2.0.18"
-oximod_core = { version = "0.6.0", path = "../oximod_core" }
+oximod_core = { version = "1.0.0", path = "../oximod_core" }
 futures-util = "0.3.32"
 
 [dependencies.regex]

@@ -1,6 +1,6 @@
 [package]
 name = "oximod"
-version = "0.6.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.88"
 authors = ["Arshia Eskandari <email@arshiaeskandari.com>"]
@@ -15,8 +15,8 @@ categories = ["database", "asynchronous"]
 async-trait = "0.1.89"
 mongodb = "3.8.0"
 thiserror = "2.0.18"
-oximod_core = { version = "0.6.0", path = "../oximod_core" }
-oximod_macros = { version = "0.6.0", path = "../oximod_macros" }
+oximod_core = { version = "1.0.0", path = "../oximod_core" }
+oximod_macros = { version = "1.0.0", path = "../oximod_macros" }
 serde = "1.0.228"
 futures-util = "0.3.32"
 
