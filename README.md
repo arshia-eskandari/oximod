@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/oximod"><img src="https://img.shields.io/crates/v/oximod" alt="Crates.io"></a>
+  <a href="https://crates.io/crates/oximod"><img src="https://img.shields.io/crates/v/oximod?cacheSeconds=300" alt="Crates.io"></a>
   <a href="https://docs.rs/oximod"><img src="https://docs.rs/oximod/badge.svg" alt="Documentation"></a>
   <a href="https://crates.io/crates/oximod"><img src="https://img.shields.io/crates/d/oximod" alt="Downloads"></a>
   <a href="https://github.com/arshia-eskandari/oximod/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
